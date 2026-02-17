@@ -1,40 +1,99 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { repositoryApi } from '../api/repositoryApi';
-import type { TestProfile, CaptureProfile } from '../types';
+import type { TestProfile } from '../types';
 import {
   Plus, Settings2, Loader2, Trash2, X, AlertCircle, Search,
-  Globe, Phone, Server, Wifi, Code, Layers
+  ChevronRight, ChevronLeft, Check, Info
 } from 'lucide-react';
+import {
+  type ProfileDomain, type ProfileType, type ConfigField,
+  DOMAIN_META, PROFILE_TYPE_META, ALLOWED_TYPES, CONFIG_TEMPLATES,
+  getEnabledDomains, getDefaultConfig, validateConfig, migrateOldProfile,
+} from '../config/profileDomains';
 
-const PROTOCOLS: { value: CaptureProfile; label: string; icon: typeof Globe; desc: string }[] = [
-  { value: 'SIP', label: 'SIP', icon: Phone, desc: 'Session Initiation Protocol' },
-  { value: 'DIAMETER', label: 'DIAMETER', icon: Layers, desc: 'Protocole AAA télécom' },
-  { value: 'HTTP2', label: 'HTTP/2', icon: Globe, desc: 'HTTP/2 & gRPC' },
-  { value: 'IMS', label: 'IMS', icon: Server, desc: 'IP Multimedia Subsystem' },
-  { value: 'WEB', label: 'WEB', icon: Wifi, desc: 'Web standard HTTP/HTTPS' },
-  { value: 'CUSTOM', label: 'Custom', icon: Code, desc: 'Protocole personnalisé' },
-];
+// ─── Dynamic Config Form ───────────────────────────────────────────────────
 
-function CreateProfileModal({ isOpen, onClose, projectId }: {
-  isOpen: boolean; onClose: () => void; projectId: string;
+function ConfigFieldInput({ field, value, onChange }: {
+  field: ConfigField;
+  value: unknown;
+  onChange: (key: string, val: unknown) => void;
+}) {
+  const baseInput = "w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30";
+
+  switch (field.type) {
+    case 'text':
+      return (
+        <input type="text" value={(value as string) || ''} onChange={(e) => onChange(field.key, e.target.value)}
+          placeholder={field.placeholder} className={baseInput} />
+      );
+    case 'number':
+      return (
+        <input type="number" value={(value as number) ?? ''} onChange={(e) => onChange(field.key, e.target.value ? Number(e.target.value) : '')}
+          placeholder={field.placeholder} className={baseInput} />
+      );
+    case 'select':
+      return (
+        <select value={(value as string) || ''} onChange={(e) => onChange(field.key, e.target.value)}
+          className={baseInput}>
+          <option value="">— Sélectionner —</option>
+          {field.options?.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      );
+    case 'checkbox':
+      return (
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={!!value} onChange={(e) => onChange(field.key, e.target.checked)}
+            className="w-4 h-4 rounded border-input text-primary focus:ring-ring/30" />
+          <span className="text-sm text-foreground">Activé</span>
+        </label>
+      );
+    case 'textarea':
+      return (
+        <textarea value={(value as string) || ''} onChange={(e) => onChange(field.key, e.target.value)}
+          placeholder={field.placeholder} rows={3}
+          className={`${baseInput} resize-none`} />
+      );
+    default:
+      return (
+        <input type="text" value={(value as string) || ''} onChange={(e) => onChange(field.key, e.target.value)}
+          placeholder={field.placeholder} className={baseInput} />
+      );
+  }
+}
+
+// ─── Create Profile Modal (3-step wizard) ──────────────────────────────────
+
+function CreateProfileModal({ isOpen, onClose, projectId, projectDomain }: {
+  isOpen: boolean; onClose: () => void; projectId: string; projectDomain: string;
 }) {
   const queryClient = useQueryClient();
+  const enabledDomains = useMemo(() => getEnabledDomains(projectDomain), [projectDomain]);
+  const isSingleDomain = enabledDomains.length === 1;
+
+  // Wizard state
+  const [step, setStep] = useState(1);
+  const [selectedDomain, setSelectedDomain] = useState<ProfileDomain | null>(
+    isSingleDomain ? enabledDomains[0] : null
+  );
+  const [selectedType, setSelectedType] = useState<ProfileType | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [protocol, setProtocol] = useState<CaptureProfile>('SIP');
-  const [targetHost, setTargetHost] = useState('');
-  const [targetPort, setTargetPort] = useState('5060');
+  const [config, setConfig] = useState<Record<string, unknown>>({});
   const [error, setError] = useState<string | null>(null);
+
+  const availableTypes = selectedDomain ? ALLOWED_TYPES[selectedDomain] : [];
+  const configFields = selectedType ? CONFIG_TEMPLATES[selectedType] : [];
 
   const mutation = useMutation({
     mutationFn: (data: Partial<TestProfile>) => repositoryApi.createProfile(projectId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profiles', projectId] });
-      setName(''); setDescription(''); setProtocol('SIP'); setTargetHost(''); setTargetPort('5060');
-      onClose();
+      resetAndClose();
     },
     onError: (err: unknown) => {
       const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
@@ -42,104 +101,319 @@ function CreateProfileModal({ isOpen, onClose, projectId }: {
     },
   });
 
+  const resetAndClose = () => {
+    setStep(isSingleDomain ? 2 : 1);
+    setSelectedDomain(isSingleDomain ? enabledDomains[0] : null);
+    setSelectedType(null);
+    setName('');
+    setDescription('');
+    setConfig({});
+    setError(null);
+    onClose();
+  };
+
+  const handleDomainSelect = (domain: ProfileDomain) => {
+    setSelectedDomain(domain);
+    setSelectedType(null);
+    setConfig({});
+    setStep(2);
+  };
+
+  const handleTypeSelect = (type: ProfileType) => {
+    setSelectedType(type);
+    setConfig(getDefaultConfig(type));
+    setStep(3);
+  };
+
+  const handleConfigChange = (key: string, val: unknown) => {
+    setConfig(prev => ({ ...prev, [key]: val }));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!name.trim() || !targetHost.trim()) {
-      setError('Le nom et l\'hôte cible sont requis.');
+
+    if (!name.trim()) {
+      setError('Le nom du profil est requis.');
       return;
     }
+    if (!selectedDomain || !selectedType) {
+      setError('Domaine et type requis.');
+      return;
+    }
+
+    const validationErrors = validateConfig(selectedType, config);
+    if (validationErrors.length > 0) {
+      setError(validationErrors.join(' '));
+      return;
+    }
+
+    // Extract target_host and target_port from config for backward compat
+    const targetHost = (config.sut_url || config.base_url || config.target_host || config.host || config.mme_host || config.pgw_host || config.sgw_host || config.amf_host || config.smf_host || config.nrf_url || config.appium_server || config.winappdriver_url || config.wsdl_url || '') as string;
+    const targetPort = (config.port || config.target_port || config.mme_port || config.pgw_port || config.sgw_port || config.amf_port || config.smf_port || config.adb_port || 0) as number;
+
     mutation.mutate({
       name: name.trim(),
       description: description.trim(),
-      protocol,
-      target_host: targetHost.trim(),
-      target_port: parseInt(targetPort) || 5060,
+      domain: selectedDomain,
+      profile_type: selectedType,
+      protocol: 'CUSTOM',
+      target_host: targetHost,
+      target_port: targetPort || 0,
       parameters: {},
+      config,
     });
+  };
+
+  const goBack = () => {
+    if (step === 3) {
+      setSelectedType(null);
+      setStep(2);
+    } else if (step === 2 && !isSingleDomain) {
+      setSelectedDomain(null);
+      setStep(1);
+    }
   };
 
   if (!isOpen) return null;
 
+  const domainMeta = selectedDomain ? DOMAIN_META[selectedDomain] : null;
+  const effectiveStep = isSingleDomain ? step : step;
+  const totalSteps = isSingleDomain ? 2 : 3;
+  const displayStep = isSingleDomain ? step - 1 : step;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-card rounded-lg shadow-xl border border-border w-full max-w-lg mx-4">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h2 className="text-lg font-heading font-semibold text-foreground">Nouveau profil de test</h2>
-          <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={resetAndClose} />
+      <div className="relative bg-card rounded-lg shadow-xl border border-border w-full max-w-2xl mx-4 max-h-[85vh] flex flex-col">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+          <div className="flex items-center gap-3">
+            {domainMeta && (
+              <div className={`w-8 h-8 rounded-md ${domainMeta.bgClass} flex items-center justify-center`}>
+                <domainMeta.icon className={`w-4 h-4 ${domainMeta.textClass}`} />
+              </div>
+            )}
+            <div>
+              <h2 className="text-lg font-heading font-semibold text-foreground">
+                Nouveau profil {domainMeta ? `— ${domainMeta.shortLabel}` : ''}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Étape {displayStep} sur {totalSteps}
+              </p>
+            </div>
+          </div>
+          <button type="button" onClick={resetAndClose} className="text-muted-foreground hover:text-foreground">
             <X className="w-5 h-5" />
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+
+        {/* Progress bar */}
+        <div className="px-6 pt-4 shrink-0">
+          <div className="flex gap-1">
+            {Array.from({ length: totalSteps }, (_, i) => (
+              <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${
+                i < displayStep ? 'bg-primary' : 'bg-border'
+              }`} />
+            ))}
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="px-6 py-5 overflow-y-auto flex-1">
           {error && (
-            <div className="flex items-start gap-2 bg-destructive/10 border border-destructive/20 rounded-md p-3">
+            <div className="flex items-start gap-2 bg-destructive/10 border border-destructive/20 rounded-md p-3 mb-4">
               <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
               <p className="text-sm text-destructive">{error}</p>
             </div>
           )}
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Nom du profil *</label>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)}
-              placeholder="Ex: IMS Registration Test"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Protocole *</label>
-            <div className="grid grid-cols-3 gap-2">
-              {PROTOCOLS.map((p) => (
-                <button key={p.value} type="button" onClick={() => setProtocol(p.value)}
-                  className={`flex flex-col items-center gap-1 rounded-md border p-3 text-xs transition-colors ${
-                    protocol === p.value ? 'border-primary bg-primary/5 text-primary' : 'border-border text-muted-foreground hover:border-border/80'
-                  }`}>
-                  <p.icon className="w-4 h-4" />
-                  <span className="font-medium">{p.label}</span>
-                </button>
-              ))}
+
+          {/* Step 1: Domain Selection */}
+          {step === 1 && !isSingleDomain && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-base font-heading font-semibold text-foreground mb-1">Choisir le domaine</h3>
+                <p className="text-sm text-muted-foreground">
+                  Sélectionnez le domaine de test pour ce profil. Les domaines disponibles dépendent du projet.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {enabledDomains.map((d) => {
+                  const meta = DOMAIN_META[d];
+                  const DIcon = meta.icon;
+                  return (
+                    <button key={d} type="button" onClick={() => handleDomainSelect(d)}
+                      className={`flex items-start gap-3 rounded-lg border p-4 text-left transition-all hover:border-primary/50 hover:bg-primary/5 border-border`}>
+                      <div className={`w-10 h-10 rounded-md ${meta.bgClass} flex items-center justify-center shrink-0`}>
+                        <DIcon className={`w-5 h-5 ${meta.textClass}`} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground">{meta.label}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{meta.description}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Hôte cible *</label>
-              <input type="text" value={targetHost} onChange={(e) => setTargetHost(e.target.value)}
-                placeholder="192.168.1.100"
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
+          )}
+
+          {/* Step 2: Type Selection */}
+          {step === 2 && selectedDomain && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-base font-heading font-semibold text-foreground mb-1">Choisir le type de profil</h3>
+                <p className="text-sm text-muted-foreground">
+                  Domaine : <span className={`font-medium ${domainMeta?.textClass}`}>{domainMeta?.label}</span>.
+                  Sélectionnez le type de test à configurer.
+                </p>
+              </div>
+              {availableTypes.length === 0 ? (
+                <div className="text-center py-8">
+                  <Info className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">Aucun type disponible pour ce domaine.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-2">
+                  {availableTypes.map((t) => {
+                    const meta = PROFILE_TYPE_META[t];
+                    const TIcon = meta.icon;
+                    return (
+                      <button key={t} type="button" onClick={() => handleTypeSelect(t)}
+                        className="flex items-center gap-4 rounded-lg border border-border p-4 text-left transition-all hover:border-primary/50 hover:bg-primary/5 group">
+                        <div className={`w-10 h-10 rounded-md ${domainMeta?.bgClass} flex items-center justify-center shrink-0`}>
+                          <TIcon className={`w-5 h-5 ${domainMeta?.textClass}`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-foreground">{meta.label}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{meta.description}</p>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Port</label>
-              <input type="number" value={targetPort} onChange={(e) => setTargetPort(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
-            </div>
-          </div>
+          )}
+
+          {/* Step 3: Configuration Form */}
+          {step === 3 && selectedDomain && selectedType && (
+            <form onSubmit={handleSubmit} id="profile-form" className="space-y-5">
+              <div>
+                <h3 className="text-base font-heading font-semibold text-foreground mb-1">
+                  Configuration — {PROFILE_TYPE_META[selectedType].label}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Renseignez les paramètres de connexion et de configuration.
+                </p>
+              </div>
+
+              {/* Name & Description */}
+              <div className="space-y-3 pb-4 border-b border-border">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Nom du profil *</label>
+                  <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+                    placeholder={`Ex: ${PROFILE_TYPE_META[selectedType].label} — Production`}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Description</label>
+                  <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2}
+                    placeholder="Description optionnelle du profil..."
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground resize-none placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
+                </div>
+              </div>
+
+              {/* Dynamic Config Fields */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-heading font-semibold text-foreground flex items-center gap-2">
+                  <Settings2 className="w-4 h-4 text-primary" />
+                  Paramètres {PROFILE_TYPE_META[selectedType].label}
+                </h4>
+                {configFields.map((field) => (
+                  <div key={field.key}>
+                    <label className="block text-sm font-medium text-foreground mb-1">
+                      {field.label} {field.required && <span className="text-destructive">*</span>}
+                    </label>
+                    <ConfigFieldInput field={field} value={config[field.key]} onChange={handleConfigChange} />
+                    {field.helpText && (
+                      <p className="text-xs text-muted-foreground mt-1">{field.helpText}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </form>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-6 py-4 border-t border-border shrink-0">
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Description</label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2}
-              placeholder="Description optionnelle..."
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring/30" />
+            {(step > 1 && !(step === 2 && isSingleDomain)) && (
+              <button type="button" onClick={goBack}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors">
+                <ChevronLeft className="w-4 h-4" /> Retour
+              </button>
+            )}
           </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose}
+          <div className="flex gap-3">
+            <button type="button" onClick={resetAndClose}
               className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors">
               Annuler
             </button>
-            <button type="submit" disabled={mutation.isPending}
-              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
-              {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-              Créer
-            </button>
+            {step === 3 && (
+              <button type="submit" form="profile-form" disabled={mutation.isPending}
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
+                {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                Créer le profil
+              </button>
+            )}
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );
 }
+
+// ─── Domain Badge Component ────────────────────────────────────────────────
+
+function DomainBadge({ domain }: { domain?: string }) {
+  if (!domain) return null;
+  const meta = DOMAIN_META[domain as ProfileDomain];
+  if (!meta) return <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono">{domain}</span>;
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded font-medium ${meta.bgClass} ${meta.textClass} border ${meta.borderClass}`}>
+      <meta.icon className="w-3 h-3" />
+      {meta.shortLabel}
+    </span>
+  );
+}
+
+function TypeBadge({ profileType }: { profileType?: string }) {
+  if (!profileType) return null;
+  const meta = PROFILE_TYPE_META[profileType as ProfileType];
+  if (!meta) return <span className="text-xs text-muted-foreground font-mono">{profileType}</span>;
+  return (
+    <span className="text-xs text-muted-foreground font-mono">{meta.label}</span>
+  );
+}
+
+// ─── Main Page ─────────────────────────────────────────────────────────────
 
 export default function ProfilesPage() {
   const { currentProject } = useProject();
   const { canWrite } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch] = useState('');
+  const [domainFilter, setDomainFilter] = useState<string>('ALL');
   const queryClient = useQueryClient();
+
+  const enabledDomains = useMemo(
+    () => currentProject ? getEnabledDomains(currentProject.domain) : [],
+    [currentProject?.domain]
+  );
 
   const { data, isLoading } = useQuery({
     queryKey: ['profiles', currentProject?.id],
@@ -152,10 +426,34 @@ export default function ProfilesPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['profiles', currentProject?.id] }),
   });
 
-  const profiles = (data?.data || []) as TestProfile[];
-  const filtered = search
-    ? profiles.filter(p => p.name?.toLowerCase().includes(search.toLowerCase()))
-    : profiles;
+  // Migrate old profiles and apply filters
+  const profiles = useMemo(() => {
+    const raw = (data?.data || []) as TestProfile[];
+    return raw.map(p => {
+      if (!p.domain && p.protocol) {
+        const migrated = migrateOldProfile(p.protocol);
+        return { ...p, domain: migrated.domain, profile_type: migrated.type };
+      }
+      return p;
+    });
+  }, [data]);
+
+  const filtered = useMemo(() => {
+    let result = profiles;
+    if (domainFilter !== 'ALL') {
+      result = result.filter(p => p.domain === domainFilter);
+    }
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter(p =>
+        p.name?.toLowerCase().includes(q) ||
+        p.description?.toLowerCase().includes(q) ||
+        p.domain?.toLowerCase().includes(q) ||
+        p.profile_type?.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [profiles, domainFilter, search]);
 
   if (!currentProject) {
     return (
@@ -169,11 +467,19 @@ export default function ProfilesPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-heading font-bold text-foreground">Profils de test</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Configurez les profils pour <strong className="text-foreground">{currentProject.name}</strong>. Un profil définit le protocole, l'hôte cible et les paramètres de connexion.
+            Profils pour <strong className="text-foreground">{currentProject.name}</strong>
+            <span className="mx-1.5">·</span>
+            Domaine{enabledDomains.length > 1 ? 's' : ''} :{' '}
+            {enabledDomains.map(d => (
+              <span key={d} className={`font-medium ${DOMAIN_META[d].textClass}`}>
+                {DOMAIN_META[d].shortLabel}
+              </span>
+            )).reduce((acc: React.ReactNode[], el, i) => i === 0 ? [el] : [...acc, <span key={`sep-${i}`} className="text-muted-foreground">, </span>, el], [])}
           </p>
         </div>
         {canWrite && (
@@ -184,13 +490,38 @@ export default function ProfilesPage() {
         )}
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-          placeholder="Rechercher un profil..."
-          className="w-full rounded-md border border-input bg-background pl-10 pr-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
+      {/* Filters */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher un profil..."
+            className="w-full rounded-md border border-input bg-background pl-10 pr-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
+        </div>
+        {enabledDomains.length > 1 && (
+          <div className="flex items-center gap-1 bg-card border border-border rounded-md p-1">
+            <button onClick={() => setDomainFilter('ALL')}
+              className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                domainFilter === 'ALL' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+              }`}>
+              Tous
+            </button>
+            {enabledDomains.map(d => {
+              const meta = DOMAIN_META[d];
+              return (
+                <button key={d} onClick={() => setDomainFilter(d)}
+                  className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                    domainFilter === d ? `${meta.bgClass} ${meta.textClass}` : 'text-muted-foreground hover:text-foreground'
+                  }`}>
+                  {meta.shortLabel}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
+      {/* List */}
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
           <Loader2 className="w-6 h-6 text-primary animate-spin" />
@@ -199,7 +530,11 @@ export default function ProfilesPage() {
         <div className="text-center py-16 bg-card border border-border rounded-lg">
           <Settings2 className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
           <h3 className="text-base font-heading font-semibold text-foreground mb-1">Aucun profil</h3>
-          <p className="text-sm text-muted-foreground mb-4">Créez un profil pour définir les paramètres de connexion au système cible.</p>
+          <p className="text-sm text-muted-foreground mb-4">
+            {domainFilter !== 'ALL'
+              ? `Aucun profil pour le domaine ${DOMAIN_META[domainFilter as ProfileDomain]?.label || domainFilter}.`
+              : 'Créez un profil pour définir les paramètres de test.'}
+          </p>
           {canWrite && (
             <button onClick={() => setShowCreate(true)}
               className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
@@ -210,27 +545,37 @@ export default function ProfilesPage() {
       ) : (
         <div className="space-y-2">
           {filtered.map((profile) => {
-            const proto = PROTOCOLS.find(p => p.value === profile.protocol);
-            const ProtoIcon = proto?.icon || Code;
+            const domainMeta = profile.domain ? DOMAIN_META[profile.domain as ProfileDomain] : null;
+            const typeMeta = profile.profile_type ? PROFILE_TYPE_META[profile.profile_type as ProfileType] : null;
+            const Icon = typeMeta?.icon || domainMeta?.icon || Settings2;
+
             return (
-              <div key={profile.id} className="flex items-center justify-between bg-card border border-border rounded-lg px-5 py-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
-                    <ProtoIcon className="w-5 h-5 text-primary" />
+              <div key={profile.id} className="flex items-center justify-between bg-card border border-border rounded-lg px-5 py-4 group">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className={`w-10 h-10 rounded-md ${domainMeta?.bgClass || 'bg-muted'} flex items-center justify-center shrink-0`}>
+                    <Icon className={`w-5 h-5 ${domainMeta?.textClass || 'text-muted-foreground'}`} />
                   </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-foreground">{profile.name}</h3>
-                    <p className="text-xs text-muted-foreground font-mono">
-                      {profile.protocol} — {profile.target_host}:{profile.target_port}
-                    </p>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold text-foreground truncate">{profile.name}</h3>
+                      <DomainBadge domain={profile.domain} />
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <TypeBadge profileType={profile.profile_type} />
+                      {profile.target_host && (
+                        <span className="text-xs text-muted-foreground font-mono">
+                          · {profile.target_host}{profile.target_port ? `:${profile.target_port}` : ''}
+                        </span>
+                      )}
+                    </div>
                     {profile.description && (
-                      <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-md">{profile.description}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-lg">{profile.description}</p>
                     )}
                   </div>
                 </div>
                 {canWrite && (
                   <button onClick={() => deleteMutation.mutate(profile.id)}
-                    className="text-muted-foreground hover:text-destructive transition-colors p-1.5" title="Supprimer">
+                    className="text-muted-foreground hover:text-destructive transition-colors p-1.5 opacity-0 group-hover:opacity-100" title="Supprimer">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 )}
@@ -240,7 +585,12 @@ export default function ProfilesPage() {
         </div>
       )}
 
-      <CreateProfileModal isOpen={showCreate} onClose={() => setShowCreate(false)} projectId={currentProject.id} />
+      <CreateProfileModal
+        isOpen={showCreate}
+        onClose={() => setShowCreate(false)}
+        projectId={currentProject.id}
+        projectDomain={currentProject.domain}
+      />
     </div>
   );
 }

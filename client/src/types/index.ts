@@ -347,10 +347,17 @@ export interface TestProfile {
   project_id: string;
   name: string;
   description: string;
+  /** @deprecated Use domain + profile_type instead */
   protocol: CaptureProfile;
+  /** Domain-first: domaine du profil (WEB, API, TELECOM_IMS, etc.) */
+  domain?: string;
+  /** Domain-first: type de profil (UI_E2E, REST, SIP, etc.) */
+  profile_type?: string;
   target_host: string;
   target_port: number;
   parameters: Record<string, unknown>;
+  /** Domain-first: configuration dynamique par type */
+  config?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
