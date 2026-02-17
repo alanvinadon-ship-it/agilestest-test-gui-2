@@ -4,6 +4,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 3000, // 3s timeout pour basculer rapidement sur le localStore
   headers: {
     'Content-Type': 'application/json',
   },
@@ -22,7 +23,9 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // Ne pas rediriger sur 401 si c'est un timeout ou une erreur réseau
+    // (l'API n'est pas disponible, le fallback localStorage prendra le relais)
+    if (error.response?.status === 401 && !error.code?.includes('ECONNABORTED')) {
       localStorage.removeItem('access_token');
       localStorage.removeItem('user');
       if (window.location.pathname !== '/login') {
