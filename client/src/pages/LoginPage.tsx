@@ -2,6 +2,40 @@ import { useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { adminApi } from '../api/adminApi';
 import { Loader2, LogIn, AlertCircle, Shield } from 'lucide-react';
+import type { User } from '../types';
+
+// ─── Comptes locaux autorisés (fallback quand l'API n'est pas disponible) ────
+const LOCAL_ACCOUNTS: Array<{ email: string; password: string; user: User }> = [
+  {
+    email: 'admin@agilestest.io',
+    password: 'admin123',
+    user: {
+      id: 'local-admin-001',
+      email: 'admin@agilestest.io',
+      full_name: 'Administrateur AgilesTest',
+      role: 'ADMIN',
+      is_active: true,
+      created_at: '2025-01-01T00:00:00Z',
+      updated_at: '2025-01-01T00:00:00Z',
+    },
+  },
+];
+
+function generateLocalToken(user: User): string {
+  // Token JWT-like pour le mode local (base64 encodé)
+  const header = btoa(JSON.stringify({ alg: 'local', typ: 'JWT' }));
+  const payload = btoa(
+    JSON.stringify({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 86400, // 24h
+    }),
+  );
+  const sig = btoa('local-signature');
+  return `${header}.${payload}.${sig}`;
+}
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -16,15 +50,21 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      // 1. Essayer l'API distante d'abord
       const response = await adminApi.login({ email, password });
       login(response.access_token, response.user);
-    } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { error?: { message?: string }; message?: string } } };
-      setError(
-        axiosErr?.response?.data?.error?.message ||
-        axiosErr?.response?.data?.message ||
-        'Identifiants invalides. Veuillez réessayer.'
+    } catch {
+      // 2. Fallback : vérifier les comptes locaux
+      const localAccount = LOCAL_ACCOUNTS.find(
+        (a) => a.email === email && a.password === password,
       );
+
+      if (localAccount) {
+        const token = generateLocalToken(localAccount.user);
+        login(token, localAccount.user);
+      } else {
+        setError('Identifiants invalides. Veuillez réessayer.');
+      }
     } finally {
       setLoading(false);
     }

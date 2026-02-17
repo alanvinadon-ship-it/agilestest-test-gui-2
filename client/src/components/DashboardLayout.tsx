@@ -1,4 +1,5 @@
 import { Link, useLocation } from "wouter";
+import { useCallback } from "react";
 import {
   LayoutDashboard,
   FolderKanban,
@@ -13,7 +14,7 @@ import {
   LogOut,
   User,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "../auth/AuthContext";
 import { ProjectSwitcher } from "./ProjectSwitcher";
@@ -46,9 +47,14 @@ const navSections = [
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const { user, logout } = useAuth();
+
+  const handleLogout = useCallback(() => {
+    logout();
+    navigate('/login');
+  }, [logout, navigate]);
   const { currentProject } = useProject();
 
   return (
@@ -118,7 +124,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <p className="text-[10px] text-muted-foreground font-mono">{user.role}</p>
               </div>
               <button
-                onClick={logout}
+                onClick={handleLogout}
                 className="text-muted-foreground hover:text-destructive transition-colors"
                 title="Déconnexion"
               >
