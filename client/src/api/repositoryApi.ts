@@ -87,7 +87,7 @@ export const repositoryApi = {
 
   // ─── Profiles ──────────────────────────────────────────────────────────────
 
-  listProfiles: (projectId: string, params?: { page?: number; limit?: number }) =>
+  listProfiles: (projectId: string, params?: { page?: number; limit?: number; test_type?: string; domain?: string }) =>
     withFallback(
       () => apiClient.get<PaginatedResponse<TestProfile>>(`${PREFIX}/projects/${projectId}/profiles`, { params }).then(r => r.data),
       () => localProfiles.list(projectId, params),

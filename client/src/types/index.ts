@@ -12,6 +12,7 @@ export type ProbeCapability = 'LOGS' | 'PCAP';
 export type CaptureType = 'LOGS' | 'PCAP';
 export type CaptureProfile = 'WEB' | 'IMS' | 'DIAMETER' | 'HTTP2' | 'SIP' | 'CUSTOM';
 export type IncidentSeverity = 'CRITICAL' | 'MAJOR' | 'MINOR' | 'INFO';
+export type TestType = 'VABF' | 'VSR' | 'VABE';
 export type AnalysisStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
 export type ProjectDomain = 'WEB' | 'API' | 'IMS' | 'RAN' | 'EPC' | '5GC';
 
@@ -349,6 +350,8 @@ export interface TestProfile {
   description: string;
   /** @deprecated Use domain + profile_type instead */
   protocol: CaptureProfile;
+  /** Type de test : VABF, VSR ou VABE — obligatoire */
+  test_type: TestType;
   /** Domain-first: domaine du profil (WEB, API, TELECOM_IMS, etc.) */
   domain?: string;
   /** Domain-first: type de profil (UI_E2E, REST, SIP, etc.) */

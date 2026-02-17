@@ -95,7 +95,7 @@ function LaunchExecutionModal({ isOpen, onClose, projectId }: {
             <select value={profileId} onChange={(e) => { setProfileId(e.target.value); setScenarioId(''); }}
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30">
               <option value="">Sélectionner un profil</option>
-              {profiles.map(p => <option key={p.id} value={p.id}>{p.name} ({p.protocol})</option>)}
+              {profiles.map(p => <option key={p.id} value={p.id}>[{p.test_type || 'VABF'}] {p.name} ({p.domain || p.protocol})</option>)}
             </select>
           </div>
           <div>
@@ -211,6 +211,7 @@ export default function ExecutionsPage() {
             <thead>
               <tr className="border-b border-border">
                 <th className="text-left px-5 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Statut</th>
+                <th className="text-left px-5 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Type</th>
                 <th className="text-left px-5 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">ID</th>
                 <th className="text-left px-5 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Durée</th>
                 <th className="text-left px-5 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Artefacts</th>
@@ -229,6 +230,11 @@ export default function ExecutionsPage() {
                       <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${config.cls}`}>
                         <StatusIcon className={`w-3.5 h-3.5 ${exec.status === 'RUNNING' ? 'animate-spin' : ''}`} />
                         {config.label}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3">
+                      <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                        {(exec as any).test_type || 'VABF'}
                       </span>
                     </td>
                     <td className="px-5 py-3 font-mono text-xs text-muted-foreground">{exec.id.slice(0, 8)}...</td>

@@ -3,16 +3,59 @@ import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { repositoryApi } from '../api/repositoryApi';
-import type { TestProfile } from '../types';
+import type { TestProfile, TestType } from '../types';
 import {
   Plus, Settings2, Loader2, Trash2, X, AlertCircle, Search,
-  ChevronRight, ChevronLeft, Check, Info
+  ChevronRight, ChevronLeft, Check, Info,
+  ClipboardCheck, Shield, Gauge
 } from 'lucide-react';
 import {
   type ProfileDomain, type ProfileType, type ConfigField,
   DOMAIN_META, PROFILE_TYPE_META, ALLOWED_TYPES, CONFIG_TEMPLATES,
   getEnabledDomains, getDefaultConfig, validateConfig, migrateOldProfile,
 } from '../config/profileDomains';
+
+// ─── Test Type Metadata ─────────────────────────────────────────────────────
+
+const TEST_TYPE_META: Record<TestType, {
+  label: string;
+  fullLabel: string;
+  description: string;
+  icon: typeof ClipboardCheck;
+  bgClass: string;
+  textClass: string;
+  borderClass: string;
+}> = {
+  VABF: {
+    label: 'VABF',
+    fullLabel: 'Validation Fonctionnelle',
+    description: 'Vérification d\'Aptitude au Bon Fonctionnement — tests fonctionnels, cas nominaux, cas limites, non-régression.',
+    icon: ClipboardCheck,
+    bgClass: 'bg-emerald-500/10',
+    textClass: 'text-emerald-400',
+    borderClass: 'border-emerald-500/20',
+  },
+  VSR: {
+    label: 'VSR',
+    fullLabel: 'Validation Service / Résilience',
+    description: 'Vérification de Service Régulier — tests de résilience, haute disponibilité, failover, recovery, monitoring.',
+    icon: Shield,
+    bgClass: 'bg-sky-500/10',
+    textClass: 'text-sky-400',
+    borderClass: 'border-sky-500/20',
+  },
+  VABE: {
+    label: 'VABE',
+    fullLabel: 'Performance / Charge / Sécurité',
+    description: 'Vérification d\'Aptitude à la Bonne Exploitabilité — tests de charge, performance, stress, sécurité.',
+    icon: Gauge,
+    bgClass: 'bg-amber-500/10',
+    textClass: 'text-amber-400',
+    borderClass: 'border-amber-500/20',
+  },
+};
+
+const ALL_TEST_TYPES: TestType[] = ['VABF', 'VSR', 'VABE'];
 
 // ─── Dynamic Config Form ───────────────────────────────────────────────────
 
@@ -66,7 +109,45 @@ function ConfigFieldInput({ field, value, onChange }: {
   }
 }
 
-// ─── Create Profile Modal (3-step wizard) ──────────────────────────────────
+// ─── Test Type Badge ──────────────────────────────────────────────────────
+
+function TestTypeBadge({ testType }: { testType?: TestType | string }) {
+  if (!testType) return null;
+  const meta = TEST_TYPE_META[testType as TestType];
+  if (!meta) return <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono">{testType}</span>;
+  const Icon = meta.icon;
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded font-semibold ${meta.bgClass} ${meta.textClass} border ${meta.borderClass}`}>
+      <Icon className="w-3 h-3" />
+      {meta.label}
+    </span>
+  );
+}
+
+// ─── Domain Badge ─────────────────────────────────────────────────────────
+
+function DomainBadge({ domain }: { domain?: string }) {
+  if (!domain) return null;
+  const meta = DOMAIN_META[domain as ProfileDomain];
+  if (!meta) return <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono">{domain}</span>;
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded font-medium ${meta.bgClass} ${meta.textClass} border ${meta.borderClass}`}>
+      <meta.icon className="w-3 h-3" />
+      {meta.shortLabel}
+    </span>
+  );
+}
+
+function TypeBadge({ profileType }: { profileType?: string }) {
+  if (!profileType) return null;
+  const meta = PROFILE_TYPE_META[profileType as ProfileType];
+  if (!meta) return <span className="text-xs text-muted-foreground font-mono">{profileType}</span>;
+  return (
+    <span className="text-xs text-muted-foreground font-mono">{meta.label}</span>
+  );
+}
+
+// ─── Create Profile Modal (4-step wizard) ──────────────────────────────────
 
 function CreateProfileModal({ isOpen, onClose, projectId, projectDomain }: {
   isOpen: boolean; onClose: () => void; projectId: string; projectDomain: string;
@@ -75,11 +156,12 @@ function CreateProfileModal({ isOpen, onClose, projectId, projectDomain }: {
   const enabledDomains = useMemo(() => getEnabledDomains(projectDomain), [projectDomain]);
   const isSingleDomain = enabledDomains.length === 1;
 
-  // Wizard state
-  const [step, setStep] = useState(1);
+  // Wizard state — steps: 1=Domain, 2=TestType, 3=ProfileType, 4=Config
+  const [step, setStep] = useState(isSingleDomain ? 2 : 1);
   const [selectedDomain, setSelectedDomain] = useState<ProfileDomain | null>(
     isSingleDomain ? enabledDomains[0] : null
   );
+  const [selectedTestType, setSelectedTestType] = useState<TestType | null>(null);
   const [selectedType, setSelectedType] = useState<ProfileType | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -89,6 +171,11 @@ function CreateProfileModal({ isOpen, onClose, projectId, projectDomain }: {
   const availableTypes = selectedDomain ? ALLOWED_TYPES[selectedDomain] : [];
   const configFields = selectedType ? CONFIG_TEMPLATES[selectedType] : [];
 
+  // Compute total steps and display step
+  const firstStep = isSingleDomain ? 2 : 1;
+  const totalSteps = isSingleDomain ? 3 : 4;
+  const displayStep = step - firstStep + 1;
+
   const mutation = useMutation({
     mutationFn: (data: Partial<TestProfile>) => repositoryApi.createProfile(projectId, data),
     onSuccess: () => {
@@ -97,13 +184,14 @@ function CreateProfileModal({ isOpen, onClose, projectId, projectDomain }: {
     },
     onError: (err: unknown) => {
       const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
-      setError(axiosErr?.response?.data?.error?.message || 'Erreur lors de la création.');
+      setError(axiosErr?.response?.data?.error?.message || (err as Error)?.message || 'Erreur lors de la création.');
     },
   });
 
   const resetAndClose = () => {
     setStep(isSingleDomain ? 2 : 1);
     setSelectedDomain(isSingleDomain ? enabledDomains[0] : null);
+    setSelectedTestType(null);
     setSelectedType(null);
     setName('');
     setDescription('');
@@ -114,15 +202,23 @@ function CreateProfileModal({ isOpen, onClose, projectId, projectDomain }: {
 
   const handleDomainSelect = (domain: ProfileDomain) => {
     setSelectedDomain(domain);
+    setSelectedTestType(null);
     setSelectedType(null);
     setConfig({});
     setStep(2);
   };
 
+  const handleTestTypeSelect = (tt: TestType) => {
+    setSelectedTestType(tt);
+    setSelectedType(null);
+    setConfig({});
+    setStep(3);
+  };
+
   const handleTypeSelect = (type: ProfileType) => {
     setSelectedType(type);
     setConfig(getDefaultConfig(type));
-    setStep(3);
+    setStep(4);
   };
 
   const handleConfigChange = (key: string, val: unknown) => {
@@ -137,8 +233,8 @@ function CreateProfileModal({ isOpen, onClose, projectId, projectDomain }: {
       setError('Le nom du profil est requis.');
       return;
     }
-    if (!selectedDomain || !selectedType) {
-      setError('Domaine et type requis.');
+    if (!selectedDomain || !selectedType || !selectedTestType) {
+      setError('Domaine, type de test et type de profil requis.');
       return;
     }
 
@@ -148,13 +244,13 @@ function CreateProfileModal({ isOpen, onClose, projectId, projectDomain }: {
       return;
     }
 
-    // Extract target_host and target_port from config for backward compat
     const targetHost = (config.sut_url || config.base_url || config.target_host || config.host || config.mme_host || config.pgw_host || config.sgw_host || config.amf_host || config.smf_host || config.nrf_url || config.appium_server || config.winappdriver_url || config.wsdl_url || '') as string;
     const targetPort = (config.port || config.target_port || config.mme_port || config.pgw_port || config.sgw_port || config.amf_port || config.smf_port || config.adb_port || 0) as number;
 
     mutation.mutate({
       name: name.trim(),
       description: description.trim(),
+      test_type: selectedTestType,
       domain: selectedDomain,
       profile_type: selectedType,
       protocol: 'CUSTOM',
@@ -166,8 +262,12 @@ function CreateProfileModal({ isOpen, onClose, projectId, projectDomain }: {
   };
 
   const goBack = () => {
-    if (step === 3) {
+    setError(null);
+    if (step === 4) {
       setSelectedType(null);
+      setStep(3);
+    } else if (step === 3) {
+      setSelectedTestType(null);
       setStep(2);
     } else if (step === 2 && !isSingleDomain) {
       setSelectedDomain(null);
@@ -178,9 +278,7 @@ function CreateProfileModal({ isOpen, onClose, projectId, projectDomain }: {
   if (!isOpen) return null;
 
   const domainMeta = selectedDomain ? DOMAIN_META[selectedDomain] : null;
-  const effectiveStep = isSingleDomain ? step : step;
-  const totalSteps = isSingleDomain ? 2 : 3;
-  const displayStep = isSingleDomain ? step - 1 : step;
+  const testTypeMeta = selectedTestType ? TEST_TYPE_META[selectedTestType] : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -197,7 +295,9 @@ function CreateProfileModal({ isOpen, onClose, projectId, projectDomain }: {
             )}
             <div>
               <h2 className="text-lg font-heading font-semibold text-foreground">
-                Nouveau profil {domainMeta ? `— ${domainMeta.shortLabel}` : ''}
+                Nouveau profil
+                {domainMeta ? ` — ${domainMeta.shortLabel}` : ''}
+                {testTypeMeta ? ` · ${testTypeMeta.label}` : ''}
               </h2>
               <p className="text-xs text-muted-foreground">
                 Étape {displayStep} sur {totalSteps}
@@ -244,7 +344,7 @@ function CreateProfileModal({ isOpen, onClose, projectId, projectDomain }: {
                   const DIcon = meta.icon;
                   return (
                     <button key={d} type="button" onClick={() => handleDomainSelect(d)}
-                      className={`flex items-start gap-3 rounded-lg border p-4 text-left transition-all hover:border-primary/50 hover:bg-primary/5 border-border`}>
+                      className="flex items-start gap-3 rounded-lg border p-4 text-left transition-all hover:border-primary/50 hover:bg-primary/5 border-border">
                       <div className={`w-10 h-10 rounded-md ${meta.bgClass} flex items-center justify-center shrink-0`}>
                         <DIcon className={`w-5 h-5 ${meta.textClass}`} />
                       </div>
@@ -259,13 +359,53 @@ function CreateProfileModal({ isOpen, onClose, projectId, projectDomain }: {
             </div>
           )}
 
-          {/* Step 2: Type Selection */}
-          {step === 2 && selectedDomain && (
+          {/* Step 2: Test Type Selection (VABF / VSR / VABE) */}
+          {step === 2 && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-base font-heading font-semibold text-foreground mb-1">Type de test *</h3>
+                <p className="text-sm text-muted-foreground">
+                  {domainMeta && (
+                    <>Domaine : <span className={`font-medium ${domainMeta.textClass}`}>{domainMeta.label}</span>. </>
+                  )}
+                  Sélectionnez l'objectif de validation pour ce profil.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-3">
+                {ALL_TEST_TYPES.map((tt) => {
+                  const meta = TEST_TYPE_META[tt];
+                  const TIcon = meta.icon;
+                  return (
+                    <button key={tt} type="button" onClick={() => handleTestTypeSelect(tt)}
+                      className="flex items-center gap-4 rounded-lg border border-border p-5 text-left transition-all hover:border-primary/50 hover:bg-primary/5 group">
+                      <div className={`w-12 h-12 rounded-md ${meta.bgClass} flex items-center justify-center shrink-0`}>
+                        <TIcon className={`w-6 h-6 ${meta.textClass}`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-bold text-foreground">{meta.label}</p>
+                          <span className="text-xs text-muted-foreground">— {meta.fullLabel}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">{meta.description}</p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Profile Type Selection */}
+          {step === 3 && selectedDomain && selectedTestType && (
             <div className="space-y-4">
               <div>
                 <h3 className="text-base font-heading font-semibold text-foreground mb-1">Choisir le type de profil</h3>
                 <p className="text-sm text-muted-foreground">
-                  Domaine : <span className={`font-medium ${domainMeta?.textClass}`}>{domainMeta?.label}</span>.
+                  <span className={`font-medium ${domainMeta?.textClass}`}>{domainMeta?.label}</span>
+                  <span className="mx-1">·</span>
+                  <span className={`font-medium ${testTypeMeta?.textClass}`}>{testTypeMeta?.label}</span>
+                  <span className="mx-1">—</span>
                   Sélectionnez le type de test à configurer.
                 </p>
               </div>
@@ -298,14 +438,16 @@ function CreateProfileModal({ isOpen, onClose, projectId, projectDomain }: {
             </div>
           )}
 
-          {/* Step 3: Configuration Form */}
-          {step === 3 && selectedDomain && selectedType && (
+          {/* Step 4: Configuration Form */}
+          {step === 4 && selectedDomain && selectedType && selectedTestType && (
             <form onSubmit={handleSubmit} id="profile-form" className="space-y-5">
               <div>
                 <h3 className="text-base font-heading font-semibold text-foreground mb-1">
                   Configuration — {PROFILE_TYPE_META[selectedType].label}
                 </h3>
                 <p className="text-sm text-muted-foreground">
+                  <TestTypeBadge testType={selectedTestType} />
+                  <span className="mx-1.5">·</span>
                   Renseignez les paramètres de connexion et de configuration.
                 </p>
               </div>
@@ -315,7 +457,7 @@ function CreateProfileModal({ isOpen, onClose, projectId, projectDomain }: {
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-1">Nom du profil *</label>
                   <input type="text" value={name} onChange={(e) => setName(e.target.value)}
-                    placeholder={`Ex: ${PROFILE_TYPE_META[selectedType].label} — Production`}
+                    placeholder={`Ex: ${PROFILE_TYPE_META[selectedType].label} — ${selectedTestType} Production`}
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
                 </div>
                 <div>
@@ -351,7 +493,7 @@ function CreateProfileModal({ isOpen, onClose, projectId, projectDomain }: {
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-border shrink-0">
           <div>
-            {(step > 1 && !(step === 2 && isSingleDomain)) && (
+            {(step > firstStep) && (
               <button type="button" onClick={goBack}
                 className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors">
                 <ChevronLeft className="w-4 h-4" /> Retour
@@ -363,7 +505,7 @@ function CreateProfileModal({ isOpen, onClose, projectId, projectDomain }: {
               className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors">
               Annuler
             </button>
-            {step === 3 && (
+            {step === 4 && (
               <button type="submit" form="profile-form" disabled={mutation.isPending}
                 className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
                 {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
@@ -377,29 +519,6 @@ function CreateProfileModal({ isOpen, onClose, projectId, projectDomain }: {
   );
 }
 
-// ─── Domain Badge Component ────────────────────────────────────────────────
-
-function DomainBadge({ domain }: { domain?: string }) {
-  if (!domain) return null;
-  const meta = DOMAIN_META[domain as ProfileDomain];
-  if (!meta) return <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono">{domain}</span>;
-  return (
-    <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded font-medium ${meta.bgClass} ${meta.textClass} border ${meta.borderClass}`}>
-      <meta.icon className="w-3 h-3" />
-      {meta.shortLabel}
-    </span>
-  );
-}
-
-function TypeBadge({ profileType }: { profileType?: string }) {
-  if (!profileType) return null;
-  const meta = PROFILE_TYPE_META[profileType as ProfileType];
-  if (!meta) return <span className="text-xs text-muted-foreground font-mono">{profileType}</span>;
-  return (
-    <span className="text-xs text-muted-foreground font-mono">{meta.label}</span>
-  );
-}
-
 // ─── Main Page ─────────────────────────────────────────────────────────────
 
 export default function ProfilesPage() {
@@ -408,6 +527,7 @@ export default function ProfilesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch] = useState('');
   const [domainFilter, setDomainFilter] = useState<string>('ALL');
+  const [testTypeFilter, setTestTypeFilter] = useState<string>('ALL');
   const queryClient = useQueryClient();
 
   const enabledDomains = useMemo(
@@ -432,7 +552,11 @@ export default function ProfilesPage() {
     return raw.map(p => {
       if (!p.domain && p.protocol) {
         const migrated = migrateOldProfile(p.protocol);
-        return { ...p, domain: migrated.domain, profile_type: migrated.type };
+        return { ...p, domain: migrated.domain, profile_type: migrated.type, test_type: p.test_type || 'VABF' as TestType };
+      }
+      // Migration : profils sans test_type → VABF par défaut
+      if (!p.test_type) {
+        return { ...p, test_type: 'VABF' as TestType };
       }
       return p;
     });
@@ -443,17 +567,21 @@ export default function ProfilesPage() {
     if (domainFilter !== 'ALL') {
       result = result.filter(p => p.domain === domainFilter);
     }
+    if (testTypeFilter !== 'ALL') {
+      result = result.filter(p => p.test_type === testTypeFilter);
+    }
     if (search) {
       const q = search.toLowerCase();
       result = result.filter(p =>
         p.name?.toLowerCase().includes(q) ||
         p.description?.toLowerCase().includes(q) ||
         p.domain?.toLowerCase().includes(q) ||
-        p.profile_type?.toLowerCase().includes(q)
+        p.profile_type?.toLowerCase().includes(q) ||
+        p.test_type?.toLowerCase().includes(q)
       );
     }
     return result;
-  }, [profiles, domainFilter, search]);
+  }, [profiles, domainFilter, testTypeFilter, search]);
 
   if (!currentProject) {
     return (
@@ -491,13 +619,36 @@ export default function ProfilesPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="Rechercher un profil..."
             className="w-full rounded-md border border-input bg-background pl-10 pr-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
         </div>
+
+        {/* Test Type Filter */}
+        <div className="flex items-center gap-1 bg-card border border-border rounded-md p-1">
+          <button onClick={() => setTestTypeFilter('ALL')}
+            className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+              testTypeFilter === 'ALL' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+            }`}>
+            Tous
+          </button>
+          {ALL_TEST_TYPES.map(tt => {
+            const meta = TEST_TYPE_META[tt];
+            return (
+              <button key={tt} onClick={() => setTestTypeFilter(tt)}
+                className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors ${
+                  testTypeFilter === tt ? `${meta.bgClass} ${meta.textClass}` : 'text-muted-foreground hover:text-foreground'
+                }`}>
+                {meta.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Domain Filter */}
         {enabledDomains.length > 1 && (
           <div className="flex items-center gap-1 bg-card border border-border rounded-md p-1">
             <button onClick={() => setDomainFilter('ALL')}
@@ -531,7 +682,9 @@ export default function ProfilesPage() {
           <Settings2 className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
           <h3 className="text-base font-heading font-semibold text-foreground mb-1">Aucun profil</h3>
           <p className="text-sm text-muted-foreground mb-4">
-            {domainFilter !== 'ALL'
+            {testTypeFilter !== 'ALL'
+              ? `Aucun profil ${TEST_TYPE_META[testTypeFilter as TestType]?.label || testTypeFilter}.`
+              : domainFilter !== 'ALL'
               ? `Aucun profil pour le domaine ${DOMAIN_META[domainFilter as ProfileDomain]?.label || domainFilter}.`
               : 'Créez un profil pour définir les paramètres de test.'}
           </p>
@@ -556,8 +709,9 @@ export default function ProfilesPage() {
                     <Icon className={`w-5 h-5 ${domainMeta?.textClass || 'text-muted-foreground'}`} />
                   </div>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-sm font-semibold text-foreground truncate">{profile.name}</h3>
+                      <TestTypeBadge testType={profile.test_type} />
                       <DomainBadge domain={profile.domain} />
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">

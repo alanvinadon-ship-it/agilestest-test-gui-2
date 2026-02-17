@@ -97,8 +97,10 @@ export const localProjects = {
 // ─── Profiles ───────────────────────────────────────────────────────────────
 
 export const localProfiles = {
-  list(projectId: string, params?: { page?: number; limit?: number }): PaginatedResponse<TestProfile> {
-    const items = getCollection<TestProfile>('profiles').filter(p => p.project_id === projectId);
+  list(projectId: string, params?: { page?: number; limit?: number; test_type?: string; domain?: string }): PaginatedResponse<TestProfile> {
+    let items = getCollection<TestProfile>('profiles').filter(p => p.project_id === projectId);
+    if (params?.test_type) items = items.filter(p => p.test_type === params.test_type);
+    if (params?.domain) items = items.filter(p => p.domain === params.domain);
     return paginate(items, params?.page, params?.limit);
   },
 
@@ -109,6 +111,10 @@ export const localProfiles = {
   },
 
   create(projectId: string, data: Partial<TestProfile>): TestProfile {
+    // Validation : test_type obligatoire
+    if (!data.test_type || !['VABF', 'VSR', 'VABE'].includes(data.test_type)) {
+      throw new Error('Le champ test_type est obligatoire (VABF, VSR ou VABE).');
+    }
     const items = getCollection<TestProfile>('profiles');
     const profile: TestProfile = {
       id: uid(),
@@ -116,6 +122,7 @@ export const localProfiles = {
       name: data.name || 'Nouveau profil',
       description: data.description || '',
       protocol: data.protocol || 'CUSTOM',
+      test_type: data.test_type,
       domain: data.domain || undefined,
       profile_type: data.profile_type || undefined,
       target_host: data.target_host || '',
@@ -134,6 +141,14 @@ export const localProfiles = {
     const items = getCollection<TestProfile>('profiles');
     const idx = items.findIndex(p => p.id === id);
     if (idx === -1) throw new Error('Profil introuvable');
+    // Règle : test_type non modifiable si des scénarios sont attachés
+    if (data.test_type && data.test_type !== items[idx].test_type) {
+      const scenarios = getCollection<{profile_id: string}>('scenarios');
+      const hasScenarios = scenarios.some(s => s.profile_id === id);
+      if (hasScenarios) {
+        throw new Error('Impossible de modifier test_type : des scénarios sont attachés à ce profil (409).');
+      }
+    }
     items[idx] = { ...items[idx], ...data, updated_at: now() };
     setCollection('profiles', items);
     return items[idx];
