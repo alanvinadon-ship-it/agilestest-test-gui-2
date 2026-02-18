@@ -7,6 +7,7 @@
  * - Auto-incidents Drive + lien IA REPAIR
  */
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useLocation } from 'wouter';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,7 +23,6 @@ import {
   segmentRoute, enrichSamplesWithSegments, aggregateSegmentKpi,
   buildArtifactTimeIndex, findArtifactsForSegment,
   generateDriveIncidents, deduplicateIncidents, mergeContiguousIncidents,
-  buildDriveRepairContext, simulateDriveRepair,
 } from '@/driveCorrelation';
 import type {
   RouteSegment, EnrichedKpiSample, ArtifactTimeIndex, DriveIncident,
@@ -646,30 +646,11 @@ export default function DriveReportingPage() {
     return { segment: selectedSegment, samples: segSamples, artifacts: segArtifacts, incidents: segIncidents, top_violations: topViolations };
   }, [selectedSegment, report]);
 
-  const [repairResult, setRepairResult] = useState<import('../ai/types').RepairResult | null>(null);
-  const [repairingIncidentId, setRepairingIncidentId] = useState<string | null>(null);
+  const [, navigate] = useLocation();
 
-  const handleRepair = useCallback(async (incident: DriveIncident) => {
-    if (!report) return;
-    setRepairingIncidentId(incident.incident_id);
-    toast.info(`Analyse IA REPAIR lancée pour ${KPI_LABELS[incident.kpi_name] || incident.kpi_name} (${SEVERITY_LABELS[incident.severity]})`);
-
-    // Build context
-    const incSamples = report.enrichedSamples.filter(s =>
-      incident.evidence_refs.segment_ids.includes(s.segment_id) && s.kpi_name === incident.kpi_name
-    );
-    const incArtifacts = report.artifactIndex.filter(a =>
-      incident.evidence_refs.artifact_ids.includes(a.artifact_id)
-    );
-    const ctx = buildDriveRepairContext(incident, incSamples, incArtifacts);
-
-    // Simulate async repair
-    await new Promise(r => setTimeout(r, 2500));
-    const result = simulateDriveRepair(ctx);
-    setRepairResult(result);
-    setRepairingIncidentId(null);
-    toast.success(`Analyse terminée — ${result.patches.length} patch(es), confiance: ${(result.confidence * 100).toFixed(0)}%`);
-  }, [report]);
+  const handleRepair = useCallback((incident: DriveIncident) => {
+    navigate(`/drive/incidents/${incident.incident_id}`);
+  }, [navigate]);
 
   const handleCreateIncident = useCallback((seg: RouteSegment) => {
     toast.success(`Incident créé manuellement pour le segment ${seg.index + 1}`);

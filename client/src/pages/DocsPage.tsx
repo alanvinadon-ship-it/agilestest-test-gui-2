@@ -13,7 +13,7 @@ import remarkGfm from 'remark-gfm';
 import {
   BookOpen, Search, ChevronRight, Copy, Check,
   User, Shield, Server, HelpCircle, FileText,
-  Hash, ExternalLink, Radio, ClipboardList, Target, BarChart3,
+  Hash, ExternalLink, Radio, ClipboardList, Target, BarChart3, Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -35,6 +35,7 @@ const GUIDES: GuideEntry[] = [
   { slug: 'capture-policy', title: 'Capture Policy', icon: Radio, file: '/docs/CAPTURE_POLICY.md', description: 'Capture réseau PCAP — tcpdump & Probe SPAN/TAP' },
   { slug: 'probe-hardening', title: 'Probe Hardening', icon: Shield, file: '/docs/PROBE_HARDENING.md', description: 'Durcissement Probe SPAN/TAP — sécurité, quotas, diagnostics' },
   { slug: 'drive-correlation', title: 'Drive Correlation', icon: BarChart3, file: '/docs/DRIVE_CORRELATION.md', description: 'Corrélation KPI ↔ route ↔ artefacts — segments, incidents, IA REPAIR' },
+  { slug: 'drive-repair-real', title: 'Drive Repair Real', icon: Zap, file: '/docs/DRIVE_REPAIR_REAL.md', description: 'Repair Drive opérateur-grade — diagnostic multi-couches, preuves, rerun plan' },
   { slug: 'pilot-runbook', title: 'Runbook Pilote Orange', icon: BookOpen, file: '/docs/PILOT_ORANGE_RUNBOOK.md', description: 'Procédure complète du pilote V1 — 4 parcours' },
   { slug: 'pilot-checklist', title: 'Checklist Pilote', icon: ClipboardList, file: '/docs/PILOT_ORANGE_CHECKLIST.md', description: 'Checklists J-7/J-2/Jour J et par parcours' },
   { slug: 'pilot-gonogo', title: 'Grille GO/NOGO', icon: Target, file: '/docs/PILOT_ORANGE_GO_NOGO_TEMPLATE.md', description: 'Critères d’évaluation et décision GO/NOGO' },

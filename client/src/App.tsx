@@ -32,6 +32,7 @@ import AdminAuditPage from "./pages/AdminAuditPage";
 import AdminRolesPage from "./pages/AdminRolesPage";
 import DriveCampaignsPage from "./pages/DriveCampaignsPage";
 import DriveReportingPage from "./pages/DriveReportingPage";
+import DriveIncidentReportPage from "./pages/DriveIncidentReportPage";
 import ProjectSettingsPage from "./pages/ProjectSettingsPage";
 
 // ─── Query Client ───────────────────────────────────────────────────────────
@@ -138,6 +139,9 @@ function AppRouter() {
               </Route>
               <Route path="/drive/reporting">
                 <ProjectScoped><DriveReportingPage /></ProjectScoped>
+              </Route>
+              <Route path="/drive/incidents/:id">
+                <ProjectScoped><DriveIncidentReportPage /></ProjectScoped>
               </Route>
 
               {/* Admin pages */}
