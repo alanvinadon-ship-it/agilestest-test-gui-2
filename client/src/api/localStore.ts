@@ -7,7 +7,7 @@
 import type {
   Project, CreateProjectRequest, UpdateProjectRequest,
   TestProfile, TestScenario, Dataset, DatasetType,
-  Execution, Artifact, Incident,
+  Execution, ExecutionStatus, Artifact, Incident,
   CaptureJob, CaptureDetail, CreateCaptureRequest,
   Probe, ProbeWithPolicy, ProbeWithScope, CreateProbeRequest, UpdateProbeRequest,
   PaginatedResponse, AuditLogEntry,
@@ -513,7 +513,16 @@ export const localExecutions = {
     return item;
   },
 
-  create(projectId: string, data: { profile_id: string; scenario_id: string }): Execution {
+  create(projectId: string, data: {
+    profile_id: string;
+    scenario_id: string;
+    script_id?: string;
+    script_version?: number;
+    dataset_bundle_id?: string;
+    target_env?: TargetEnv;
+    runner_id?: string;
+    ai_repair_from_execution_id?: string;
+  }): Execution {
     const items = getCollection<Execution>('executions');
     const execution: Execution = {
       id: uid(),
@@ -522,6 +531,12 @@ export const localExecutions = {
       scenario_id: data.scenario_id,
       status: 'PENDING',
       runner_type: 'local',
+      script_id: data.script_id,
+      script_version: data.script_version,
+      dataset_bundle_id: data.dataset_bundle_id,
+      target_env: data.target_env,
+      runner_id: data.runner_id,
+      ai_repair_from_execution_id: data.ai_repair_from_execution_id,
       started_at: null,
       finished_at: null,
       duration_ms: null,
@@ -548,9 +563,20 @@ export const localExecutions = {
           const all2 = getCollection<Execution>('executions');
           const idx2 = all2.findIndex(e => e.id === execution.id);
           if (idx2 !== -1) {
-            all2[idx2].status = Math.random() > 0.3 ? 'PASSED' : 'FAILED';
+            const isFailed = Math.random() > 0.3 ? 'PASSED' : 'FAILED';
+            all2[idx2].status = isFailed as ExecutionStatus;
             all2[idx2].finished_at = now();
             all2[idx2].duration_ms = Math.round(duration);
+            // Simuler des artefacts et incidents pour les FAILED
+            if (isFailed === 'FAILED') {
+              all2[idx2].artifacts_count = 2;
+              all2[idx2].incidents_count = 1;
+              _generateSimulatedArtifacts(execution.id, data.scenario_id);
+              _generateSimulatedIncidents(execution.id, projectId, data.scenario_id);
+            } else {
+              all2[idx2].artifacts_count = 1;
+              _generateSimulatedArtifacts(execution.id, data.scenario_id);
+            }
             setCollection('executions', all2);
           }
         }, duration);
@@ -559,7 +585,73 @@ export const localExecutions = {
 
     return execution;
   },
+
+  /** Clone une exécution (rerun) avec les mêmes références */
+  rerun(executionId: string): Execution {
+    const original = localExecutions.get(executionId);
+    return localExecutions.create(original.project_id, {
+      profile_id: original.profile_id,
+      scenario_id: original.scenario_id,
+      script_id: original.script_id,
+      script_version: original.script_version,
+      dataset_bundle_id: original.dataset_bundle_id,
+      target_env: original.target_env,
+      runner_id: original.runner_id,
+    });
+  },
 };
+
+/** Génère des artefacts simulés pour une exécution */
+function _generateSimulatedArtifacts(executionId: string, scenarioId: string) {
+  const artifacts = getCollection<Artifact>('artifacts');
+  artifacts.push({
+    id: uid(),
+    execution_id: executionId,
+    type: 'LOG',
+    filename: `execution_${executionId.slice(0, 8)}.log`,
+    mime_type: 'text/plain',
+    size_bytes: 4096 + Math.floor(Math.random() * 8192),
+    storage_path: `/logs/${executionId}.log`,
+    s3_uri: null,
+    checksum: null,
+    capture_job_id: null,
+    download_url: null,
+    created_at: now(),
+  });
+  artifacts.push({
+    id: uid(),
+    execution_id: executionId,
+    type: 'SCREENSHOT',
+    filename: `failure_${scenarioId.slice(0, 8)}.png`,
+    mime_type: 'image/png',
+    size_bytes: 65536 + Math.floor(Math.random() * 32768),
+    storage_path: `/screenshots/${executionId}.png`,
+    s3_uri: null,
+    checksum: null,
+    capture_job_id: null,
+    download_url: null,
+    created_at: now(),
+  });
+  setCollection('artifacts', artifacts);
+}
+
+/** Génère des incidents simulés pour une exécution FAILED */
+function _generateSimulatedIncidents(executionId: string, projectId: string, scenarioId: string) {
+  const incidents = getCollection<Incident>('incidents');
+  incidents.push({
+    id: uid(),
+    execution_id: executionId,
+    project_id: projectId,
+    title: `Assertion failed in scenario ${scenarioId.slice(0, 8)}`,
+    description: 'Expected element to be visible but it was not found within timeout. The selector may have changed or the page did not load correctly.',
+    severity: 'MAJOR',
+    step_name: 'Step 2 - Vérification',
+    expected_result: 'Element visible and interactable',
+    actual_result: 'TimeoutError: locator.waitFor: Timeout 30000ms exceeded',
+    detected_at: now(),
+  });
+  setCollection('incidents', incidents);
+}
 
 // ─── Artifacts (local stubs) ────────────────────────────────────────────────
 

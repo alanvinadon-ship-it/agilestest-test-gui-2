@@ -1,13 +1,28 @@
-import { useRoute, Link } from 'wouter';
-import { useQuery } from '@tanstack/react-query';
+/**
+ * ExecutionDetailPage — Détail d'une exécution avec :
+ * - Infos script/bundle/env/runner
+ * - Si FAILED : bouton "Repair from failure"
+ * - Diff viewer + Save as new version + Activate & Rerun
+ */
+import { useState, useEffect } from 'react';
+import { useRoute, Link, useLocation } from 'wouter';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { repositoryApi } from '../api/repositoryApi';
 import { collectorApi } from '../api/collectorApi';
-import type { Execution, Artifact, Incident, ExecutionStatus } from '../types';
+import { localScriptRepository } from '../ai/scriptRepository';
+import { localExecutions } from '../api/localStore';
+import { useProject } from '../state/projectStore';
+import { useAuth } from '../auth/AuthContext';
+import type { Execution, Artifact, Incident, ExecutionStatus, TargetEnv } from '../types';
+import type { GeneratedScript, RepairResult } from '../ai/types';
 import {
   ArrowLeft, Loader2, CheckCircle2, XCircle, Clock, AlertTriangle,
   Ban, Download, FileText, Image, Video, FileCode, File,
-  AlertCircle, Activity
+  AlertCircle, Activity, Wrench, Sparkles, Play, RotateCcw,
+  Code2, Globe, Package, Server, ChevronDown, ChevronRight,
+  Save, Zap, Eye, FileDiff,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 const statusConfig: Record<ExecutionStatus, { icon: typeof CheckCircle2; label: string; cls: string; bg: string }> = {
   PENDING: { icon: Clock, label: 'En attente', cls: 'text-yellow-400', bg: 'bg-yellow-400/10' },
@@ -16,6 +31,13 @@ const statusConfig: Record<ExecutionStatus, { icon: typeof CheckCircle2; label: 
   FAILED: { icon: XCircle, label: 'Échoué', cls: 'text-red-400', bg: 'bg-red-400/10' },
   ERROR: { icon: AlertTriangle, label: 'Erreur', cls: 'text-orange-400', bg: 'bg-orange-400/10' },
   CANCELLED: { icon: Ban, label: 'Annulé', cls: 'text-gray-400', bg: 'bg-gray-400/10' },
+};
+
+const ENV_META: Record<TargetEnv, { label: string; color: string }> = {
+  DEV:          { label: 'DEV',          color: 'text-sky-400 bg-sky-500/10 border-sky-500/20' },
+  PREPROD:      { label: 'PREPROD',      color: 'text-violet-400 bg-violet-500/10 border-violet-500/20' },
+  PILOT_ORANGE: { label: 'PILOT ORANGE', color: 'text-orange-400 bg-orange-500/10 border-orange-500/20' },
+  PROD:         { label: 'PROD',         color: 'text-red-400 bg-red-500/10 border-red-500/20' },
 };
 
 const artifactIcons: Record<string, typeof FileText> = {
@@ -51,9 +73,250 @@ function formatBytes(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
+// ─── Simulated Repair ────────────────────────────────────────────────────
+
+function simulateRepair(script: GeneratedScript, incidents: Incident[]): RepairResult {
+  const errorMsg = incidents[0]?.description || 'Unknown error';
+  const mainFile = script.files[0];
+  return {
+    patches: [{
+      file_path: mainFile?.path || 'test.spec.ts',
+      original_snippet: '  await page.locator(selector).waitFor({ timeout: 30000 });',
+      patched_snippet: '  await page.locator(selector).waitFor({ state: "visible", timeout: 60000 });\n  await page.waitForLoadState("networkidle");',
+      explanation: `Fix timeout issue: increased timeout to 60s and added networkidle wait to handle slow page loads. Root cause: ${errorMsg.slice(0, 100)}`,
+    }],
+    root_cause: `The test failed because the page did not fully load before the assertion. ${errorMsg}`,
+    suggested_fix: 'Increase timeout and add explicit wait for network idle state before interacting with elements.',
+    confidence: 0.82,
+    warnings: ['This is a simulated repair. In production, the IA model would analyze the actual logs and screenshots.'],
+  };
+}
+
+// ─── Repair Panel Component ──────────────────────────────────────────────
+
+function RepairPanel({ execution, script, incidents, onRepairComplete }: {
+  execution: Execution;
+  script: GeneratedScript;
+  incidents: Incident[];
+  onRepairComplete: (newScript: GeneratedScript) => void;
+}) {
+  const [repairing, setRepairing] = useState(false);
+  const [repairResult, setRepairResult] = useState<RepairResult | null>(null);
+  const [showDiff, setShowDiff] = useState(true);
+
+  const handleRepair = async () => {
+    setRepairing(true);
+    // Simulate AI repair call
+    await new Promise(r => setTimeout(r, 2000));
+    const result = simulateRepair(script, incidents);
+    setRepairResult(result);
+    setRepairing(false);
+  };
+
+  const handleSaveNewVersion = () => {
+    // Apply patches to create new files
+    const newFiles = script.files.map(f => {
+      const patch = repairResult?.patches.find(p => p.file_path === f.path);
+      if (patch) {
+        return {
+          ...f,
+          content: f.content.replace(patch.original_snippet, patch.patched_snippet),
+        };
+      }
+      return f;
+    });
+
+    const newScript = localScriptRepository.create({
+      project_id: script.project_id,
+      scenario_id: script.scenario_id,
+      bundle_id: script.bundle_id,
+      env: script.env,
+      framework: script.framework,
+      code_language: script.code_language,
+      files: newFiles,
+      notes: `Repair from execution ${execution.id.slice(0, 8)} — ${repairResult?.root_cause.slice(0, 100)}`,
+      warnings: repairResult?.warnings,
+    });
+
+    toast.success(`Script v${newScript.version} créé (repair)`);
+    onRepairComplete(newScript);
+  };
+
+  const handleActivateAndRerun = () => {
+    // Apply patches to create new files
+    const newFiles = script.files.map(f => {
+      const patch = repairResult?.patches.find(p => p.file_path === f.path);
+      if (patch) {
+        return {
+          ...f,
+          content: f.content.replace(patch.original_snippet, patch.patched_snippet),
+        };
+      }
+      return f;
+    });
+
+    const newScript = localScriptRepository.create({
+      project_id: script.project_id,
+      scenario_id: script.scenario_id,
+      bundle_id: script.bundle_id,
+      env: script.env,
+      framework: script.framework,
+      code_language: script.code_language,
+      files: newFiles,
+      notes: `Repair from execution ${execution.id.slice(0, 8)} — ${repairResult?.root_cause.slice(0, 100)}`,
+      warnings: repairResult?.warnings,
+    });
+
+    // Activate
+    localScriptRepository.activate(newScript.script_id);
+
+    // Rerun with new script
+    localExecutions.create(execution.project_id, {
+      profile_id: execution.profile_id,
+      scenario_id: execution.scenario_id,
+      script_id: newScript.script_id,
+      script_version: newScript.version,
+      dataset_bundle_id: execution.dataset_bundle_id,
+      target_env: execution.target_env,
+      runner_id: execution.runner_id,
+      ai_repair_from_execution_id: execution.id,
+    });
+
+    toast.success(`Script v${newScript.version} activé + exécution relancée`);
+    onRepairComplete(newScript);
+  };
+
+  return (
+    <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-red-500/5">
+        <div className="flex items-center gap-2">
+          <Wrench className="w-4 h-4 text-red-400" />
+          <h3 className="text-sm font-heading font-semibold text-foreground">Repair from Failure</h3>
+        </div>
+        {!repairResult && (
+          <button
+            onClick={handleRepair}
+            disabled={repairing}
+            className="inline-flex items-center gap-1.5 rounded-md bg-red-500/10 border border-red-500/20 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 disabled:opacity-50 transition-colors"
+          >
+            {repairing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+            {repairing ? 'Analyse IA en cours...' : 'Lancer le repair IA'}
+          </button>
+        )}
+      </div>
+
+      {repairing && (
+        <div className="px-5 py-8 text-center">
+          <Loader2 className="w-8 h-8 text-primary animate-spin mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">Analyse des artefacts et logs d'échec...</p>
+          <p className="text-xs text-muted-foreground mt-1">Le modèle IA identifie la cause racine et génère des patches.</p>
+        </div>
+      )}
+
+      {repairResult && (
+        <div className="px-5 py-4 space-y-4">
+          {/* Root cause */}
+          <div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Cause racine identifiée</p>
+            <p className="text-sm text-foreground bg-secondary/20 rounded-md p-3">{repairResult.root_cause}</p>
+          </div>
+
+          {/* Confidence */}
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">Confiance :</span>
+            <div className="flex-1 h-2 bg-secondary/30 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all"
+                style={{ width: `${repairResult.confidence * 100}%` }}
+              />
+            </div>
+            <span className="text-xs font-mono text-foreground">{Math.round(repairResult.confidence * 100)}%</span>
+          </div>
+
+          {/* Suggested fix */}
+          <div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Correction suggérée</p>
+            <p className="text-sm text-foreground">{repairResult.suggested_fix}</p>
+          </div>
+
+          {/* Patches diff */}
+          <div>
+            <button
+              onClick={() => setShowDiff(!showDiff)}
+              className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 mb-2"
+            >
+              {showDiff ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+              <FileDiff className="w-3 h-3" />
+              {repairResult.patches.length} patch(es) — {repairResult.patches.map(p => p.file_path).join(', ')}
+            </button>
+
+            {showDiff && repairResult.patches.map((patch, i) => (
+              <div key={i} className="bg-secondary/10 rounded-md border border-border overflow-hidden mb-2">
+                <div className="px-3 py-1.5 bg-secondary/20 border-b border-border flex items-center gap-2">
+                  <FileCode className="w-3 h-3 text-muted-foreground" />
+                  <span className="text-xs font-mono text-foreground">{patch.file_path}</span>
+                </div>
+                <div className="p-3 space-y-2">
+                  <div>
+                    <p className="text-[10px] font-mono text-red-400 uppercase mb-0.5">— Original</p>
+                    <pre className="text-xs text-red-300/80 bg-red-500/5 rounded p-2 overflow-x-auto whitespace-pre-wrap">{patch.original_snippet}</pre>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-mono text-green-400 uppercase mb-0.5">+ Patched</p>
+                    <pre className="text-xs text-green-300/80 bg-green-500/5 rounded p-2 overflow-x-auto whitespace-pre-wrap">{patch.patched_snippet}</pre>
+                  </div>
+                  <p className="text-xs text-muted-foreground italic">{patch.explanation}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Warnings */}
+          {repairResult.warnings && repairResult.warnings.length > 0 && (
+            <div className="bg-amber-500/5 border border-amber-500/10 rounded-md p-3">
+              {repairResult.warnings.map((w, i) => (
+                <p key={i} className="text-xs text-amber-400 flex items-start gap-1.5">
+                  <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+                  {w}
+                </p>
+              ))}
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex items-center gap-3 pt-2 border-t border-border">
+            <button
+              onClick={handleSaveNewVersion}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-secondary transition-colors"
+            >
+              <Save className="w-3.5 h-3.5" />
+              Save as new version
+            </button>
+            <button
+              onClick={handleActivateAndRerun}
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              Activate & Rerun
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────
+
 export default function ExecutionDetailPage() {
   const [, params] = useRoute('/executions/:id');
+  const [, navigate] = useLocation();
   const executionId = params?.id || '';
+  const queryClient = useQueryClient();
+  const { currentProject } = useProject();
+  const { canWrite } = useAuth();
+
+  const [repairScript, setRepairScript] = useState<GeneratedScript | null>(null);
 
   const { data: execution, isLoading: loadingExec } = useQuery({
     queryKey: ['execution', executionId],
@@ -80,6 +343,23 @@ export default function ExecutionDetailPage() {
   const artifacts = (artifactsData?.data || []) as Artifact[];
   const incidents = (incidentsData?.data || []) as Incident[];
 
+  // Load script info
+  const [script, setScript] = useState<GeneratedScript | null>(null);
+  useEffect(() => {
+    if (execution?.script_id) {
+      const s = localScriptRepository.get(execution.script_id);
+      setScript(s);
+    }
+  }, [execution?.script_id]);
+
+  const handleRerun = () => {
+    if (!execution) return;
+    localExecutions.rerun(execution.id);
+    queryClient.invalidateQueries({ queryKey: ['executions'] });
+    toast.success('Exécution relancée');
+    navigate('/executions');
+  };
+
   if (loadingExec) {
     return (
       <div className="max-w-5xl mx-auto flex items-center justify-center py-24">
@@ -102,6 +382,8 @@ export default function ExecutionDetailPage() {
 
   const config = statusConfig[execution.status];
   const StatusIcon = config.icon;
+  const envMeta = execution.target_env ? ENV_META[execution.target_env] : null;
+  const isFailed = execution.status === 'FAILED' || execution.status === 'ERROR';
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -109,7 +391,7 @@ export default function ExecutionDetailPage() {
       <div>
         <Link href="/executions">
           <span className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground cursor-pointer mb-4">
-            <ArrowLeft className="w-4 h-4" /> Retour aux exécutions
+            <ArrowLeft className="w-4 h-4" /> Retour au Run Center
           </span>
         </Link>
 
@@ -117,37 +399,110 @@ export default function ExecutionDetailPage() {
           <div>
             <h1 className="text-2xl font-heading font-bold text-foreground">Exécution</h1>
             <p className="text-xs font-mono text-muted-foreground mt-1">{execution.id}</p>
+            {execution.ai_repair_from_execution_id && (
+              <span className="inline-flex items-center gap-1 mt-1 text-[10px] text-violet-400 bg-violet-500/10 px-1.5 py-0.5 rounded border border-violet-500/20">
+                <Sparkles className="w-2.5 h-2.5" /> Repair de {execution.ai_repair_from_execution_id.slice(0, 8)}
+              </span>
+            )}
           </div>
-          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md ${config.bg}`}>
-            <StatusIcon className={`w-4 h-4 ${config.cls} ${execution.status === 'RUNNING' ? 'animate-spin' : ''}`} />
-            <span className={`text-sm font-medium ${config.cls}`}>{config.label}</span>
+          <div className="flex items-center gap-2">
+            {canWrite && (execution.status === 'PASSED' || execution.status === 'FAILED') && (
+              <button
+                onClick={handleRerun}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary transition-colors"
+              >
+                <RotateCcw className="w-3.5 h-3.5" /> Rerun
+              </button>
+            )}
+            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md ${config.bg}`}>
+              <StatusIcon className={`w-4 h-4 ${config.cls} ${execution.status === 'RUNNING' ? 'animate-spin' : ''}`} />
+              <span className={`text-sm font-medium ${config.cls}`}>{config.label}</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* Execution context cards */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <div className="bg-card border border-border rounded-lg p-4">
           <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-1">Durée</p>
           <p className="text-lg font-heading font-bold text-foreground">{formatDuration(execution.duration_ms)}</p>
         </div>
         <div className="bg-card border border-border rounded-lg p-4">
-          <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-1">Artefacts</p>
-          <p className="text-lg font-heading font-bold text-foreground">{artifacts.length}</p>
+          <div className="flex items-center gap-1 mb-1">
+            <Globe className="w-3 h-3 text-muted-foreground" />
+            <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Env</p>
+          </div>
+          {envMeta ? (
+            <span className={`text-xs font-semibold px-1.5 py-0.5 rounded border ${envMeta.color}`}>
+              {envMeta.label}
+            </span>
+          ) : (
+            <p className="text-sm text-muted-foreground">—</p>
+          )}
         </div>
         <div className="bg-card border border-border rounded-lg p-4">
-          <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-1">Incidents</p>
-          <p className={`text-lg font-heading font-bold ${incidents.length > 0 ? 'text-red-400' : 'text-foreground'}`}>
-            {incidents.length}
-          </p>
+          <div className="flex items-center gap-1 mb-1">
+            <Code2 className="w-3 h-3 text-muted-foreground" />
+            <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Script</p>
+          </div>
+          {script ? (
+            <div>
+              <p className="text-sm font-medium text-foreground">{script.framework} v{script.version}</p>
+              <p className="text-[10px] text-muted-foreground">{script.files.length} fichier(s)</p>
+            </div>
+          ) : execution.script_id ? (
+            <p className="text-xs font-mono text-muted-foreground">v{execution.script_version || '?'}</p>
+          ) : (
+            <p className="text-sm text-muted-foreground">—</p>
+          )}
         </div>
         <div className="bg-card border border-border rounded-lg p-4">
-          <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-1">Démarré</p>
-          <p className="text-sm font-medium text-foreground">
-            {execution.started_at ? new Date(execution.started_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' }) : '—'}
-          </p>
+          <div className="flex items-center gap-1 mb-1">
+            <Package className="w-3 h-3 text-muted-foreground" />
+            <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Bundle</p>
+          </div>
+          <p className="text-xs font-mono text-foreground">{execution.dataset_bundle_id ? execution.dataset_bundle_id.slice(0, 12) : '—'}</p>
+        </div>
+        <div className="bg-card border border-border rounded-lg p-4">
+          <div className="flex items-center gap-1 mb-1">
+            <Server className="w-3 h-3 text-muted-foreground" />
+            <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Runner</p>
+          </div>
+          <p className="text-xs font-mono text-foreground">{execution.runner_id || '—'}</p>
         </div>
       </div>
+
+      {/* Repair Panel — only for FAILED executions with a script */}
+      {isFailed && script && canWrite && (
+        <RepairPanel
+          execution={execution}
+          script={script}
+          incidents={incidents}
+          onRepairComplete={(newScript) => {
+            setRepairScript(newScript);
+            queryClient.invalidateQueries({ queryKey: ['executions'] });
+          }}
+        />
+      )}
+
+      {/* Repair result info */}
+      {repairScript && (
+        <div className="bg-green-500/5 border border-green-500/20 rounded-lg px-5 py-3 flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              Script v{repairScript.version} créé par repair
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {repairScript.framework} — {repairScript.files.length} fichier(s) — {repairScript.status}
+            </p>
+          </div>
+          <Link href="/scripts" className="ml-auto text-xs text-primary hover:underline">
+            Voir les scripts
+          </Link>
+        </div>
+      )}
 
       {/* Artifacts */}
       <div>

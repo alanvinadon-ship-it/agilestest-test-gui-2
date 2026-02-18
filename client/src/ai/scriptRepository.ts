@@ -166,4 +166,24 @@ export const localScriptRepository = {
   countByScenario(projectId: string, scenarioId: string): number {
     return readAll().filter(s => s.project_id === projectId && s.scenario_id === scenarioId).length;
   },
+
+  /** Récupère le script ACTIVE pour un scénario donné (le plus récent si plusieurs) */
+  getActive(projectId: string, scenarioId: string): GeneratedScript | null {
+    const scripts = readAll().filter(s =>
+      s.project_id === projectId && s.scenario_id === scenarioId && s.status === 'ACTIVE'
+    );
+    if (scripts.length === 0) return null;
+    scripts.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+    return scripts[0];
+  },
+
+  /** Liste toutes les versions d'un scénario+framework */
+  listVersions(projectId: string, scenarioId: string, framework?: ScriptFramework): GeneratedScript[] {
+    let scripts = readAll().filter(s =>
+      s.project_id === projectId && s.scenario_id === scenarioId
+    );
+    if (framework) scripts = scripts.filter(s => s.framework === framework);
+    scripts.sort((a, b) => b.version - a.version);
+    return scripts;
+  },
 };

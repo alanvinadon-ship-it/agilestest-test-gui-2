@@ -54,6 +54,18 @@ export interface Execution {
   scenario_id: string;
   status: ExecutionStatus;
   runner_type: string;
+  /** Script IA utilisé pour cette exécution */
+  script_id?: string;
+  /** Version du script au moment du lancement */
+  script_version?: number;
+  /** Bundle de datasets utilisé */
+  dataset_bundle_id?: string;
+  /** Environnement cible */
+  target_env?: TargetEnv;
+  /** Identifiant du runner (probe/agent) */
+  runner_id?: string;
+  /** Si cette exécution résulte d'un repair, référence l'exécution d'origine */
+  ai_repair_from_execution_id?: string;
   started_at: string | null;
   finished_at: string | null;
   duration_ms: number | null;
