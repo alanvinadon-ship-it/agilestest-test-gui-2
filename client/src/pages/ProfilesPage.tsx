@@ -7,7 +7,7 @@ import type { TestProfile, TestType } from '../types';
 import {
   Plus, Settings2, Loader2, Trash2, X, AlertCircle, Search,
   ChevronRight, ChevronLeft, Check, Info,
-  ClipboardCheck, Shield, Gauge
+  ClipboardCheck, Shield, Gauge, Edit2
 } from 'lucide-react';
 import {
   type ProfileDomain, type ProfileType, type ConfigField,
@@ -525,6 +525,7 @@ export default function ProfilesPage() {
   const { currentProject } = useProject();
   const { canWrite } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
+  const [editingProfile, setEditingProfile] = useState<TestProfile | null>(null);
   const [search, setSearch] = useState('');
   const [domainFilter, setDomainFilter] = useState<string>('ALL');
   const [testTypeFilter, setTestTypeFilter] = useState<string>('ALL');
@@ -728,10 +729,16 @@ export default function ProfilesPage() {
                   </div>
                 </div>
                 {canWrite && (
-                  <button onClick={() => deleteMutation.mutate(profile.id)}
-                    className="text-muted-foreground hover:text-destructive transition-colors p-1.5 opacity-0 group-hover:opacity-100" title="Supprimer">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => setEditingProfile(profile)}
+                      className="text-muted-foreground hover:text-primary transition-colors p-1.5" title="Éditer">
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => deleteMutation.mutate(profile.id)}
+                      className="text-muted-foreground hover:text-destructive transition-colors p-1.5" title="Supprimer">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 )}
               </div>
             );
@@ -745,6 +752,171 @@ export default function ProfilesPage() {
         projectId={currentProject.id}
         projectDomain={currentProject.domain}
       />
+      {editingProfile && (
+        <EditProfileModal
+          profile={editingProfile}
+          onClose={() => setEditingProfile(null)}
+          projectDomain={currentProject?.domain}
+        />
+      )}
+    </div>
+  );
+}
+
+function EditProfileModal({ profile, onClose, projectDomain }: {
+  profile: TestProfile;
+  onClose: () => void;
+  projectDomain?: string;
+}) {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState(profile.name);
+  const [description, setDescription] = useState(profile.description || '');
+  const [config, setConfig] = useState<Record<string, unknown>>(profile.config || {});
+  const [error, setError] = useState<string | null>(null);
+  const [testTypeError, setTestTypeError] = useState(false);
+
+  const { data: scenariosData } = useQuery({
+    queryKey: ['scenarios', profile.id],
+    queryFn: () => repositoryApi.listScenarios(profile.id),
+  });
+
+  const hasScenarios = (scenariosData?.data || []).length > 0;
+  const configFields = profile.profile_type ? CONFIG_TEMPLATES[profile.profile_type as ProfileType] : [];
+
+  const mutation = useMutation({
+    mutationFn: (data: Partial<TestProfile>) => repositoryApi.updateProfile(profile.id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      onClose();
+    },
+    onError: (err: unknown) => {
+      const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
+      const msg = axiosErr?.response?.data?.error?.message || (err as Error)?.message || 'Erreur lors de la modification.';
+      if (msg.includes('409')) {
+        setTestTypeError(true);
+      }
+      setError(msg);
+    },
+  });
+
+  const handleConfigChange = (key: string, val: unknown) => {
+    setConfig(prev => ({ ...prev, [key]: val }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setTestTypeError(false);
+
+    if (!name.trim()) {
+      setError('Le nom du profil est requis.');
+      return;
+    }
+
+    const validationErrors = validateConfig(profile.profile_type as ProfileType, config);
+    if (validationErrors.length > 0) {
+      setError(validationErrors.join(' '));
+      return;
+    }
+
+    mutation.mutate({
+      name: name.trim(),
+      description: description.trim(),
+      config,
+    });
+  };
+
+  const domainMeta = profile.domain ? DOMAIN_META[profile.domain as ProfileDomain] : null;
+  const testTypeMeta = profile.test_type ? TEST_TYPE_META[profile.test_type] : null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-card rounded-lg shadow-xl border border-border w-full max-w-2xl mx-4 max-h-[85vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+          <div className="flex items-center gap-3">
+            {domainMeta && (
+              <div className={`w-8 h-8 rounded-md ${domainMeta.bgClass} flex items-center justify-center`}>
+                <domainMeta.icon className={`w-4 h-4 ${domainMeta.textClass}`} />
+              </div>
+            )}
+            <div>
+              <h2 className="text-lg font-heading font-semibold text-foreground">Éditer le profil</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {domainMeta && <span className={`font-medium ${domainMeta.textClass}`}>{domainMeta.label}</span>}
+                {testTypeMeta && <span className="ml-2">· <span className={`font-medium ${testTypeMeta.textClass}`}>{testTypeMeta.label}</span></span>}
+              </p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 overflow-y-auto flex-1">
+          {error && (
+            <div className="flex items-start gap-2 bg-destructive/10 border border-destructive/20 rounded-md p-3 mb-4">
+              <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-destructive">{error}</p>
+                {testTypeError && hasScenarios && (
+                  <p className="text-xs text-destructive/80 mt-1">Le type de test ne peut pas être modifié car des scénarios sont attachés à ce profil.</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">Nom du profil *</label>
+              <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+                placeholder="Ex: E2E — Orange Web Production"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">Description</label>
+              <textarea value={description} onChange={(e) => setDescription(e.target.value)}
+                placeholder="Description optionnelle du profil..."
+                rows={2}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 resize-none" />
+            </div>
+
+            {configFields.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-3">Configuration</h3>
+                <div className="space-y-4">
+                  {configFields.map(field => (
+                    <div key={field.key}>
+                      <label className="block text-sm font-medium text-foreground mb-1">
+                        {field.label}
+                        {field.required && <span className="text-destructive"> *</span>}
+                      </label>
+                      <ConfigFieldInput
+                        field={field}
+                        value={config[field.key]}
+                        onChange={handleConfigChange}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </form>
+        </div>
+
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border shrink-0">
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 rounded-md border border-input text-sm font-medium text-foreground hover:bg-accent transition-colors">
+            Annuler
+          </button>
+          <button type="button" onClick={handleSubmit} disabled={mutation.isPending}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            {mutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+            Enregistrer
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
