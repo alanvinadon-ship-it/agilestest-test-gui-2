@@ -69,6 +69,7 @@ function SecretField({ label, value, hasValue, canEdit, onChange }: {
 }) {
   const [editing, setEditing] = useState(false);
   const [localVal, setLocalVal] = useState('');
+  const [visible, setVisible] = useState(false);
 
   if (!canEdit) {
     return (
@@ -87,8 +88,9 @@ function SecretField({ label, value, hasValue, canEdit, onChange }: {
         <label className="block text-xs font-medium text-muted-foreground mb-1">{label}</label>
         <div className="flex gap-2">
           <div className="flex-1 px-3 py-2 bg-secondary/30 border border-border rounded-md text-sm text-muted-foreground">{MASK}</div>
-          <button onClick={() => { setEditing(true); setLocalVal(''); }}
-            className="px-3 py-2 text-xs bg-secondary hover:bg-secondary/80 border border-border rounded-md text-foreground transition-colors">
+          <button onClick={() => { setEditing(true); setLocalVal(''); setVisible(true); }}
+            className="px-3 py-2 text-xs bg-secondary hover:bg-secondary/80 border border-border rounded-md text-foreground transition-colors"
+            title="Modifier">
             <Edit2 className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -96,18 +98,28 @@ function SecretField({ label, value, hasValue, canEdit, onChange }: {
     );
   }
 
+  const currentVal = editing ? localVal : (value || '');
+
   return (
     <div>
       <label className="block text-xs font-medium text-muted-foreground mb-1">{label}</label>
       <div className="flex gap-2">
-        <input type="password" value={editing ? localVal : (value || '')}
-          onChange={e => { if (editing) setLocalVal(e.target.value); else onChange(e.target.value); }}
-          onBlur={() => { if (editing) { onChange(localVal || null); setEditing(false); } }}
-          placeholder={`Entrer ${label.toLowerCase()}`}
-          className="flex-1 px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+        <div className="relative flex-1">
+          <input type={visible ? 'text' : 'password'} value={currentVal}
+            onChange={e => { if (editing) setLocalVal(e.target.value); else onChange(e.target.value); }}
+            onBlur={() => { if (editing) { onChange(localVal || null); setEditing(false); } }}
+            placeholder={`Entrer ${label.toLowerCase()}`}
+            className="w-full px-3 py-2 pr-10 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+          <button type="button" onClick={() => setVisible(!visible)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+            title={visible ? 'Masquer' : 'Afficher'}>
+            {visible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        </div>
         {editing && (
-          <button onClick={() => { setEditing(false); }}
-            className="px-3 py-2 text-xs bg-secondary hover:bg-secondary/80 border border-border rounded-md text-muted-foreground">
+          <button onClick={() => { setEditing(false); setVisible(false); }}
+            className="px-3 py-2 text-xs bg-secondary hover:bg-secondary/80 border border-border rounded-md text-muted-foreground"
+            title="Annuler">
             <X className="w-3.5 h-3.5" />
           </button>
         )}
