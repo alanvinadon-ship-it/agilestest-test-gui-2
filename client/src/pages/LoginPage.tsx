@@ -3,6 +3,7 @@ import { useAuth } from '../auth/AuthContext';
 import { adminApi } from '../api/adminApi';
 import { Loader2, LogIn, AlertCircle, Shield } from 'lucide-react';
 import type { User } from '../types';
+import { adminUsers } from '../admin/adminStore';
 
 // ─── Comptes locaux autorisés (fallback quand l'API n'est pas disponible) ────
 const LOCAL_ACCOUNTS: Array<{ email: string; password: string; user: User }> = [
@@ -63,7 +64,31 @@ export default function LoginPage() {
         const token = generateLocalToken(localAccount.user);
         login(token, localAccount.user);
       } else {
-        setError('Identifiants invalides. Veuillez réessayer.');
+        // 3. Fallback : vérifier les comptes créés via invitation (localStorage)
+        const storedPasswords = JSON.parse(localStorage.getItem('agilestest_passwords') || '{}');
+        const storedPwd = storedPasswords[email.toLowerCase()];
+        if (storedPwd && storedPwd === password) {
+          const adminUser = adminUsers.list({ search: email }).data.find(
+            u => u.email.toLowerCase() === email.toLowerCase() && u.status === 'ACTIVE'
+          );
+          if (adminUser) {
+            const invitedUser: User = {
+              id: adminUser.id,
+              email: adminUser.email,
+              full_name: adminUser.full_name,
+              role: adminUser.role,
+              is_active: true,
+              created_at: adminUser.created_at,
+              updated_at: adminUser.updated_at,
+            };
+            const token = generateLocalToken(invitedUser);
+            login(token, invitedUser);
+          } else {
+            setError('Identifiants invalides. Veuillez r\u00e9essayer.');
+          }
+        } else {
+          setError('Identifiants invalides. Veuillez r\u00e9essayer.');
+        }
       }
     } finally {
       setLoading(false);

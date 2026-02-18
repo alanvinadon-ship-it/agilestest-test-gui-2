@@ -566,6 +566,85 @@ export const adminInvites = {
     return invites[idx];
   },
 
+  findByToken(token: string): Invite | undefined {
+    const invites = getStore<Invite>('agilestest_invites');
+    return invites.find(i => i.token === token);
+  },
+
+  acceptByToken(
+    token: string,
+    fullName: string,
+    password: string
+  ): { user: AdminUser; invite: Invite } {
+    const invites = getStore<Invite>('agilestest_invites');
+    const idx = invites.findIndex(i => i.token === token);
+    if (idx === -1) throw new Error('Invitation non trouv\u00e9e ou lien invalide.');
+    if (invites[idx].status !== 'PENDING') {
+      throw new Error('Cette invitation n\'est plus valide.');
+    }
+    if (new Date(invites[idx].expires_at).getTime() < Date.now()) {
+      invites[idx].status = 'EXPIRED';
+      setStore('agilestest_invites', invites);
+      throw new Error('Cette invitation a expir\u00e9.');
+    }
+
+    // Mark invite as accepted
+    invites[idx].status = 'ACCEPTED';
+    invites[idx].accepted_at = now();
+    setStore('agilestest_invites', invites);
+
+    // Activate the user
+    ensureSeed();
+    const users = getStore<AdminUser>('agilestest_admin_users');
+    const uIdx = users.findIndex(u => u.email.toLowerCase() === invites[idx].email.toLowerCase());
+    if (uIdx !== -1) {
+      users[uIdx].status = 'ACTIVE';
+      users[uIdx].is_active = true;
+      users[uIdx].full_name = fullName;
+      users[uIdx].updated_at = now();
+    }
+    setStore('agilestest_admin_users', users);
+
+    // Store password hash (simulated — localStorage)
+    const passwords = JSON.parse(localStorage.getItem('agilestest_passwords') || '{}');
+    passwords[invites[idx].email.toLowerCase()] = password;
+    localStorage.setItem('agilestest_passwords', JSON.stringify(passwords));
+
+    // Add project membership if specified
+    if (invites[idx].project_id && invites[idx].project_role && uIdx !== -1) {
+      const memberships = getStore<ProjectMembership>('agilestest_memberships');
+      if (!memberships.some(m => m.project_id === invites[idx].project_id && m.user_id === users[uIdx].id)) {
+        memberships.push({
+          id: `mem-${uid()}`,
+          project_id: invites[idx].project_id!,
+          project_name: invites[idx].project_id!,
+          user_id: users[uIdx].id,
+          user_email: users[uIdx].email,
+          user_name: fullName,
+          project_role: invites[idx].project_role!,
+          added_by: invites[idx].invited_by_id,
+          created_at: now(),
+          updated_at: now(),
+        });
+        setStore('agilestest_memberships', memberships);
+        users[uIdx].memberships_count = memberships.filter(m => m.user_id === users[uIdx].id).length;
+        setStore('agilestest_admin_users', users);
+      }
+    }
+
+    logAudit(
+      uIdx !== -1 ? users[uIdx].id : 'unknown',
+      fullName,
+      invites[idx].email,
+      'INVITE_ACCEPTED',
+      'invite',
+      invites[idx].id,
+      invites[idx].email
+    );
+
+    return { user: uIdx !== -1 ? users[uIdx] : {} as AdminUser, invite: invites[idx] };
+  },
+
   accept(
     inviteId: string,
     fullName: string

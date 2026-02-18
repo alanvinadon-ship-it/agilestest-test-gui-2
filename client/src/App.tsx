@@ -31,6 +31,7 @@ import AdminRbacPage from "./pages/AdminRbacPage";
 import AdminAuditPage from "./pages/AdminAuditPage";
 import AdminRolesPage from "./pages/AdminRolesPage";
 import AdminNotificationsPage from "./pages/AdminNotificationsPage";
+import AcceptInvitePage from "./pages/AcceptInvitePage";
 import DriveCampaignsPage from "./pages/DriveCampaignsPage";
 import DriveReportingPage from "./pages/DriveReportingPage";
 import DriveIncidentReportPage from "./pages/DriveIncidentReportPage";
@@ -87,6 +88,11 @@ function AppRouter() {
       {/* Login */}
       <Route path="/login">
         {isAuthenticated ? <Redirect to="/" /> : <LoginPage />}
+      </Route>
+
+      {/* Invitation acceptance (public, no auth required) */}
+      <Route path="/invite/accept">
+        <AcceptInvitePage />
       </Route>
 
       {/* Authenticated routes */}

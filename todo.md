@@ -26,3 +26,11 @@
 - [x] handleResend envoie aussi l'email réel via SMTP
 - [x] Indicateur visuel mode Live/Stub dans le modal d'invitation
 - [x] 11 tests Vitest passent (3 nouveaux pour sendInviteEmail)
+- [x] Page d'acceptation d'invitation /invite/accept?token=...
+- [x] Validation du token d'invitation (findByToken + acceptByToken dans adminStore)
+- [x] Formulaire d'inscription (nom, mot de passe, confirmation, indicateur de force)
+- [x] Activation du compte utilisateur après acceptation + stockage mot de passe
+- [x] Route publique dans App.tsx pour /invite/accept (pas besoin d'auth)
+- [x] LoginPage supporte les comptes créés via invitation (fallback localStorage)
+- [x] États visuels : loading, invalid, expired, already accepted, success
+- [x] 11 tests Vitest passent (existants non cassés)
