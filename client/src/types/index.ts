@@ -261,6 +261,19 @@ export interface Probe {
   metadata: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
+  // ── PROBE-HARDEN-1 ──
+  version?: string;
+  uptime_seconds?: number;
+  cpu_percent?: number;
+  disk_free_mb?: number;
+  interfaces?: string[];
+  active_sessions?: number;
+  total_captures?: number;
+  last_error?: string | null;
+  health_status?: 'healthy' | 'degraded' | 'unhealthy';
+  heartbeat_interval_sec?: number;
+  allowlist_cidrs?: string[];
+  tls_enabled?: boolean;
 }
 
 export interface ProbePolicy {

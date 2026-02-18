@@ -137,6 +137,33 @@ export const collectorApi = {
       () => localProbes.list({ status: 'ONLINE' }),
     ),
 
+  // ─── Probe Hardening (PROBE-HARDEN-1) ───────────────────────────────
+
+  probeHeartbeat: (probeId: string, payload?: {
+    status?: 'healthy' | 'degraded' | 'unhealthy';
+    version?: string;
+    cpu_percent?: number;
+    disk_free_mb?: number;
+    interfaces?: string[];
+    active_sessions?: number;
+  }) =>
+    withFallback(
+      () => apiClient.post<{ data: Probe }>(`${PREFIX}/probes/${probeId}/heartbeat`, payload).then(r => r.data.data),
+      () => localProbes.heartbeat(probeId, payload),
+    ),
+
+  getProbeHealth: (probeId: string) =>
+    withFallback(
+      () => apiClient.get<{ data: ReturnType<typeof localProbes.getHealth> }>(`${PREFIX}/probes/${probeId}/health`).then(r => r.data.data),
+      () => localProbes.getHealth(probeId),
+    ),
+
+  testProbeCapture: (probeId: string, iface: string) =>
+    withFallback(
+      () => apiClient.post<{ data: ReturnType<typeof localProbes.testCapture> }>(`${PREFIX}/probes/${probeId}/test-capture`, { iface }).then(r => r.data.data),
+      () => localProbes.testCapture(probeId, iface),
+    ),
+
   // ─── Sites & Zones ─────────────────────────────────────────────────────────
 
   listSitesAndZones: (projectId?: string) =>

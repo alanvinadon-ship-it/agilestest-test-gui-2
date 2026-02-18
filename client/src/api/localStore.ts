@@ -752,6 +752,19 @@ export const localProbes = {
       metadata: null,
       created_at: now(),
       updated_at: now(),
+      // PROBE-HARDEN-1
+      version: '1.0.0',
+      uptime_seconds: 0,
+      cpu_percent: 0,
+      disk_free_mb: 0,
+      interfaces: [],
+      active_sessions: 0,
+      total_captures: 0,
+      last_error: null,
+      health_status: 'unhealthy',
+      heartbeat_interval_sec: 30,
+      allowlist_cidrs: ['0.0.0.0/0'],
+      tls_enabled: false,
     };
     items.push(probe);
     setCollection('probes', items);
@@ -778,6 +791,81 @@ export const localProbes = {
 
   regenerateToken(probeId: string): { token: string } {
     return { token: `probe-token-${uid()}` };
+  },
+
+  /** Simuler un heartbeat (met à jour last_seen, health, métriques) */
+  heartbeat(probeId: string, payload?: {
+    status?: 'healthy' | 'degraded' | 'unhealthy';
+    version?: string;
+    cpu_percent?: number;
+    disk_free_mb?: number;
+    interfaces?: string[];
+    active_sessions?: number;
+  }): Probe {
+    const items = getCollection<Probe>('probes');
+    const idx = items.findIndex(p => p.probe_id === probeId);
+    if (idx === -1) throw new Error('Sonde introuvable');
+    const healthStatus = payload?.status || 'healthy';
+    items[idx] = {
+      ...items[idx],
+      status: healthStatus === 'unhealthy' ? 'OFFLINE' : healthStatus === 'degraded' ? 'DEGRADED' : 'ONLINE',
+      last_seen_at: now(),
+      health_status: healthStatus,
+      version: payload?.version || items[idx].version || '1.0.0',
+      cpu_percent: payload?.cpu_percent ?? items[idx].cpu_percent ?? 0,
+      disk_free_mb: payload?.disk_free_mb ?? items[idx].disk_free_mb ?? 0,
+      interfaces: payload?.interfaces || items[idx].interfaces || [],
+      active_sessions: payload?.active_sessions ?? items[idx].active_sessions ?? 0,
+      updated_at: now(),
+    };
+    setCollection('probes', items);
+    return items[idx];
+  },
+
+  /** Récupérer le health d'une probe (simulation) */
+  getHealth(probeId: string): {
+    status: string; version: string; uptime_seconds: number;
+    interfaces: Array<{ name: string; up: boolean; speed_mbps: number | null; rx_bytes: number; tx_bytes: number; promisc: boolean }>;
+    disk_free_mb: number; cpu_percent: number; last_error: string | null;
+    active_sessions: number; total_captures: number;
+  } {
+    const probe = getCollection<Probe>('probes').find(p => p.probe_id === probeId);
+    if (!probe) throw new Error('Sonde introuvable');
+    return {
+      status: probe.health_status || (probe.status === 'ONLINE' ? 'healthy' : 'unhealthy'),
+      version: probe.version || '1.0.0',
+      uptime_seconds: probe.uptime_seconds || Math.floor(Math.random() * 86400),
+      interfaces: (probe.interfaces || ['eth0', 'mirror0']).map(name => ({
+        name, up: true, speed_mbps: 1000, rx_bytes: Math.floor(Math.random() * 1e9),
+        tx_bytes: Math.floor(Math.random() * 1e8), promisc: name.includes('mirror'),
+      })),
+      disk_free_mb: probe.disk_free_mb || Math.floor(Math.random() * 50000) + 10000,
+      cpu_percent: probe.cpu_percent || Math.floor(Math.random() * 40) + 5,
+      last_error: probe.last_error || null,
+      active_sessions: probe.active_sessions || 0,
+      total_captures: probe.total_captures || Math.floor(Math.random() * 200),
+    };
+  },
+
+  /** Lancer un test de capture (30s, dry run) */
+  testCapture(probeId: string, iface: string): {
+    success: boolean; packets_captured: number; bytes_captured: number;
+    duration_sec: number; reason_code?: string; error_message?: string;
+  } {
+    const probe = getCollection<Probe>('probes').find(p => p.probe_id === probeId);
+    if (!probe) return { success: false, packets_captured: 0, bytes_captured: 0, duration_sec: 0, reason_code: 'PROBE_OFFLINE', error_message: 'Sonde introuvable' };
+    if (probe.status !== 'ONLINE') return { success: false, packets_captured: 0, bytes_captured: 0, duration_sec: 0, reason_code: 'PROBE_OFFLINE', error_message: 'Sonde hors ligne' };
+    const ifaceExists = (probe.interfaces || []).length > 0;
+    if (!ifaceExists && iface !== 'eth0' && iface !== 'mirror0') {
+      return { success: false, packets_captured: 0, bytes_captured: 0, duration_sec: 0, reason_code: 'IFACE_NOT_FOUND', error_message: `Interface ${iface} introuvable` };
+    }
+    const packets = Math.floor(Math.random() * 5000) + 100;
+    return {
+      success: true,
+      packets_captured: packets,
+      bytes_captured: packets * (Math.floor(Math.random() * 800) + 64),
+      duration_sec: 30,
+    };
   },
 };
 
@@ -2005,6 +2093,7 @@ export const localCaptureSessions = {
     iface: string;
     bpf_filter: string;
     vlan_filter?: number;
+    is_test_capture?: boolean;
   }): CaptureSession {
     const items = getCollection<CaptureSession>('capture_sessions');
     const session: CaptureSession = {
@@ -2019,6 +2108,9 @@ export const localCaptureSessions = {
       vlan_filter: data.vlan_filter,
       status: 'PENDING',
       artifacts: [],
+      packets_captured: 0,
+      bytes_captured: 0,
+      is_test_capture: data.is_test_capture || false,
       created_at: now(),
     };
     items.push(session);
@@ -2046,12 +2138,22 @@ export const localCaptureSessions = {
     return items[idx];
   },
 
-  /** Marquer en erreur */
-  fail(sessionId: string, errorMessage: string): CaptureSession {
+  /** Marquer en erreur avec reason code */
+  fail(sessionId: string, errorMessage: string, reasonCode?: string): CaptureSession {
     const items = getCollection<CaptureSession>('capture_sessions');
     const idx = items.findIndex(s => s.session_id === sessionId);
     if (idx === -1) throw new Error('Session introuvable');
-    items[idx] = { ...items[idx], status: 'FAILED', stopped_at: now(), error_message: errorMessage };
+    items[idx] = { ...items[idx], status: 'FAILED', stopped_at: now(), error_message: errorMessage, reason_code: (reasonCode as CaptureSession['reason_code']) || undefined };
+    setCollection('capture_sessions', items);
+    return items[idx];
+  },
+
+  /** Timeout de session */
+  timeout(sessionId: string): CaptureSession {
+    const items = getCollection<CaptureSession>('capture_sessions');
+    const idx = items.findIndex(s => s.session_id === sessionId);
+    if (idx === -1) throw new Error('Session introuvable');
+    items[idx] = { ...items[idx], status: 'TIMEOUT' as CaptureSessionStatus, stopped_at: now(), reason_code: 'TIMEOUT', error_message: 'Session timeout' };
     setCollection('capture_sessions', items);
     return items[idx];
   },
@@ -2076,20 +2178,37 @@ export const localCaptureSessions = {
     return items[idx];
   },
 
+  /** Lister les sessions par execution_id */
+  listByExecution(executionId: string): CaptureSession[] {
+    return getCollection<CaptureSession>('capture_sessions').filter(s => s.execution_id === executionId);
+  },
+
   /** Simuler un cycle complet de capture probe (pour le mode local/demo) */
   simulateCapture(data: {
     project_id: string;
     campaign_id?: string;
     drive_job_id?: string;
+    execution_id?: string;
     probe_id: string;
     iface: string;
     bpf_filter: string;
     vlan_filter?: number;
+    is_test_capture?: boolean;
   }): CaptureSession {
+    // Vérifier que la probe est en ligne
+    const probes = getCollection<Probe>('probes');
+    const probe = probes.find(p => p.probe_id === data.probe_id);
+    if (!probe || probe.status !== 'ONLINE') {
+      const session = this.create(data);
+      return this.fail(session.session_id, 'Sonde hors ligne', 'PROBE_OFFLINE');
+    }
     // Créer
     const session = this.create(data);
     // Démarrer
     this.start(session.session_id);
+    // Simuler des paquets
+    const packets = Math.floor(Math.random() * 10000) + 500;
+    const bytes = packets * (Math.floor(Math.random() * 800) + 64);
     // Simuler des artefacts
     const fakeArtifacts = [
       {

@@ -257,3 +257,51 @@ La page de détail d'exécution affiche une section **Capture Réseau** avec :
 2. Vérifier l'espace disque disponible sur MinIO
 3. Vérifier les permissions du bucket : `mc admin policy info minio readwrite`
 4. Consulter le manifest d'artefacts dans le détail du job
+
+
+---
+
+## Durcissement Probe (PROBE-HARDEN-1)
+
+> Pour la documentation complète du durcissement probe, voir [PROBE_HARDENING.md](./PROBE_HARDENING.md).
+
+### Reason Codes
+
+Le Mode B utilise désormais des **reason codes standardisés** pour diagnostiquer les échecs de capture :
+
+| Code | Sévérité | Description |
+|------|----------|-------------|
+| `PROBE_OFFLINE` | critical | Sonde hors ligne ou injoignable |
+| `IFACE_NOT_FOUND` | critical | Interface réseau introuvable |
+| `NO_PACKETS` | warning | Aucun paquet capturé après timeout |
+| `CAPTURE_FAILED` | error | Échec de tcpdump |
+| `UPLOAD_FAILED` | error | Échec upload PCAP vers MinIO |
+| `AUTH_FAILED` | critical | Token invalide ou expiré |
+| `TIMEOUT` | warning | Session dépassant la durée maximale |
+| `QUOTA_EXCEEDED` | warning | Quota de sessions concurrentes atteint |
+| `CONFIG_INVALID` | critical | Configuration probe invalide |
+
+### Quotas de capture
+
+| Quota | Défaut | Description |
+|-------|--------|-------------|
+| `max_concurrent_sessions` | 3 | Sessions simultanées par sonde |
+| `max_session_duration_sec` | 3600 | Durée max (1h) |
+| `max_total_size_mb` | 5000 | Taille max PCAP (5 GB) |
+| `max_files_per_session` | 20 | Fichiers PCAP max par session |
+| `no_packets_timeout_sec` | 30 | Délai détection no-packets |
+
+### Authentification
+
+Chaque sonde doit s'authentifier via le header `X-PROBE-TOKEN`. Le token est généré à la création et peut être régénéré depuis l'UI. Les CIDR autorisés et le TLS sont configurables par sonde.
+
+### Test Capture (Dry Run)
+
+Le bouton "Test capture (30s)" dans la page Sondes permet de vérifier la connectivité et la capture avant de lancer un run réel. Le résultat inclut le nombre de paquets, le volume et le reason code en cas d'échec.
+
+### Changelog
+
+| Version | Date | Description |
+|---------|------|-------------|
+| 1.0.0 | 2026-02-18 | Capture Policy initiale (DRIVE-CAPTURE-POLICY-1) |
+| 1.1.0 | 2026-02-18 | Durcissement probe (PROBE-HARDEN-1) : auth, heartbeat, health, reason codes, quotas, test capture |

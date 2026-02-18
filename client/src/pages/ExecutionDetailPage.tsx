@@ -24,7 +24,8 @@ import {
   Save, Zap, Eye, FileDiff, Shield,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { resolveCapturePolicy, CaptureModeBadge, captureModeLabel, captureSourceLabel } from '../capture';
+import { resolveCapturePolicy, CaptureModeBadge, captureModeLabel, captureSourceLabel, REASON_CODE_LABELS, REASON_CODE_SEVERITY } from '../capture';
+import type { ProbeReasonCode } from '../capture/types';
 import { localCapturePolicies, localCaptureSessions } from '../api/localStore';
 import type { CaptureSession } from '../capture/types';
 
@@ -586,26 +587,64 @@ export default function ExecutionDetailPage() {
                 </div>
               )}
 
-              {/* Capture Sessions (Mode B) */}
+              {/* Capture Sessions (Mode B) — enrichi PROBE-HARDEN-1 */}
               {captureSessions.length > 0 && (
                 <div className="border-t border-border/50 pt-3">
                   <p className="text-[10px] text-muted-foreground uppercase mb-2">Sessions de capture probe</p>
-                  <div className="space-y-1">
-                    {captureSessions.map((sess: CaptureSession) => (
-                      <div key={sess.session_id} className="flex items-center justify-between text-xs bg-secondary/20 rounded px-3 py-1.5">
-                        <span className="font-mono text-foreground">{sess.session_id.slice(0, 12)}...</span>
-                        <span className="text-muted-foreground">probe={sess.probe_id}</span>
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                          sess.status === 'COMPLETED' ? 'text-green-400 bg-green-500/10' :
-                          sess.status === 'RUNNING' ? 'text-blue-400 bg-blue-500/10' :
-                          sess.status === 'FAILED' ? 'text-red-400 bg-red-500/10' :
-                          'text-yellow-400 bg-yellow-500/10'
-                        }`}>{sess.status}</span>
-                        {sess.artifacts.length > 0 && (
-                          <span className="text-muted-foreground">{sess.artifacts.length} pcap(s)</span>
-                        )}
-                      </div>
-                    ))}
+                  <div className="space-y-2">
+                    {captureSessions.map((sess: CaptureSession) => {
+                      const reasonLabel = sess.reason_code ? REASON_CODE_LABELS[sess.reason_code as ProbeReasonCode] : null;
+                      const reasonSeverity = sess.reason_code ? REASON_CODE_SEVERITY[sess.reason_code as ProbeReasonCode] : null;
+                      return (
+                        <div key={sess.session_id} className="bg-secondary/20 rounded-md px-3 py-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-foreground">{sess.session_id.slice(0, 12)}...</span>
+                              <span className="text-muted-foreground">probe={sess.probe_id}</span>
+                              <span className="text-muted-foreground">iface={sess.iface}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {sess.packets_captured != null && (
+                                <span className="text-muted-foreground">{sess.packets_captured} paquets</span>
+                              )}
+                              {sess.bytes_captured != null && sess.bytes_captured > 0 && (
+                                <span className="text-muted-foreground">{(sess.bytes_captured / 1024 / 1024).toFixed(1)} MB</span>
+                              )}
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                sess.status === 'COMPLETED' ? 'text-green-400 bg-green-500/10' :
+                                sess.status === 'RUNNING' ? 'text-blue-400 bg-blue-500/10' :
+                                sess.status === 'FAILED' ? 'text-red-400 bg-red-500/10' :
+                                sess.status === 'TIMEOUT' ? 'text-orange-400 bg-orange-500/10' :
+                                'text-yellow-400 bg-yellow-500/10'
+                              }`}>{sess.status}</span>
+                              {sess.artifacts.length > 0 && (
+                                <span className="text-muted-foreground">{sess.artifacts.length} pcap(s)</span>
+                              )}
+                            </div>
+                          </div>
+                          {/* Reason code diagnostic */}
+                          {sess.reason_code && (
+                            <div className={`mt-1.5 flex items-start gap-1.5 text-[11px] rounded px-2 py-1 ${
+                              reasonSeverity === 'critical' ? 'bg-red-500/10 text-red-400' :
+                              reasonSeverity === 'error' ? 'bg-orange-500/10 text-orange-400' :
+                              'bg-yellow-500/10 text-yellow-400'
+                            }`}>
+                              <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+                              <div>
+                                <span className="font-semibold font-mono">{sess.reason_code}</span>
+                                {reasonLabel && <span className="ml-1.5">{reasonLabel}</span>}
+                                {sess.error_message && <p className="text-muted-foreground mt-0.5">{sess.error_message}</p>}
+                              </div>
+                            </div>
+                          )}
+                          {sess.is_test_capture && (
+                            <span className="inline-flex items-center gap-1 mt-1 text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                              Test capture (dry run)
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

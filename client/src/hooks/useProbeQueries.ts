@@ -74,3 +74,39 @@ export function useCaptureProfiles() {
     queryFn: () => collectorApi.getCaptureProfiles(),
   });
 }
+
+// ─── Probe Hardening (PROBE-HARDEN-1) ─────────────────────────────────────
+
+export function useProbeHealth(probeId: string) {
+  return useQuery({
+    queryKey: [...probeKeys.detail(probeId), 'health'],
+    queryFn: () => collectorApi.getProbeHealth(probeId),
+    enabled: !!probeId,
+    refetchInterval: 30000,
+  });
+}
+
+export function useProbeHeartbeat() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ probeId, payload }: { probeId: string; payload?: {
+      status?: 'healthy' | 'degraded' | 'unhealthy';
+      version?: string;
+      cpu_percent?: number;
+      disk_free_mb?: number;
+      interfaces?: string[];
+      active_sessions?: number;
+    }}) => collectorApi.probeHeartbeat(probeId, payload),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: probeKeys.detail(variables.probeId) });
+      queryClient.invalidateQueries({ queryKey: probeKeys.all });
+    },
+  });
+}
+
+export function useTestProbeCapture() {
+  return useMutation({
+    mutationFn: ({ probeId, iface }: { probeId: string; iface: string }) =>
+      collectorApi.testProbeCapture(probeId, iface),
+  });
+}
