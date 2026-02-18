@@ -1,20 +1,21 @@
 /**
- * SuggestScenariosModal — Modal de suggestion de scénarios IA.
+ * SuggestScenariosModal — Modal de suggestion de scénarios IA (durci industriel).
  *
- * Affiche les scénarios suggérés par le moteur IA avec :
- * - Table avec checkboxes pour sélection multiple
- * - Filtre par priorité (P0/P1/P2)
- * - Preview détaillée d'un scénario (étapes, inputs, datasets)
- * - Bouton "Importer la sélection"
+ * - Normalisation IDs : TESTTYPE-DOMAINCODE-NNN-SLUG
+ * - Breakdown par priorité (P0/P1/P2)
+ * - Import modes : SKIP | RENAME | OVERWRITE
+ * - Rapport d'import détaillé
+ * - Audit log
  */
 
 import { useState, useMemo, useCallback } from 'react';
 import {
   X, Sparkles, ChevronRight, ChevronDown, Check, Filter,
   AlertTriangle, Info, Zap, FileText, Tag, ArrowRight,
-  CheckSquare, Square, Loader2,
+  CheckSquare, Square, Loader2, Shield, RefreshCw, SkipForward,
+  ClipboardList, Download,
 } from 'lucide-react';
-import type { TestProfile } from '../types';
+import type { TestProfile, ImportMode, ImportReport } from '../types';
 import type { ScopeLevel, Priority } from '../config/scenarioTemplates';
 import {
   suggestScenarios,
@@ -22,7 +23,6 @@ import {
   type SuggestedScenario,
   type SuggestResponse,
 } from '../services/scenarioSuggestionEngine';
-import { localScenarios } from '../api/localStore';
 
 interface Props {
   profile: TestProfile;
@@ -33,7 +33,7 @@ interface Props {
   onImported: () => void;
 }
 
-// ─── Priority badge ────────────────────────────────────────────────────────
+// ─── Priority badge ─────────────────────────────────────────────────────
 
 const priorityConfig: Record<Priority, { label: string; color: string; bg: string }> = {
   P0: { label: 'P0 — Bloquant', color: 'text-red-400', bg: 'bg-red-500/15 border-red-500/30' },
@@ -50,7 +50,7 @@ function PriorityBadge({ priority }: { priority: Priority }) {
   );
 }
 
-// ─── Scope selector ────────────────────────────────────────────────────────
+// ─── Scope selector ─────────────────────────────────────────────────────
 
 const scopeOptions: Array<{ value: ScopeLevel; label: string; desc: string; icon: React.ReactNode }> = [
   { value: 'MINIMAL', label: 'Minimal', desc: 'Tests P0 essentiels uniquement', icon: <Zap className="w-4 h-4" /> },
@@ -58,31 +58,42 @@ const scopeOptions: Array<{ value: ScopeLevel; label: string; desc: string; icon
   { value: 'FULL', label: 'Complet', desc: 'P0 + P1 + P2 (couverture maximale)', icon: <FileText className="w-4 h-4" /> },
 ];
 
-// ─── Component ─────────────────────────────────────────────────────────────
+// ─── Import mode config ─────────────────────────────────────────────────
+
+const importModeConfig: Record<ImportMode, { label: string; desc: string; icon: React.ReactNode; color: string }> = {
+  SKIP: { label: 'Ignorer', desc: 'Les doublons sont ignorés', icon: <SkipForward className="w-4 h-4" />, color: 'text-blue-400 border-blue-500/30 bg-blue-500/10' },
+  RENAME: { label: 'Renommer', desc: 'Auto-génère un nouvel ID', icon: <RefreshCw className="w-4 h-4" />, color: 'text-amber-400 border-amber-500/30 bg-amber-500/10' },
+  OVERWRITE: { label: 'Écraser', desc: 'Remplace les existants (Admin)', icon: <Shield className="w-4 h-4" />, color: 'text-red-400 border-red-500/30 bg-red-500/10' },
+};
+
+// ─── Component ──────────────────────────────────────────────────────────
+
+type ModalStep = 'scope' | 'results' | 'report';
 
 export default function SuggestScenariosModal({ profile, projectId, projectName, open, onClose, onImported }: Props) {
   const [scope, setScope] = useState<ScopeLevel>('STANDARD');
-  const [step, setStep] = useState<'scope' | 'results'>('scope');
+  const [step, setStep] = useState<ModalStep>('scope');
   const [response, setResponse] = useState<SuggestResponse | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filterPriority, setFilterPriority] = useState<Priority | 'ALL'>('ALL');
+  const [importMode, setImportMode] = useState<ImportMode>('RENAME');
   const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{ imported: number; errors: number } | null>(null);
+  const [importReport, setImportReport] = useState<ImportReport | null>(null);
 
   // Générer les suggestions
   const handleGenerate = useCallback(() => {
     const result = suggestScenarios({
       profile,
+      project_id: projectId,
       project_name: projectName,
       scope_level: scope,
     });
     setResponse(result);
-    // Sélectionner tous les P0 par défaut
-    const p0Ids = new Set(result.suggestions.filter(s => s.priority === 'P0').map(s => s.scenario_id));
+    const p0Ids = new Set(result.suggestions.filter(s => s.priority === 'P0').map(s => s.scenario_code));
     setSelected(p0Ids);
     setStep('results');
-  }, [profile, projectName, scope]);
+  }, [profile, projectId, projectName, scope]);
 
   // Filtrer les suggestions
   const filteredSuggestions = useMemo(() => {
@@ -92,11 +103,11 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
   }, [response, filterPriority]);
 
   // Toggle sélection
-  const toggleSelect = (id: string) => {
+  const toggleSelect = (code: string) => {
     setSelected(prev => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
       return next;
     });
   };
@@ -105,41 +116,24 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
     if (selected.size === filteredSuggestions.length) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(filteredSuggestions.map(s => s.scenario_id)));
+      setSelected(new Set(filteredSuggestions.map(s => s.scenario_code)));
     }
   };
 
-  // Import
+  // Import avec mode
   const handleImport = useCallback(() => {
     if (!response) return;
     setImporting(true);
 
-    const toImport = response.suggestions.filter(s => selected.has(s.scenario_id));
+    const toImport = response.suggestions.filter(s => selected.has(s.scenario_code));
 
-    // Simuler un délai pour l'UX
     setTimeout(() => {
-      const result = bulkImportSuggestions(
-        toImport,
-        profile.id,
-        projectId,
-        localScenarios.create,
-      );
-
-      setImportResult({
-        imported: result.imported.length,
-        errors: result.errors.length,
-      });
+      const report = bulkImportSuggestions(toImport, profile.id, projectId, importMode);
+      setImportReport(report);
       setImporting(false);
-
-      // Fermer après 1.5s si succès
-      if (result.errors.length === 0) {
-        setTimeout(() => {
-          onImported();
-          onClose();
-        }, 1500);
-      }
+      setStep('report');
     }, 800);
-  }, [response, selected, profile.id, projectId, onImported, onClose]);
+  }, [response, selected, profile.id, projectId, importMode]);
 
   // Reset on close
   const handleClose = () => {
@@ -148,9 +142,15 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
     setSelected(new Set());
     setExpandedId(null);
     setFilterPriority('ALL');
+    setImportMode('RENAME');
     setImporting(false);
-    setImportResult(null);
+    setImportReport(null);
     onClose();
+  };
+
+  const handleFinishImport = () => {
+    onImported();
+    handleClose();
   };
 
   if (!open) return null;
@@ -159,16 +159,23 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="bg-[#0c1829] border border-[#1e3a5f]/60 rounded-lg shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col">
 
-        {/* ─── Header ──────────────────────────────────────────────── */}
+        {/* ─── Header ──────────────────────────────────────────── */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#1e3a5f]/40">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 flex items-center justify-center">
               <Sparkles className="w-5 h-5 text-amber-400" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-slate-100">Suggérer des scénarios</h2>
+              <h2 className="text-lg font-semibold text-slate-100">
+                {step === 'report' ? 'Rapport d\'import' : 'Suggérer des scénarios'}
+              </h2>
               <p className="text-xs text-slate-400">
                 {profile.name} — {profile.domain} · {profile.test_type}
+                {response && step !== 'scope' && (
+                  <span className="ml-2 text-amber-400/70">
+                    ID format: {response.metadata.test_type}-{response.metadata.domain_code}-NNN-SLUG
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -177,7 +184,7 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
           </button>
         </div>
 
-        {/* ─── Step 1: Scope Selection ─────────────────────────────── */}
+        {/* ─── Step 1: Scope Selection ─────────────────────────── */}
         {step === 'scope' && (
           <div className="flex-1 overflow-y-auto p-6">
             <div className="mb-6">
@@ -216,6 +223,36 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
               ))}
             </div>
 
+            {/* Import mode selector */}
+            <div className="mb-6">
+              <h3 className="text-sm font-semibold text-slate-200 mb-1">Mode d'import (collision)</h3>
+              <p className="text-xs text-slate-400 mb-3">
+                Comportement si un scénario avec le même code existe déjà.
+              </p>
+              <div className="flex gap-2">
+                {(Object.keys(importModeConfig) as ImportMode[]).map(mode => {
+                  const cfg = importModeConfig[mode];
+                  return (
+                    <button
+                      key={mode}
+                      onClick={() => setImportMode(mode)}
+                      className={`flex-1 flex items-center gap-2 p-3 rounded-lg border transition-all text-left ${
+                        importMode === mode
+                          ? cfg.color + ' border-opacity-100'
+                          : 'border-[#1e3a5f]/40 bg-[#0a1220] hover:border-[#1e3a5f]/60 text-slate-400'
+                      }`}
+                    >
+                      {cfg.icon}
+                      <div>
+                        <div className="text-xs font-semibold">{cfg.label}</div>
+                        <div className="text-[10px] opacity-70">{cfg.desc}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Info box */}
             <div className="flex items-start gap-3 p-4 rounded-lg bg-[#0a1220] border border-[#1e3a5f]/30">
               <Info className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
@@ -225,24 +262,39 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
                 <span className="text-amber-400">{profile.test_type}</span> ·{' '}
                 <span className="text-amber-400">{profile.profile_type || 'N/A'}</span>
                 <br />
-                Le moteur sélectionnera les templates adaptés à cette combinaison et générera des scénarios
-                avec IDs normalisés, priorités et justifications.
+                IDs normalisés : <code className="text-cyan-400">{profile.test_type}-{'{DOMAINCODE}'}-NNN-SLUG</code>
               </div>
             </div>
           </div>
         )}
 
-        {/* ─── Step 2: Results ─────────────────────────────────────── */}
+        {/* ─── Step 2: Results ─────────────────────────────────── */}
         {step === 'results' && response && (
           <div className="flex-1 overflow-hidden flex flex-col">
-            {/* Toolbar */}
+            {/* Toolbar with breakdown */}
             <div className="flex items-center justify-between px-6 py-3 border-b border-[#1e3a5f]/30 bg-[#0a1220]/50">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-4">
                 <span className="text-xs text-slate-400">
-                  {response.suggestions.length} scénarios suggérés
+                  {response.suggestions.length} scénarios
                   {selected.size > 0 && (
                     <span className="text-amber-400 ml-1">· {selected.size} sélectionnés</span>
                   )}
+                </span>
+                {/* Breakdown badges */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/20 font-mono">
+                    P0: {response.metadata.breakdown.P0}
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/20 font-mono">
+                    P1: {response.metadata.breakdown.P1}
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 border border-blue-500/20 font-mono">
+                    P2: {response.metadata.breakdown.P2}
+                  </span>
+                </div>
+                {/* Import mode badge */}
+                <span className={`text-[10px] px-1.5 py-0.5 rounded border font-mono ${importModeConfig[importMode].color}`}>
+                  Mode: {importMode}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -273,22 +325,22 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
                     : <Square className="w-4 h-4" />
                   }
                 </button>
-                <span className="text-xs text-slate-500 font-medium uppercase tracking-wider flex-1">Scénario</span>
+                <span className="text-xs text-slate-500 font-medium uppercase tracking-wider flex-1">Scénario (code normalisé)</span>
                 <span className="text-xs text-slate-500 font-medium uppercase tracking-wider w-16 text-center">Priorité</span>
                 <span className="text-xs text-slate-500 font-medium uppercase tracking-wider w-20 text-center">Étapes</span>
                 <span className="text-xs text-slate-500 font-medium uppercase tracking-wider w-24 text-center">Datasets</span>
               </div>
 
               {filteredSuggestions.map(suggestion => {
-                const isExpanded = expandedId === suggestion.scenario_id;
-                const isSelected = selected.has(suggestion.scenario_id);
+                const isExpanded = expandedId === suggestion.scenario_code;
+                const isSelected = selected.has(suggestion.scenario_code);
 
                 return (
-                  <div key={suggestion.scenario_id} className={`border-b border-[#1e3a5f]/15 ${isSelected ? 'bg-amber-500/5' : ''}`}>
+                  <div key={suggestion.scenario_code} className={`border-b border-[#1e3a5f]/15 ${isSelected ? 'bg-amber-500/5' : ''}`}>
                     {/* Row */}
                     <div className="flex items-center gap-3 px-6 py-3 hover:bg-white/[0.02] transition-colors">
                       <button
-                        onClick={() => toggleSelect(suggestion.scenario_id)}
+                        onClick={() => toggleSelect(suggestion.scenario_code)}
                         className="text-slate-400 hover:text-amber-400 transition-colors flex-shrink-0"
                       >
                         {isSelected
@@ -298,7 +350,7 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
                       </button>
 
                       <button
-                        onClick={() => setExpandedId(isExpanded ? null : suggestion.scenario_id)}
+                        onClick={() => setExpandedId(isExpanded ? null : suggestion.scenario_code)}
                         className="flex-1 flex items-center gap-2 text-left min-w-0"
                       >
                         {isExpanded
@@ -307,9 +359,9 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
                         }
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-mono text-amber-500/70">{suggestion.scenario_id}</span>
-                            <span className="text-sm text-slate-200 truncate">{suggestion.title}</span>
+                            <span className="text-xs font-mono text-cyan-400/80">{suggestion.scenario_code}</span>
                           </div>
+                          <span className="text-sm text-slate-200 truncate block">{suggestion.title}</span>
                           <p className="text-xs text-slate-500 truncate mt-0.5">{suggestion.rationale}</p>
                         </div>
                       </button>
@@ -325,7 +377,7 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
                       <div className="w-24 text-center flex-shrink-0">
                         <span className="text-xs text-slate-400">
                           {suggestion.required_datasets_types.length > 0
-                            ? suggestion.required_datasets_types.join(', ')
+                            ? suggestion.required_datasets_types.length
                             : '—'
                           }
                         </span>
@@ -336,29 +388,27 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
                     {isExpanded && (
                       <div className="px-6 pb-4 pt-1 ml-7 mr-6">
                         <div className="rounded-lg border border-[#1e3a5f]/30 bg-[#0a1220] p-4 space-y-4">
-                          {/* Rationale */}
                           <div>
                             <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Justification</h4>
                             <p className="text-sm text-slate-400 leading-relaxed">{suggestion.rationale}</p>
                           </div>
 
-                          {/* Steps */}
                           <div>
                             <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Étapes</h4>
                             <div className="space-y-2">
-                              {suggestion.steps_outline.map((step, i) => (
+                              {suggestion.steps_outline.map((s, i) => (
                                 <div key={i} className="flex items-start gap-3">
                                   <div className="w-6 h-6 rounded bg-[#1e3a5f]/30 flex items-center justify-center flex-shrink-0 mt-0.5">
                                     <span className="text-xs font-mono text-amber-400">{i + 1}</span>
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
-                                      <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-[#1e3a5f]/30 text-cyan-400">{step.action}</span>
-                                      <span className="text-sm text-slate-300">{step.description}</span>
+                                      <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-[#1e3a5f]/30 text-cyan-400">{s.action}</span>
+                                      <span className="text-sm text-slate-300">{s.description}</span>
                                     </div>
                                     <div className="flex items-center gap-1 mt-1">
                                       <ArrowRight className="w-3 h-3 text-green-500/60" />
-                                      <span className="text-xs text-green-400/70">{step.expected_result}</span>
+                                      <span className="text-xs text-green-400/70">{s.expected_result}</span>
                                     </div>
                                   </div>
                                 </div>
@@ -366,20 +416,17 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
                             </div>
                           </div>
 
-                          {/* Expected results */}
                           <div>
                             <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Résultats attendus</h4>
                             <ul className="space-y-1">
                               {suggestion.expected_results_outline.map((r, i) => (
                                 <li key={i} className="flex items-center gap-2 text-xs text-slate-400">
-                                  <Check className="w-3 h-3 text-green-500/60 flex-shrink-0" />
-                                  {r}
+                                  <Check className="w-3 h-3 text-green-500/60 flex-shrink-0" />{r}
                                 </li>
                               ))}
                             </ul>
                           </div>
 
-                          {/* Required inputs & datasets */}
                           <div className="flex gap-6">
                             <div className="flex-1">
                               <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Inputs requis</h4>
@@ -389,9 +436,7 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
                                     input.includes('✓')
                                       ? 'bg-green-500/10 text-green-400 border border-green-500/20'
                                       : 'bg-[#1e3a5f]/30 text-slate-400 border border-[#1e3a5f]/40'
-                                  }`}>
-                                    {input}
-                                  </span>
+                                  }`}>{input}</span>
                                 ))}
                               </div>
                             </div>
@@ -400,16 +445,13 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
                                 <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Datasets</h4>
                                 <div className="flex flex-wrap gap-1.5">
                                   {suggestion.required_datasets_types.map((ds, i) => (
-                                    <span key={i} className="text-xs px-2 py-0.5 rounded font-mono bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                                      {ds}
-                                    </span>
+                                    <span key={i} className="text-xs px-2 py-0.5 rounded font-mono bg-purple-500/10 text-purple-400 border border-purple-500/20">{ds}</span>
                                   ))}
                                 </div>
                               </div>
                             )}
                           </div>
 
-                          {/* Tags */}
                           <div>
                             <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Tags</h4>
                             <div className="flex flex-wrap gap-1.5">
@@ -434,33 +476,84 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
                 </div>
               )}
             </div>
-
-            {/* Import result banner */}
-            {importResult && (
-              <div className={`px-6 py-3 border-t ${
-                importResult.errors > 0
-                  ? 'bg-red-500/10 border-red-500/30'
-                  : 'bg-green-500/10 border-green-500/30'
-              }`}>
-                <div className="flex items-center gap-2">
-                  {importResult.errors > 0 ? (
-                    <AlertTriangle className="w-4 h-4 text-red-400" />
-                  ) : (
-                    <Check className="w-4 h-4 text-green-400" />
-                  )}
-                  <span className={`text-sm ${importResult.errors > 0 ? 'text-red-300' : 'text-green-300'}`}>
-                    {importResult.imported} scénario(s) importé(s)
-                    {importResult.errors > 0 && `, ${importResult.errors} erreur(s)`}
-                  </span>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
-        {/* ─── Footer ──────────────────────────────────────────────── */}
+        {/* ─── Step 3: Import Report ──────────────────────────── */}
+        {step === 'report' && importReport && (
+          <div className="flex-1 overflow-y-auto p-6">
+            {/* Summary cards */}
+            <div className="grid grid-cols-4 gap-3 mb-6">
+              <div className="p-4 rounded-lg border border-green-500/20 bg-green-500/5">
+                <div className="text-2xl font-bold text-green-400 font-mono">{importReport.imported_count}</div>
+                <div className="text-xs text-green-400/70 mt-1">Importés</div>
+              </div>
+              <div className="p-4 rounded-lg border border-blue-500/20 bg-blue-500/5">
+                <div className="text-2xl font-bold text-blue-400 font-mono">{importReport.skipped_count}</div>
+                <div className="text-xs text-blue-400/70 mt-1">Ignorés</div>
+              </div>
+              <div className="p-4 rounded-lg border border-amber-500/20 bg-amber-500/5">
+                <div className="text-2xl font-bold text-amber-400 font-mono">{importReport.renamed_count}</div>
+                <div className="text-xs text-amber-400/70 mt-1">Renommés</div>
+              </div>
+              <div className="p-4 rounded-lg border border-red-500/20 bg-red-500/5">
+                <div className="text-2xl font-bold text-red-400 font-mono">{importReport.overwritten_count}</div>
+                <div className="text-xs text-red-400/70 mt-1">Écrasés</div>
+              </div>
+            </div>
+
+            {/* Audit info */}
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-[#0a1220] border border-[#1e3a5f]/30 mb-4">
+              <ClipboardList className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+              <div className="text-xs text-slate-400">
+                <strong className="text-slate-300">Audit :</strong>{' '}
+                <code className="text-cyan-400">{importReport.audit_log_id}</code>{' '}
+                — {new Date(importReport.timestamp).toLocaleString('fr-FR')}
+              </div>
+            </div>
+
+            {/* Details table */}
+            <h3 className="text-sm font-semibold text-slate-200 mb-3">Détail des opérations</h3>
+            <div className="rounded-lg border border-[#1e3a5f]/30 overflow-hidden">
+              <div className="grid grid-cols-[1fr_auto_2fr] gap-0 text-xs">
+                {/* Header */}
+                <div className="px-3 py-2 bg-[#0a1220] border-b border-[#1e3a5f]/30 text-slate-500 font-medium uppercase tracking-wider">Code</div>
+                <div className="px-3 py-2 bg-[#0a1220] border-b border-[#1e3a5f]/30 text-slate-500 font-medium uppercase tracking-wider text-center">Action</div>
+                <div className="px-3 py-2 bg-[#0a1220] border-b border-[#1e3a5f]/30 text-slate-500 font-medium uppercase tracking-wider">Message</div>
+
+                {/* Rows */}
+                {importReport.details.map((d, i) => {
+                  const actionColors: Record<string, string> = {
+                    IMPORTED: 'text-green-400 bg-green-500/10',
+                    SKIPPED: 'text-blue-400 bg-blue-500/10',
+                    RENAMED: 'text-amber-400 bg-amber-500/10',
+                    OVERWRITTEN: 'text-red-400 bg-red-500/10',
+                  };
+                  return (
+                    <div key={i} className="contents">
+                      <div className="px-3 py-2 border-b border-[#1e3a5f]/15 font-mono text-cyan-400/80 truncate">
+                        {d.scenario_code}
+                      </div>
+                      <div className="px-3 py-2 border-b border-[#1e3a5f]/15 text-center">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${actionColors[d.action] || 'text-slate-400'}`}>
+                          {d.action}
+                        </span>
+                      </div>
+                      <div className="px-3 py-2 border-b border-[#1e3a5f]/15 text-slate-400 truncate">
+                        {d.message}
+                        {d.old_id && <span className="ml-1 text-slate-500">(ancien: {d.old_id})</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── Footer ──────────────────────────────────────────── */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-[#1e3a5f]/40 bg-[#0a1220]/30">
-          {step === 'scope' ? (
+          {step === 'scope' && (
             <>
               <button onClick={handleClose} className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200 transition-colors">
                 Annuler
@@ -473,7 +566,9 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
                 Générer les suggestions
               </button>
             </>
-          ) : (
+          )}
+
+          {step === 'results' && (
             <>
               <button
                 onClick={() => { setStep('scope'); setResponse(null); setSelected(new Set()); }}
@@ -487,7 +582,7 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
                 </span>
                 <button
                   onClick={handleImport}
-                  disabled={selected.size === 0 || importing || importResult !== null}
+                  disabled={selected.size === 0 || importing}
                   className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-black font-semibold text-sm hover:from-amber-400 hover:to-orange-400 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {importing ? (
@@ -495,19 +590,29 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Import en cours…
                     </>
-                  ) : importResult ? (
-                    <>
-                      <Check className="w-4 h-4" />
-                      Importé !
-                    </>
                   ) : (
                     <>
-                      <ArrowRight className="w-4 h-4" />
-                      Importer la sélection ({selected.size})
+                      <Download className="w-4 h-4" />
+                      Importer ({selected.size}) — mode {importMode}
                     </>
                   )}
                 </button>
               </div>
+            </>
+          )}
+
+          {step === 'report' && (
+            <>
+              <div className="text-xs text-slate-500">
+                {importReport && `${importReport.imported_count} scénario(s) importé(s) en statut DRAFT`}
+              </div>
+              <button
+                onClick={handleFinishImport}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-black font-semibold text-sm hover:from-amber-400 hover:to-orange-400 transition-all"
+              >
+                <Check className="w-4 h-4" />
+                Terminer
+              </button>
             </>
           )}
         </div>

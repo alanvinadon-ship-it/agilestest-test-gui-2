@@ -13,6 +13,11 @@ export type CaptureType = 'LOGS' | 'PCAP';
 export type CaptureProfile = 'WEB' | 'IMS' | 'DIAMETER' | 'HTTP2' | 'SIP' | 'CUSTOM';
 export type IncidentSeverity = 'CRITICAL' | 'MAJOR' | 'MINOR' | 'INFO';
 export type TestType = 'VABF' | 'VSR' | 'VABE';
+export type ScenarioStatus = 'DRAFT' | 'FINAL' | 'DEPRECATED';
+export type ImportMode = 'SKIP' | 'RENAME' | 'OVERWRITE';
+
+/** Codes domaine normalisés pour les IDs de scénarios */
+export type DomainCode = 'WEB' | 'API' | 'MOB' | 'DESK' | 'IMS' | 'RAN' | 'EPC4' | '5GSA' | '5GNSA' | 'DRIVE';
 export type AnalysisStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
 export type ProjectDomain = 'WEB' | 'API' | 'IMS' | 'RAN' | 'EPC' | '5GC';
 
@@ -369,13 +374,57 @@ export interface TestScenario {
   id: string;
   profile_id: string;
   project_id: string;
+  /** Code normalisé du scénario (ex: VABF-WEB-001-AUTH-UTILISATEUR) */
+  scenario_code?: string;
   name: string;
   description: string;
   steps: ScenarioStep[];
+  /** Statut du scénario : DRAFT → FINAL → DEPRECATED */
+  status: ScenarioStatus;
+  /** Version (incrémentée à chaque modification d'un scénario FINAL) */
+  version: number;
   /** Dataset types requis pour ce scénario (slugs normalisés) */
   required_dataset_types?: string[];
+  /** Métadonnées d'import et audit */
+  metadata?: {
+    import_source_id?: string;
+    import_mode?: ImportMode;
+    source_template_id?: string;
+    imported_at?: string;
+    imported_by?: string;
+  };
   created_at: string;
   updated_at: string;
+}
+
+/** Entrée du journal d'audit pour les imports */
+export interface AuditLogEntry {
+  id: string;
+  actor_user_id: string;
+  project_id: string;
+  profile_id: string;
+  action: 'IMPORT' | 'FINALIZE' | 'DEPRECATE' | 'UPDATE';
+  timestamp: string;
+  import_mode?: ImportMode;
+  imported_ids: string[];
+  details?: Record<string, unknown>;
+}
+
+/** Rapport d'import en masse */
+export interface ImportReport {
+  imported_count: number;
+  skipped_count: number;
+  renamed_count: number;
+  overwritten_count: number;
+  details: Array<{
+    scenario_id: string;
+    scenario_code: string;
+    action: 'IMPORTED' | 'SKIPPED' | 'RENAMED' | 'OVERWRITTEN';
+    old_id?: string;
+    message?: string;
+  }>;
+  audit_log_id: string;
+  timestamp: string;
 }
 
 export interface ScenarioStep {

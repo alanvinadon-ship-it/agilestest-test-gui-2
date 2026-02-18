@@ -10,7 +10,7 @@ import type {
   Execution, Artifact, Incident,
   CaptureJob, CaptureDetail, CreateCaptureRequest,
   Probe, ProbeWithPolicy, ProbeWithScope, CreateProbeRequest, UpdateProbeRequest,
-  PaginatedResponse,
+  PaginatedResponse, AuditLogEntry,
 } from '../types';
 import { DATASET_TYPE_CATALOG } from '../config/datasetTypeCatalog';
 
@@ -161,16 +161,59 @@ export const localProfiles = {
   },
 };
 
+// ─── Domain Code Mapping ───────────────────────────────────────────────────
+
+const DOMAIN_CODE_MAP: Record<string, string> = {
+  WEB: 'WEB', API: 'API', MOBILE: 'MOB', DESKTOP: 'DESK',
+  TELECOM_IMS: 'IMS', TELECOM_RAN: 'RAN', TELECOM_EPC: 'EPC4',
+  TELECOM_5GC_SA: '5GSA', TELECOM_5GC_NSA: '5GNSA',
+  IOT: 'DRIVE', IMS: 'IMS', RAN: 'RAN', EPC: 'EPC4', '5GC': '5GSA',
+};
+
+function getDomainCode(domain: string): string {
+  return DOMAIN_CODE_MAP[domain] || domain.slice(0, 4).toUpperCase();
+}
+
+function slugify(text: string): string {
+  return text
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 30);
+}
+
+// ─── Audit Log ─────────────────────────────────────────────────────────────
+
+export const localAuditLog = {
+  list(params?: { project_id?: string; action?: string }): AuditLogEntry[] {
+    let items = getCollection<AuditLogEntry>('audit_log');
+    if (params?.project_id) items = items.filter(e => e.project_id === params.project_id);
+    if (params?.action) items = items.filter(e => e.action === params.action);
+    return items.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  },
+
+  add(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>): AuditLogEntry {
+    const items = getCollection<AuditLogEntry>('audit_log');
+    const full: AuditLogEntry = { ...entry, id: uid(), timestamp: now() };
+    items.push(full);
+    setCollection('audit_log', items);
+    return full;
+  },
+};
+
 // ─── Scenarios ──────────────────────────────────────────────────────────────
 
 export const localScenarios = {
-  list(profileId: string, params?: { page?: number; limit?: number }): PaginatedResponse<TestScenario> {
-    const items = getCollection<TestScenario>('scenarios').filter(s => s.profile_id === profileId);
+  list(profileId: string, params?: { page?: number; limit?: number; status?: string }): PaginatedResponse<TestScenario> {
+    let items = getCollection<TestScenario>('scenarios').filter(s => s.profile_id === profileId);
+    if (params?.status) items = items.filter(s => s.status === params.status);
     return paginate(items, params?.page, params?.limit);
   },
 
-  listByProject(projectId: string, params?: { page?: number; limit?: number }): PaginatedResponse<TestScenario> {
-    const items = getCollection<TestScenario>('scenarios').filter(s => s.project_id === projectId);
+  listByProject(projectId: string, params?: { page?: number; limit?: number; status?: string }): PaginatedResponse<TestScenario> {
+    let items = getCollection<TestScenario>('scenarios').filter(s => s.project_id === projectId);
+    if (params?.status) items = items.filter(s => s.status === params.status);
     return paginate(items, params?.page, params?.limit);
   },
 
@@ -180,15 +223,50 @@ export const localScenarios = {
     return item;
   },
 
+  /** Réserve le prochain NNN pour un (project_id, test_type, domain_code) — anti-collision */
+  nextId(projectId: string, testType: string, domain: string): { nnn: number; code_prefix: string } {
+    const domainCode = getDomainCode(domain);
+    const prefix = `${testType}-${domainCode}`;
+    const items = getCollection<TestScenario>('scenarios').filter(s => s.project_id === projectId);
+    // Trouver le plus grand NNN existant pour ce préfixe
+    let maxN = 0;
+    const regex = new RegExp(`^${prefix}-(\\d{3})`);
+    for (const s of items) {
+      if (s.scenario_code) {
+        const m = s.scenario_code.match(regex);
+        if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
+      }
+    }
+    return { nnn: maxN + 1, code_prefix: prefix };
+  },
+
+  /** Génère un scenario_code normalisé : TESTTYPE-DOMAINCODE-NNN-SLUG */
+  generateCode(projectId: string, testType: string, domain: string, title: string): string {
+    const { nnn, code_prefix } = this.nextId(projectId, testType, domain);
+    const slug = slugify(title);
+    return `${code_prefix}-${nnn.toString().padStart(3, '0')}-${slug}`;
+  },
+
+  /** Vérifie si un scenario_code existe déjà */
+  codeExists(projectId: string, code: string): boolean {
+    return getCollection<TestScenario>('scenarios')
+      .some(s => s.project_id === projectId && s.scenario_code === code);
+  },
+
   create(profileId: string, projectId: string, data: Partial<TestScenario>): TestScenario {
     const items = getCollection<TestScenario>('scenarios');
     const scenario: TestScenario = {
       id: uid(),
       profile_id: profileId,
       project_id: projectId,
+      scenario_code: data.scenario_code || undefined,
       name: data.name || 'Nouveau scénario',
       description: data.description || '',
       steps: data.steps || [],
+      status: data.status || 'DRAFT',
+      version: data.version || 1,
+      required_dataset_types: data.required_dataset_types || [],
+      metadata: data.metadata || undefined,
       created_at: now(),
       updated_at: now(),
     };
@@ -201,8 +279,60 @@ export const localScenarios = {
     const items = getCollection<TestScenario>('scenarios');
     const idx = items.findIndex(s => s.id === id);
     if (idx === -1) throw new Error('Scénario introuvable');
-    items[idx] = { ...items[idx], ...data, updated_at: now() };
+    const current = items[idx];
+    // Règle : un scénario FINAL ne peut pas être modifié directement (MVP : interdit)
+    if (current.status === 'FINAL' && data.status !== 'DEPRECATED') {
+      // Fork : incrémenter la version
+      const newVersion = (current.version || 1) + 1;
+      items[idx] = { ...current, ...data, version: newVersion, status: 'DRAFT', updated_at: now() };
+    } else {
+      items[idx] = { ...current, ...data, updated_at: now() };
+    }
     setCollection('scenarios', items);
+    return items[idx];
+  },
+
+  /** Finaliser un scénario (DRAFT → FINAL) avec validation bloquante */
+  finalize(id: string): { success: boolean; errors: string[] } {
+    const items = getCollection<TestScenario>('scenarios');
+    const idx = items.findIndex(s => s.id === id);
+    if (idx === -1) return { success: false, errors: ['Scénario introuvable'] };
+    const s = items[idx];
+    const errors: string[] = [];
+    if (!s.name || s.name.trim().length === 0) errors.push('Le titre est obligatoire.');
+    if (!s.steps || s.steps.length === 0) errors.push('Au moins 1 étape est requise.');
+    if (s.steps && !s.steps.some(st => st.expected_result && st.expected_result.trim().length > 0)) {
+      errors.push('Au moins 1 résultat attendu est requis.');
+    }
+    // Vérifier required_inputs pour UI/API
+    if (errors.length > 0) return { success: false, errors };
+    items[idx] = { ...s, status: 'FINAL', updated_at: now() };
+    setCollection('scenarios', items);
+    // Audit
+    localAuditLog.add({
+      actor_user_id: 'local-admin-001',
+      project_id: s.project_id,
+      profile_id: s.profile_id,
+      action: 'FINALIZE',
+      imported_ids: [s.id],
+    });
+    return { success: true, errors: [] };
+  },
+
+  /** Déprécier un scénario (FINAL → DEPRECATED) */
+  deprecate(id: string): TestScenario {
+    const items = getCollection<TestScenario>('scenarios');
+    const idx = items.findIndex(s => s.id === id);
+    if (idx === -1) throw new Error('Scénario introuvable');
+    items[idx] = { ...items[idx], status: 'DEPRECATED', updated_at: now() };
+    setCollection('scenarios', items);
+    localAuditLog.add({
+      actor_user_id: 'local-admin-001',
+      project_id: items[idx].project_id,
+      profile_id: items[idx].profile_id,
+      action: 'DEPRECATE',
+      imported_ids: [id],
+    });
     return items[idx];
   },
 

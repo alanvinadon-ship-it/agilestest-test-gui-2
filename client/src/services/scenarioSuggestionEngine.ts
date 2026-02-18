@@ -1,15 +1,15 @@
 /**
  * scenarioSuggestionEngine.ts — Moteur de suggestion de scénarios "IA explicable".
  *
- * Le moteur :
- * 1. Sélectionne les templates compatibles avec le profil (domain + test_type + profile_type)
- * 2. Filtre par scope (MINIMAL, STANDARD, FULL)
- * 3. Adapte les titres et IDs (normalisation avec préfixe projet/profil)
- * 4. Remplit les required_inputs et datasets génériques
- * 5. Génère un rationale explicable par scénario
+ * Durcissement industriel (Orange) :
+ * - Normalisation IDs : TESTTYPE-DOMAINCODE-NNN-SLUG
+ * - Import modes : SKIP | RENAME | OVERWRITE
+ * - Rapport d'import détaillé
+ * - Audit log
+ * - Versioning (status DRAFT par défaut)
  */
 
-import type { TestProfile, TestScenario, ScenarioStep } from '../types';
+import type { TestProfile, TestScenario, ScenarioStep, ImportMode, ImportReport, AuditLogEntry } from '../types';
 import {
   type ScenarioTemplate,
   type ScopeLevel,
@@ -17,11 +17,35 @@ import {
   getTemplatesForProfile,
   filterByScope,
 } from '../config/scenarioTemplates';
+import { localScenarios, localAuditLog } from '../api/localStore';
 
-// ─── Types ─────────────────────────────────────────────────────────────────
+// ─── Domain Code Mapping ──────────────────────────────────────────────────
+
+const DOMAIN_CODE_MAP: Record<string, string> = {
+  WEB: 'WEB', API: 'API', MOBILE: 'MOB', DESKTOP: 'DESK',
+  TELECOM_IMS: 'IMS', TELECOM_RAN: 'RAN', TELECOM_EPC: 'EPC4',
+  TELECOM_5GC_SA: '5GSA', TELECOM_5GC_NSA: '5GNSA',
+  IOT: 'DRIVE', IMS: 'IMS', RAN: 'RAN', EPC: 'EPC4', '5GC': '5GSA',
+};
+
+function getDomainCode(domain: string): string {
+  return DOMAIN_CODE_MAP[domain] || domain.slice(0, 4).toUpperCase();
+}
+
+function slugify(text: string): string {
+  return text
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 30);
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────
 
 export interface SuggestRequest {
   profile: TestProfile;
+  project_id: string;
   project_name: string;
   scope_level: ScopeLevel;
   business_entities?: string[];
@@ -32,7 +56,9 @@ export interface SuggestRequest {
 }
 
 export interface SuggestedScenario {
-  /** ID normalisé du scénario (ex: OWEB-VABF-001) */
+  /** Code normalisé : TESTTYPE-DOMAINCODE-NNN-SLUG */
+  scenario_code: string;
+  /** Ancien format d'ID (pour rétrocompatibilité) */
   scenario_id: string;
   /** Titre adapté */
   title: string;
@@ -64,91 +90,65 @@ export interface SuggestResponse {
     profile_id: string;
     profile_name: string;
     domain: string;
+    domain_code: string;
     test_type: string;
     profile_type: string;
     scope_level: ScopeLevel;
     total_templates_matched: number;
     total_after_scope_filter: number;
     generated_at: string;
+    breakdown: { P0: number; P1: number; P2: number };
   };
 }
 
-// ─── Normalisation ─────────────────────────────────────────────────────────
+// ─── Normalisation IDs ────────────────────────────────────────────────────
 
 /**
- * Génère un préfixe d'ID basé sur le nom du projet.
- * Ex: "Orange-web-001" → "OWEB"
+ * Génère un scenario_code normalisé : TESTTYPE-DOMAINCODE-NNN-SLUG
+ * Le NNN est incrémenté par (project_id, test_type, domain_code) via localScenarios.nextId
  */
-function generateIdPrefix(projectName: string): string {
-  const words = projectName
-    .replace(/[-_]/g, ' ')
-    .split(/\s+/)
-    .filter(w => w.length > 0);
-
-  if (words.length === 0) return 'TST';
-  if (words.length === 1) return words[0].slice(0, 4).toUpperCase();
-
-  // Prendre la première lettre de chaque mot (max 4)
-  return words
-    .slice(0, 4)
-    .map(w => w[0])
-    .join('')
-    .toUpperCase();
-}
-
-/**
- * Normalise un ID de scénario.
- * Format : {PREFIX}-{TEST_TYPE}-{NNN}
- */
-function normalizeId(
-  prefix: string,
+function generateScenarioCode(
+  projectId: string,
   testType: string,
-  index: number,
-  startNumber: number,
+  domain: string,
+  title: string,
+  offset: number = 0,
 ): string {
-  const num = (startNumber + index).toString().padStart(3, '0');
-  return `${prefix}-${testType}-${num}`;
+  const domainCode = getDomainCode(domain);
+  const prefix = `${testType}-${domainCode}`;
+  const slug = slugify(title);
+
+  // Récupérer le prochain NNN disponible
+  const { nnn } = localScenarios.nextId(projectId, testType, domain);
+  const num = (nnn + offset).toString().padStart(3, '0');
+  return `${prefix}-${num}-${slug}`;
 }
 
 /**
  * Adapte le titre du template au contexte du profil.
  */
-function adaptTitle(
-  template: ScenarioTemplate,
-  profile: TestProfile,
-): string {
+function adaptTitle(template: ScenarioTemplate, profile: TestProfile): string {
   let title = template.title;
-
-  // Ajouter le contexte du profil si pertinent
   if (profile.config) {
     const sutUrl = profile.config.sut_url || profile.config.base_url;
     if (sutUrl && typeof sutUrl === 'string') {
       try {
         const hostname = new URL(sutUrl as string).hostname;
-        // Ne pas ajouter si le titre est déjà assez long
         if (title.length < 40) {
           title = `${title} — ${hostname}`;
         }
-      } catch {
-        // URL invalide, on garde le titre original
-      }
+      } catch { /* URL invalide */ }
     }
   }
-
   return title;
 }
 
 /**
  * Adapte les required_inputs en fonction de la config du profil.
  */
-function adaptRequiredInputs(
-  template: ScenarioTemplate,
-  profile: TestProfile,
-): string[] {
+function adaptRequiredInputs(template: ScenarioTemplate, profile: TestProfile): string[] {
   const inputs = [...template.required_inputs];
   const config = profile.config || {};
-
-  // Marquer les inputs déjà fournis par la config du profil
   return inputs.map(input => {
     const configKey = input.replace('url_', 'sut_url').replace('base_url', 'base_url');
     if (config[configKey] || config[input]) {
@@ -158,17 +158,19 @@ function adaptRequiredInputs(
   });
 }
 
-// ─── Moteur principal ──────────────────────────────────────────────────────
+// ─── Moteur principal ─────────────────────────────────────────────────────
 
 /**
  * Génère des suggestions de scénarios basées sur un profil de test.
+ * IDs normalisés : TESTTYPE-DOMAINCODE-NNN-SLUG
  */
 export function suggestScenarios(request: SuggestRequest): SuggestResponse {
-  const { profile, project_name, scope_level, constraints } = request;
+  const { profile, project_id, project_name, scope_level, constraints } = request;
 
   const domain = profile.domain || 'WEB';
   const testType = profile.test_type || 'VABF';
   const profileType = profile.profile_type || 'UI_E2E';
+  const domainCode = getDomainCode(domain);
 
   // 1. Sélectionner les templates compatibles
   const allMatched = getTemplatesForProfile(domain, testType, profileType);
@@ -182,23 +184,29 @@ export function suggestScenarios(request: SuggestRequest): SuggestResponse {
     (a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]
   );
 
-  // 4. Générer le préfixe d'ID
-  const idPrefix = constraints?.id_prefix || generateIdPrefix(project_name);
-  const startNumber = constraints?.numbering_start || 1;
+  // 4. Breakdown par priorité
+  const breakdown = { P0: 0, P1: 0, P2: 0 };
+  sorted.forEach(t => { breakdown[t.priority]++; });
 
-  // 5. Adapter chaque template en suggestion
-  const suggestions: SuggestedScenario[] = sorted.map((template, index) => ({
-    scenario_id: normalizeId(idPrefix, testType, index, startNumber),
-    title: adaptTitle(template, profile),
-    priority: template.priority,
-    rationale: template.rationale,
-    steps_outline: template.steps_outline.map(s => ({ ...s })),
-    expected_results_outline: [...template.expected_results_outline],
-    required_inputs: adaptRequiredInputs(template, profile),
-    required_datasets_types: [...template.required_datasets_types],
-    tags: [...template.tags],
-    source_template_id: template.template_id,
-  }));
+  // 5. Adapter chaque template en suggestion avec IDs normalisés
+  const suggestions: SuggestedScenario[] = sorted.map((template, index) => {
+    const title = adaptTitle(template, profile);
+    const code = generateScenarioCode(project_id, testType, domain, title, index);
+
+    return {
+      scenario_code: code,
+      scenario_id: code, // Rétrocompatibilité
+      title,
+      priority: template.priority,
+      rationale: template.rationale,
+      steps_outline: template.steps_outline.map(s => ({ ...s })),
+      expected_results_outline: [...template.expected_results_outline],
+      required_inputs: adaptRequiredInputs(template, profile),
+      required_datasets_types: [...template.required_datasets_types],
+      tags: [...template.tags],
+      source_template_id: template.template_id,
+    };
+  });
 
   return {
     suggestions,
@@ -206,15 +214,19 @@ export function suggestScenarios(request: SuggestRequest): SuggestResponse {
       profile_id: profile.id,
       profile_name: profile.name,
       domain,
+      domain_code: domainCode,
       test_type: testType,
       profile_type: profileType,
       scope_level,
       total_templates_matched: allMatched.length,
       total_after_scope_filter: scopeFiltered.length,
       generated_at: new Date().toISOString(),
+      breakdown,
     },
   };
 }
+
+// ─── Conversion suggestion → scénario ─────────────────────────────────────
 
 /**
  * Convertit une suggestion en TestScenario prêt à être importé.
@@ -236,50 +248,139 @@ export function suggestionToScenario(
   return {
     profile_id: profileId,
     project_id: projectId,
-    name: `[${suggestion.scenario_id}] ${suggestion.title}`,
+    scenario_code: suggestion.scenario_code,
+    name: `[${suggestion.scenario_code}] ${suggestion.title}`,
     description: `${suggestion.rationale}\n\nPriorité : ${suggestion.priority}\nTags : ${suggestion.tags.join(', ')}\nInputs requis : ${suggestion.required_inputs.join(', ')}\nDatasets : ${suggestion.required_datasets_types.join(', ') || 'Aucun'}`,
     steps,
+    status: 'DRAFT' as const,
+    version: 1,
+    required_dataset_types: suggestion.required_datasets_types,
+    metadata: {
+      source_template_id: suggestion.source_template_id,
+      imported_at: new Date().toISOString(),
+      imported_by: 'local-admin-001',
+    },
   };
 }
 
+// ─── Import en masse robuste ──────────────────────────────────────────────
+
 /**
- * Importe une liste de suggestions en tant que scénarios dans le localStore.
- * Gère les conflits d'ID en ajoutant un suffixe.
+ * Importe une liste de suggestions avec gestion des collisions.
+ * Modes : SKIP (ignorer), RENAME (auto-renommer), OVERWRITE (écraser, admin only)
  */
 export function bulkImportSuggestions(
   suggestions: SuggestedScenario[],
   profileId: string,
   projectId: string,
-  createFn: (profileId: string, projectId: string, data: Partial<TestScenario>) => TestScenario,
-): { imported: TestScenario[]; errors: Array<{ scenario_id: string; error: string }> } {
-  const imported: TestScenario[] = [];
-  const errors: Array<{ scenario_id: string; error: string }> = [];
+  importMode: ImportMode = 'RENAME',
+): ImportReport {
+  const details: ImportReport['details'] = [];
+  let imported_count = 0;
+  let skipped_count = 0;
+  let renamed_count = 0;
+  let overwritten_count = 0;
 
   for (const suggestion of suggestions) {
-    try {
-      const data = suggestionToScenario(suggestion, profileId, projectId);
-      const created = createFn(profileId, projectId, data);
-      imported.push(created);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erreur inconnue';
-      if (message.includes('409') || message.includes('conflit')) {
-        // Tentative avec suffixe
-        try {
-          const data = suggestionToScenario(suggestion, profileId, projectId);
-          data.name = `${data.name} (bis)`;
-          const created = createFn(profileId, projectId, data);
-          imported.push(created);
-        } catch (retryErr) {
-          errors.push({
-            scenario_id: suggestion.scenario_id,
-            error: retryErr instanceof Error ? retryErr.message : 'Erreur lors du retry',
+    const scenarioCode = suggestion.scenario_code;
+    const exists = localScenarios.codeExists(projectId, scenarioCode);
+
+    if (exists) {
+      switch (importMode) {
+        case 'SKIP': {
+          skipped_count++;
+          details.push({
+            scenario_id: '',
+            scenario_code: scenarioCode,
+            action: 'SKIPPED',
+            message: `Code "${scenarioCode}" existe déjà — ignoré.`,
           });
+          break;
         }
-      } else {
-        errors.push({ scenario_id: suggestion.scenario_id, error: message });
+
+        case 'RENAME': {
+          // Générer un nouveau code avec next-id
+          const domain = suggestion.scenario_code.split('-')[1] || 'WEB';
+          const testType = suggestion.scenario_code.split('-')[0] || 'VABF';
+          const newCode = localScenarios.generateCode(projectId, testType, domain, suggestion.title);
+
+          const data = suggestionToScenario(suggestion, profileId, projectId);
+          data.scenario_code = newCode;
+          data.name = `[${newCode}] ${suggestion.title}`;
+          (data.metadata as any) = {
+            ...data.metadata,
+            import_source_id: scenarioCode,
+            import_mode: 'RENAME',
+          };
+
+          const created = localScenarios.create(profileId, projectId, data);
+          renamed_count++;
+          imported_count++;
+          details.push({
+            scenario_id: created.id,
+            scenario_code: newCode,
+            action: 'RENAMED',
+            old_id: scenarioCode,
+            message: `Renommé de "${scenarioCode}" → "${newCode}".`,
+          });
+          break;
+        }
+
+        case 'OVERWRITE': {
+          // Trouver l'existant et le mettre à jour
+          const allScenarios = localScenarios.listByProject(projectId);
+          const existing = allScenarios.data.find(s => s.scenario_code === scenarioCode);
+          if (existing) {
+            const data = suggestionToScenario(suggestion, profileId, projectId);
+            localScenarios.update(existing.id, {
+              ...data,
+              version: (existing.version || 1) + 1,
+              metadata: { ...data.metadata, import_mode: 'OVERWRITE' },
+            });
+            overwritten_count++;
+            imported_count++;
+            details.push({
+              scenario_id: existing.id,
+              scenario_code: scenarioCode,
+              action: 'OVERWRITTEN',
+              message: `Écrasé (v${existing.version} → v${(existing.version || 1) + 1}).`,
+            });
+          }
+          break;
+        }
       }
+    } else {
+      // Pas de collision — import direct
+      const data = suggestionToScenario(suggestion, profileId, projectId);
+      (data.metadata as any) = { ...data.metadata, import_mode: importMode };
+      const created = localScenarios.create(profileId, projectId, data);
+      imported_count++;
+      details.push({
+        scenario_id: created.id,
+        scenario_code: scenarioCode,
+        action: 'IMPORTED',
+        message: `Importé avec succès.`,
+      });
     }
   }
 
-  return { imported, errors };
+  // Audit log
+  const auditEntry = localAuditLog.add({
+    actor_user_id: 'local-admin-001',
+    project_id: projectId,
+    profile_id: profileId,
+    action: 'IMPORT',
+    import_mode: importMode,
+    imported_ids: details.filter(d => d.action !== 'SKIPPED').map(d => d.scenario_id),
+  });
+
+  return {
+    imported_count,
+    skipped_count,
+    renamed_count,
+    overwritten_count,
+    details,
+    audit_log_id: auditEntry.id,
+    timestamp: auditEntry.timestamp,
+  };
 }
