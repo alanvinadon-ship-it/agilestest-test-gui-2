@@ -2,7 +2,7 @@
 
 > **Document d'évaluation** à remplir à l'issue du pilote pour statuer sur la décision GO/NOGO.
 >
-> **Version** : 1.0 — Février 2026
+> **Version** : 2.0 — Février 2026
 > **Date du pilote** : ___/___/2026
 > **Lieu** : ________________________
 > **Participants** : ___ personnes
@@ -18,13 +18,14 @@
 | Ingénieur réseau | |
 | Représentant AgilesTest | |
 | Durée effective du pilote | ___h ___min |
-| Nombre de parcours complétés | ___/4 |
+| Nombre de parcours complétés | ___/5 |
+| Mode de déploiement utilisé | ☐ Docker Compose / ☐ Kubernetes |
 
 ---
 
 ## 2. Critères d'évaluation pondérés
 
-### C1 — Compréhension incident sans assistance (25%)
+### C1 — Compréhension incident sans assistance (20%)
 
 > **Question** : Les participants ont-ils compris la cause d'un échec de test en lisant uniquement le rapport d'incident généré par la plateforme, sans aide extérieure ?
 
@@ -40,15 +41,15 @@
 
 | Seuil | Résultat |
 |-------|----------|
-| ≥ 80% | ✅ GO |
-| 60–79% | ⚠️ GO conditionnel |
-| < 60% | ❌ NOGO |
+| ≥ 80% | GO |
+| 60–79% | GO conditionnel |
+| < 60% | NOGO |
 
 **Score C1** : ☐ GO / ☐ GO conditionnel / ☐ NOGO
 
 ---
 
-### C2 — Temps gagné vs baseline (20%)
+### C2 — Temps gagné vs baseline (15%)
 
 > **Question** : Combien de temps la génération IA de scripts a-t-elle permis de gagner par rapport à l'écriture manuelle ?
 
@@ -70,15 +71,15 @@ Pour le parcours complet (2 scripts) :
 
 | Seuil | Résultat |
 |-------|----------|
-| ≥ 30% de gain | ✅ GO |
-| 15–29% de gain | ⚠️ GO conditionnel |
-| < 15% de gain | ❌ NOGO |
+| ≥ 30% de gain | GO |
+| 15–29% de gain | GO conditionnel |
+| < 15% de gain | NOGO |
 
 **Score C2** : ☐ GO / ☐ GO conditionnel / ☐ NOGO
 
 ---
 
-### C3 — Stabilité des exécutions (20%)
+### C3 — Stabilité des exécutions (15%)
 
 > **Question** : Sur N exécutions identiques (même scénario, même bundle, même environnement), quel est le taux de succès ?
 
@@ -99,9 +100,9 @@ Pour le parcours complet (2 scripts) :
 
 | Seuil | Résultat |
 |-------|----------|
-| ≥ 90% | ✅ GO |
-| 75–89% | ⚠️ GO conditionnel |
-| < 75% | ❌ NOGO |
+| ≥ 90% | GO |
+| 75–89% | GO conditionnel |
+| < 75% | NOGO |
 
 **Score C3** : ☐ GO / ☐ GO conditionnel / ☐ NOGO
 
@@ -119,6 +120,7 @@ Chaque participant note sur une échelle de Likert (1 = Pas du tout d'accord, 5 
 | "L'interface est intuitive et facile à prendre en main" | /5 | /5 | /5 | /5 | /5 |
 | "La génération IA de scripts est utile" | /5 | /5 | /5 | /5 | /5 |
 | "Le repair IA m'aide à corriger les scripts plus vite" | /5 | /5 | /5 | /5 | /5 |
+| "Le Drive Test opérateur-grade est exploitable" | /5 | /5 | /5 | /5 | /5 |
 | "**Je l'utiliserais au quotidien**" | /5 | /5 | /5 | /5 | /5 |
 | "Je recommanderais AgilesTest à un collègue" | /5 | /5 | /5 | /5 | /5 |
 
@@ -128,9 +130,9 @@ Chaque participant note sur une échelle de Likert (1 = Pas du tout d'accord, 5 
 
 | Seuil | Résultat |
 |-------|----------|
-| ≥ 70% avec score ≥ 4 | ✅ GO |
-| 50–69% avec score ≥ 4 | ⚠️ GO conditionnel |
-| < 50% avec score ≥ 4 | ❌ NOGO |
+| ≥ 70% avec score ≥ 4 | GO |
+| 50–69% avec score ≥ 4 | GO conditionnel |
+| < 50% avec score ≥ 4 | NOGO |
 
 **Score C4** : ☐ GO / ☐ GO conditionnel / ☐ NOGO
 
@@ -138,22 +140,23 @@ Chaque participant note sur une échelle de Likert (1 = Pas du tout d'accord, 5 
 
 ### C5 — Couverture fonctionnelle (10%)
 
-> **Question** : Les 4 parcours du pilote ont-ils été complétés sans blocage critique ?
+> **Question** : Les 5 parcours du pilote ont-ils été complétés sans blocage critique ?
 
 | Parcours | Complété ? | Bloquants rencontrés | Commentaire |
 |----------|:----------:|---------------------|-------------|
 | 1 — WEB VABF | ☐ Oui / ☐ Non | ___ | |
 | 2 — API VABF + VABE | ☐ Oui / ☐ Non | ___ | |
-| 3 — Drive Test | ☐ Oui / ☐ Non | ___ | |
+| 3 — Drive Test opérateur-grade | ☐ Oui / ☐ Non | ___ | |
 | 4 — Repair | ☐ Oui / ☐ Non | ___ | |
+| 5 — Notifications | ☐ Oui / ☐ Non | ___ | |
 
-**Parcours complétés** : ___/4
+**Parcours complétés** : ___/5
 
 | Seuil | Résultat |
 |-------|----------|
-| 4/4 complétés | ✅ GO |
-| 3/4 complétés | ⚠️ GO conditionnel |
-| ≤ 2/4 complétés | ❌ NOGO |
+| 5/5 complétés | GO |
+| 4/5 complétés | GO conditionnel |
+| ≤ 3/5 complétés | NOGO |
 
 **Score C5** : ☐ GO / ☐ GO conditionnel / ☐ NOGO
 
@@ -175,16 +178,70 @@ Chaque participant note sur une échelle de Likert (1 = Pas du tout d'accord, 5 
 | ADMIN voit les secrets dataset | Visible | | ☐ |
 | MANAGER ne voit pas les secrets dataset | Masqué | | ☐ |
 | VIEWER ne peut pas lancer d'exécution | Refusé | | ☐ |
+| ADMIN accède à `/admin/notifications` | Page affichée | | ☐ |
+| MANAGER n'accède pas à `/admin/notifications` | 403 Forbidden | | ☐ |
 
-**Tests conformes** : ___/10
+**Tests conformes** : ___/12
 
 | Seuil | Résultat |
 |-------|----------|
-| 10/10 (100%) | ✅ GO |
-| 8–9/10 (80–90%) | ⚠️ GO conditionnel |
-| < 8/10 | ❌ NOGO |
+| 12/12 (100%) | GO |
+| 10–11/12 (83–92%) | GO conditionnel |
+| < 10/12 | NOGO |
 
 **Score C6** : ☐ GO / ☐ GO conditionnel / ☐ NOGO
+
+---
+
+### C7 — Drive Test opérateur-grade (10%)
+
+> **Question** : Les fonctionnalités Drive Test avancées (segmentation, auto-incidents, repair multi-couches) sont-elles exploitables par un ingénieur réseau Orange ?
+
+| Fonctionnalité | Fonctionnel ? | Exploitable ? | Commentaire |
+|----------------|:-------------:|:-------------:|-------------|
+| Segmentation 50m avec couleurs OK/WARN/CRIT | ☐ Oui / ☐ Non | ☐ Oui / ☐ Non | |
+| Drill-down segment avec stats KPI | ☐ Oui / ☐ Non | ☐ Oui / ☐ Non | |
+| Auto-incidents P0/P1/P2 générés | ☐ Oui / ☐ Non | ☐ Oui / ☐ Non | |
+| Rapport d'incident avec hypothèses par couche | ☐ Oui / ☐ Non | ☐ Oui / ☐ Non | |
+| Evidence chips cliquables | ☐ Oui / ☐ Non | ☐ Oui / ☐ Non | |
+| Recommandations catégorisées (effort/risque) | ☐ Oui / ☐ Non | ☐ Oui / ☐ Non | |
+| Plan de rerun ciblé | ☐ Oui / ☐ Non | ☐ Oui / ☐ Non | |
+| Artefacts PCAP corrélés aux segments | ☐ Oui / ☐ Non | ☐ Oui / ☐ Non | |
+
+**Fonctionnalités fonctionnelles** : ___/8
+**Fonctionnalités exploitables** : ___/8
+
+| Seuil | Résultat |
+|-------|----------|
+| ≥ 7/8 fonctionnelles ET ≥ 6/8 exploitables | GO |
+| ≥ 5/8 fonctionnelles | GO conditionnel |
+| < 5/8 fonctionnelles | NOGO |
+
+**Score C7** : ☐ GO / ☐ GO conditionnel / ☐ NOGO
+
+---
+
+### C8 — Notifications opérationnelles (5%)
+
+> **Question** : Le système de notifications est-il configuré et opérationnel ?
+
+| Fonctionnalité | Validé ? | Commentaire |
+|----------------|:--------:|-------------|
+| Au moins 1 canal configuré (Email ou SMS) | ☐ Oui / ☐ Non | |
+| Email de test reçu | ☐ Oui / ☐ Non | |
+| Au moins 2 règles activées | ☐ Oui / ☐ Non | |
+| Delivery logs affichent les envois | ☐ Oui / ☐ Non | |
+| Throttle fonctionnel (pas de spam) | ☐ Oui / ☐ Non | |
+
+**Items validés** : ___/5
+
+| Seuil | Résultat |
+|-------|----------|
+| ≥ 4/5 validés | GO |
+| 3/5 validés | GO conditionnel |
+| < 3/5 validés | NOGO |
+
+**Score C8** : ☐ GO / ☐ GO conditionnel / ☐ NOGO
 
 ---
 
@@ -198,6 +255,7 @@ Cocher si l'un des critères bloquants suivants a été observé pendant le pilo
 | B2 | Faille de sécurité (bypass RBAC) | ☐ Oui / ☐ Non | |
 | B3 | Indisponibilité > 15 min | ☐ Oui / ☐ Non | |
 | B4 | Corruption d'artefacts MinIO | ☐ Oui / ☐ Non | |
+| B5 | Perte de capture réseau (PCAP corrompus) | ☐ Oui / ☐ Non | |
 
 **Critère bloquant déclenché** : ☐ Oui → **NOGO immédiat** / ☐ Non → Continuer l'évaluation
 
@@ -207,12 +265,14 @@ Cocher si l'un des critères bloquants suivants a été observé pendant le pilo
 
 | Critère | Poids | Score (GO=100, Cond=70, NOGO=30) | Score pondéré |
 |---------|:-----:|:--------------------------------:|:-------------:|
-| C1 — Compréhension incident | 25% | ___ | ___ |
-| C2 — Temps gagné | 20% | ___ | ___ |
-| C3 — Stabilité exécutions | 20% | ___ | ___ |
+| C1 — Compréhension incident | 20% | ___ | ___ |
+| C2 — Temps gagné | 15% | ___ | ___ |
+| C3 — Stabilité exécutions | 15% | ___ | ___ |
 | C4 — Adoption déclarative | 15% | ___ | ___ |
 | C5 — Couverture fonctionnelle | 10% | ___ | ___ |
 | C6 — RBAC opérationnel | 10% | ___ | ___ |
+| C7 — Drive Test opérateur-grade | 10% | ___ | ___ |
+| C8 — Notifications opérationnelles | 5% | ___ | ___ |
 | **TOTAL** | **100%** | | **___** |
 
 ---
@@ -273,6 +333,24 @@ Cocher si l'un des critères bloquants suivants a été observé pendant le pilo
 | 2 | | | |
 | 3 | | | |
 
+### Retour spécifique Drive Test opérateur-grade
+
+| Question | Réponse |
+|----------|---------|
+| Les seuils KPI par défaut sont-ils adaptés au réseau Orange CIV ? | |
+| Les hypothèses par couche sont-elles pertinentes pour le diagnostic terrain ? | |
+| Le plan de rerun ciblé est-il exploitable opérationnellement ? | |
+| Quels KPI supplémentaires souhaités pour V2 ? | |
+
+### Retour spécifique Notifications
+
+| Question | Réponse |
+|----------|---------|
+| Le canal Email est-il suffisant ou le SMS est-il indispensable ? | |
+| Les templates système couvrent-ils les besoins ? | |
+| Le throttle est-il correctement calibré ? | |
+| Quels événements supplémentaires souhaités ? | |
+
 ---
 
 ## 7. Signatures
@@ -281,9 +359,10 @@ Cocher si l'un des critères bloquants suivants a été observé pendant le pilo
 |------|-----|-----------|------|
 | Chef de projet Orange | | | ___/___/2026 |
 | Responsable QA Orange | | | ___/___/2026 |
+| Ingénieur réseau Orange | | | ___/___/2026 |
 | Représentant AgilesTest | | | ___/___/2026 |
 | Direction technique (si GO) | | | ___/___/2026 |
 
 ---
 
-> **Note** : Ce document doit être archivé avec les preuves collectées (captures d'écran, fichiers CSV exportés, logs) dans le dossier du pilote.
+> **Note** : Ce document doit être archivé avec les preuves collectées (captures d'écran, fichiers CSV exportés, logs, delivery logs) dans le dossier du pilote.

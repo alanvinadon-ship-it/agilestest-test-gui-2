@@ -3,7 +3,22 @@
 > **Document de suivi** à imprimer ou cocher en ligne pendant le pilote.
 > Chaque item doit être validé (✅) ou marqué comme bloquant (❌) avec un commentaire.
 >
-> **Version** : 1.0 — Février 2026
+> **Version** : 2.0 — Février 2026
+
+---
+
+## Checklist J-15 — Choix packaging et provisioning
+
+| # | Item | Responsable | Statut | Commentaire |
+|---|------|------------|--------|-------------|
+| 1 | Mode de déploiement choisi (Compose ou K8s) | Ops + Chef projet | ☐ | |
+| 2 | Infrastructure provisionnée (VM ou cluster K8s) | Ops | ☐ | |
+| 3 | CPU/RAM/Disque conformes aux prérequis | Ops | ☐ | |
+| 4 | Archive `agilestest-dual-packaging-vX.Y.Z.tar.gz` déployée | Ops | ☐ | |
+| 5 | Images Docker construites (frontend, runner, orchestration) | Ops | ☐ | |
+| 6 | `.env` configuré (Compose) ou values overlay (K8s) | Ops | ☐ | |
+| 7 | `init.sh` exécuté (Compose) ou `helm install` (K8s) | Ops | ☐ | |
+| 8 | `smoke_test.sh` ou `helm test` passé (16 tests) | Ops | ☐ | |
 
 ---
 
@@ -13,11 +28,11 @@
 |---|------|------------|--------|-------------|
 | 1 | Serveur AgilesTest accessible sur le réseau Orange | Ops | ☐ | |
 | 2 | URL de la plateforme communiquée aux participants | Ops | ☐ | |
-| 3 | Certificat SSL valide (si HTTPS) | Ops | ☐ | |
+| 3 | Certificat SSL valide (TLS) | Ops | ☐ | |
 | 4 | Docker Engine opérationnel sur le serveur runner | Ops | ☐ | |
 | 5 | Image `agilestest-runner-agent` construite et disponible | Ops | ☐ | |
 | 6 | MinIO/S3 démarré et bucket `agilestest-artifacts` créé | Ops | ☐ | |
-| 7 | Connectivité MinIO testée depuis le runner (`curl minio:9000/minio/health/live`) | Ops | ☐ | |
+| 7 | Connectivité MinIO testée depuis le runner | Ops | ☐ | |
 | 8 | Compte ADMIN créé (`admin@agilestest.io`) | Admin | ☐ | |
 | 9 | Compte MANAGER créé (`manager@orange.ci`) | Admin | ☐ | |
 | 10 | Compte VIEWER créé (`viewer@orange.ci`) | Admin | ☐ | |
@@ -26,6 +41,10 @@
 | 13 | Jeux de données `form_data` préparés | QA Lead | ☐ | |
 | 14 | Jeux de données `api_endpoints` préparés | QA Lead | ☐ | |
 | 15 | Données Drive Test (CSV/JSON) disponibles | Réseau | ☐ | |
+| 16 | Probe agent déployé (si mode B prévu) | Ops | ☐ | |
+| 17 | Token X-PROBE-TOKEN configuré (si mode B) | Ops | ☐ | |
+| 18 | Interface miroir SPAN/TAP connectée (si mode B) | Réseau | ☐ | |
+| 19 | Canal Email SMTP configuré dans `/admin/notifications` | Admin | ☐ | |
 
 ---
 
@@ -36,16 +55,21 @@
 | 1 | Connexion ADMIN réussie | QA Lead | ☐ | |
 | 2 | Connexion MANAGER réussie | QA Lead | ☐ | |
 | 3 | Connexion VIEWER réussie | QA Lead | ☐ | |
-| 4 | Navigation fluide dans toutes les sections (pas d'erreur 500) | QA Lead | ☐ | |
+| 4 | Navigation fluide dans toutes les sections | QA Lead | ☐ | |
 | 5 | Section Administration visible uniquement pour ADMIN | QA Lead | ☐ | |
 | 6 | Projet pilote `Orange-WEB` pré-créé | Admin | ☐ | |
 | 7 | Dataset types vérifiés dans `/dataset-types` | QA Lead | ☐ | |
 | 8 | Runner Docker connecté et en statut ONLINE | Ops | ☐ | |
 | 9 | Job de test lancé et complété avec succès | Ops | ☐ | |
 | 10 | Upload d'artefact vers MinIO vérifié | Ops | ☐ | |
-| 11 | Documentation accessible dans `/docs` (5 guides) | QA Lead | ☐ | |
+| 11 | Documentation accessible dans `/docs` (17 guides) | QA Lead | ☐ | |
 | 12 | Salle de pilote réservée et matériel vérifié | Logistique | ☐ | |
 | 13 | Participants confirmés (noms + emails) | Chef de projet | ☐ | |
+| 14 | Probe health check OK (si mode B) : `/probe/health` → 200 | Ops | ☐ | |
+| 15 | Test capture 30s réussi (si mode B) : packets > 0 | Ops | ☐ | |
+| 16 | Email de test envoyé et reçu via `/admin/notifications` | Admin | ☐ | |
+| 17 | Règle `EXECUTION_FAILED` activée | Admin | ☐ | |
+| 18 | Dry run complet (fail → repair → rerun → PASSED) | QA Lead | ☐ | |
 
 ---
 
@@ -54,7 +78,7 @@
 | # | Item | Responsable | Statut | Commentaire |
 |---|------|------------|--------|-------------|
 | 1 | Briefing de 15 min effectué | Chef de projet | ☐ | |
-| 2 | Runbook distribué aux participants | Chef de projet | ☐ | |
+| 2 | Runbook V2 distribué aux participants | Chef de projet | ☐ | |
 | 3 | Identifiants distribués (ADMIN/MANAGER/VIEWER) | Admin | ☐ | |
 | 4 | Plateforme accessible depuis tous les postes | Ops | ☐ | |
 | 5 | Chronomètre prêt pour mesure des temps | QA Lead | ☐ | |
@@ -117,7 +141,7 @@
 
 ---
 
-## Parcours 3 — Drive Test (45 min)
+## Parcours 3 — Drive Test opérateur-grade (60 min)
 
 **Profil** : MANAGER | **Chrono départ** : ___:___ | **Chrono fin** : ___:___
 
@@ -126,22 +150,32 @@
 | 3.1 | Créer campagne `Campagne-Abidjan-Centre` | Campagne PLANNED | ☐ | |
 | 3.2 | Ajouter route `Route-Plateau-Cocody` | Route visible | ☐ | |
 | 3.3 | Ajouter device `Samsung-S24-Test` | Device listé | ☐ | |
-| 3.4 | Configurer politique de capture (optionnel) | Mode affiché | ☐ | |
-| 3.5 | Ouvrir ImportResultsModal | Modal affiché | ☐ | |
-| 3.6 | Importer fichier CSV de mesures radio | Données parsées | ☐ | |
-| 3.7 | Confirmer l'import | Résultats dans la campagne | ☐ | |
-| 3.8 | Naviguer vers `/drive/reporting` | Page reporting affichée | ☐ | |
-| 3.9 | Vérifier graphiques KPI (RSRP, SINR, throughput) | Graphiques rendus | ☐ | |
-| 3.10 | Exporter CSV | Fichier CSV téléchargé | ☐ | |
-| 3.11 | Vérifier contenu CSV (colonnes attendues) | Colonnes correctes | ☐ | |
-| 3.12 | Lancer DriveJob (si runner disponible) | Job lancé | ☐ | |
-| 3.13 | Vérifier artefacts Drive (KPI_SERIES, GEOJSON) | Artefacts listés | ☐ | |
+| 3.4 | Configurer capture réseau (mode A ou B) | Mode affiché dans `/settings` | ☐ | |
+| 3.5 | Test capture probe 30s (si mode B) | packets > 0, taille affichée | ☐ | |
+| 3.6 | Ouvrir ImportResultsModal | Modal affiché | ☐ | |
+| 3.7 | Importer fichier CSV de mesures radio | Données parsées | ☐ | |
+| 3.8 | Confirmer l'import | Résultats dans la campagne | ☐ | |
+| 3.9 | Naviguer vers `/drive/reporting` | Page reporting affichée | ☐ | |
+| 3.10 | Vérifier barre de segments colorés (OK/WARN/CRIT) | Segments colorés visibles | ☐ | |
+| 3.11 | Vérifier filtre KPI (RSRP, SINR, throughput) | Filtre fonctionnel | ☐ | |
+| 3.12 | Vérifier slider window (5s/10s/30s) | Agrégation change | ☐ | |
+| 3.13 | Drill-down sur segment CRIT | Panneau latéral avec stats | ☐ | |
+| 3.14 | Vérifier artefacts liés dans le drill-down | PCAP/logs listés avec source | ☐ | |
+| 3.15 | Vérifier auto-incidents générés (P0/P1/P2) | Incidents dans la section | ☐ | |
+| 3.16 | Vérifier déduplication incidents | Pas de doublon | ☐ | |
+| 3.17 | Cliquer "Analyser & Repair" sur incident P0 | Page rapport d'incident | ☐ | |
+| 3.18 | Vérifier hypothèses par couche (Radio/Core/QoS/App) | Hypothèses affichées | ☐ | |
+| 3.19 | Cliquer evidence chips | Navigation vers preuves | ☐ | |
+| 3.20 | Vérifier recommandations catégorisées | Actions avec effort/risque | ☐ | |
+| 3.21 | Cliquer "Generate Rerun Job" | Job pré-rempli | ☐ | |
+| 3.22 | Exporter CSV reporting | Fichier CSV téléchargé | ☐ | |
+| 3.23 | Lancer DriveJob (si runner disponible) | Job lancé | ☐ | |
 
 **Observations** : _______________________________________________________________
 
 ---
 
-## Parcours 4 — Incident → Repair → Rerun (20 min)
+## Parcours 4 — Incident → Repair → Rerun (30 min)
 
 **Profil** : MANAGER + ADMIN | **Chrono départ** : ___:___ | **Chrono fin** : ___:___
 
@@ -159,6 +193,29 @@
 | 4.10 | Attendre la nouvelle exécution | Statut PASSED | ☐ | |
 | 4.11 | Vérifier le lien vers l'exécution d'origine | Badge "Repair de..." | ☐ | |
 | 4.12 | Restaurer le dataset original | Dataset restauré | ☐ | |
+
+**Observations** : _______________________________________________________________
+
+---
+
+## Parcours 5 — Validation Notifications (15 min)
+
+**Profil** : ADMIN | **Chrono départ** : ___:___ | **Chrono fin** : ___:___
+
+| # | Étape | Résultat attendu | Statut | Preuve |
+|---|-------|------------------|--------|--------|
+| 5.1 | Accéder à `/admin/notifications` | Page 5 onglets affichée | ☐ | |
+| 5.2 | Configurer Email SMTP | Formulaire rempli et sauvé | ☐ | |
+| 5.3 | Envoyer email de test | Email reçu | ☐ | |
+| 5.4 | Configurer SMS Orange (ou vérifier mode stub) | Canal configuré ou stub actif | ☐ | |
+| 5.5 | Vérifier 8 templates système | Templates listés | ☐ | |
+| 5.6 | Prévisualiser un template avec variables | Preview rendu correctement | ☐ | |
+| 5.7 | Activer règle `EXECUTION_FAILED` | Règle ACTIVE | ☐ | |
+| 5.8 | Activer règle `DRIVE_KPI_THRESHOLD_BREACH` | Règle ACTIVE | ☐ | |
+| 5.9 | Tester une règle | Notification de test reçue | ☐ | |
+| 5.10 | Vérifier Delivery Logs (≥ 3 entrées) | Logs avec statut DELIVERED | ☐ | |
+| 5.11 | Drill-down sur une entrée | Contenu rendu + trace_id | ☐ | |
+| 5.12 | Exporter CSV des delivery logs | Fichier CSV téléchargé | ☐ | |
 
 **Observations** : _______________________________________________________________
 
@@ -183,6 +240,25 @@
 | R13 | Consulter audit | MANAGER | Page inaccessible (403) | ☐ |
 | R14 | Gérer invitations | ADMIN | Formulaire accessible | ☐ |
 | R15 | Gérer invitations | MANAGER | Page inaccessible | ☐ |
+| R16 | Accéder `/admin/notifications` | ADMIN | Page affichée | ☐ |
+| R17 | Accéder `/admin/notifications` | MANAGER | 403 Forbidden | ☐ |
+| R18 | Accéder `/admin/notifications` | VIEWER | 403 Forbidden | ☐ |
+
+---
+
+## Vérification Capture Réseau
+
+| # | Test | Mode | Résultat attendu | Statut |
+|---|------|------|------------------|--------|
+| CA1 | Politique par défaut configurée | A ou B | Mode affiché dans `/settings` | ☐ |
+| CA2 | Override campagne (si testé) | — | Override visible dans campagne | ☐ |
+| CA3 | Mode effectif affiché dans Run Center | — | Badge mode effectif | ☐ |
+| CA4 | PCAP généré (mode A) | A | Artefact PCAP source=RUNNER | ☐ |
+| CA5 | Session probe créée (mode B) | B | Session DONE dans `/probes` | ☐ |
+| CA6 | PCAP généré (mode B) | B | Artefact PCAP source=PROBE | ☐ |
+| CA7 | Probe health check | B | Badge Online, last_seen < 60s | ☐ |
+| CA8 | Test capture 30s | B | packets > 0 | ☐ |
+| CA9 | Reason code affiché si erreur | B | Code + message dans exécution | ☐ |
 
 ---
 
@@ -192,10 +268,12 @@
 |----------|-------------|----------|----------|-----------|
 | 1 — WEB VABF | ___:___ | ___/17 | ___/17 | |
 | 2 — API VABF + VABE | ___:___ | ___/16 | ___/16 | |
-| 3 — Drive Test | ___:___ | ___/13 | ___/13 | |
+| 3 — Drive Test opérateur-grade | ___:___ | ___/23 | ___/23 | |
 | 4 — Repair | ___:___ | ___/12 | ___/12 | |
-| RBAC | — | ___/15 | ___/15 | |
-| **Total** | **___:___** | **___/73** | **___/73** | |
+| 5 — Notifications | ___:___ | ___/12 | ___/12 | |
+| RBAC | — | ___/18 | ___/18 | |
+| Capture réseau | — | ___/9 | ___/9 | |
+| **Total** | **___:___** | **___/107** | **___/107** | |
 
 **Validé par** : _________________________ **Date** : ___/___/2026
 
