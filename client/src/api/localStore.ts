@@ -16,6 +16,8 @@ import type {
   BundleValidationResult, ScenarioDatasetValidation,
   RunnerJob, RunnerJobStatus, ArtifactUploadPolicy,
   JobCompletePayload, ArtifactManifestEntry, BundleResolveResult,
+  DriveCampaign, CampaignStatus, NetworkType,
+  DriveRoute, TestDevice, DriveProbeConfig,
 } from '../types';
 import { DATASET_TYPE_CATALOG } from '../config/datasetTypeCatalog';
 
@@ -1339,5 +1341,213 @@ export const localBundleResolve = {
       secrets_placeholder_keys: secretKeys,
       resolved_at: now(),
     };
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Drive Test Domain — CRUD
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── Drive Campaigns ──────────────────────────────────────────────────────
+
+export const localDriveCampaigns = {
+  list(projectId: string, params?: { page?: number; limit?: number; status?: CampaignStatus; network_type?: NetworkType; env?: TargetEnv }): PaginatedResponse<DriveCampaign> {
+    let items = getCollection<DriveCampaign>('drive_campaigns').filter(c => c.project_id === projectId);
+    if (params?.status) items = items.filter(c => c.status === params.status);
+    if (params?.network_type) items = items.filter(c => c.network_type === params.network_type);
+    if (params?.env) items = items.filter(c => c.target_env === params.env);
+    return paginate(items, params?.page, params?.limit);
+  },
+
+  get(id: string): DriveCampaign {
+    const item = getCollection<DriveCampaign>('drive_campaigns').find(c => c.campaign_id === id);
+    if (!item) throw new Error('Campagne introuvable');
+    return item;
+  },
+
+  create(projectId: string, data: Partial<DriveCampaign>): DriveCampaign {
+    const items = getCollection<DriveCampaign>('drive_campaigns');
+    const campaign: DriveCampaign = {
+      campaign_id: uid(),
+      project_id: projectId,
+      name: data.name || 'Nouvelle campagne',
+      description: data.description || '',
+      target_env: data.target_env || 'DEV',
+      network_type: data.network_type || '4G',
+      area: data.area || '',
+      start_date: data.start_date || now().split('T')[0],
+      end_date: data.end_date || now().split('T')[0],
+      status: 'DRAFT',
+      created_by: 'local-admin-001',
+      created_at: now(),
+      updated_at: now(),
+    };
+    items.push(campaign);
+    setCollection('drive_campaigns', items);
+    return campaign;
+  },
+
+  update(id: string, data: Partial<DriveCampaign>): DriveCampaign {
+    const items = getCollection<DriveCampaign>('drive_campaigns');
+    const idx = items.findIndex(c => c.campaign_id === id);
+    if (idx === -1) throw new Error('Campagne introuvable');
+    items[idx] = { ...items[idx], ...data, updated_at: now() };
+    setCollection('drive_campaigns', items);
+    return items[idx];
+  },
+
+  updateStatus(id: string, status: CampaignStatus): DriveCampaign {
+    return this.update(id, { status });
+  },
+
+  delete(id: string): void {
+    const items = getCollection<DriveCampaign>('drive_campaigns').filter(c => c.campaign_id !== id);
+    setCollection('drive_campaigns', items);
+    // Cascade: supprimer les routes liées
+    const routes = getCollection<DriveRoute>('drive_routes').filter(r => r.campaign_id !== id);
+    setCollection('drive_routes', routes);
+  },
+};
+
+// ─── Drive Routes ─────────────────────────────────────────────────────────
+
+export const localDriveRoutes = {
+  list(campaignId: string): DriveRoute[] {
+    return getCollection<DriveRoute>('drive_routes').filter(r => r.campaign_id === campaignId);
+  },
+
+  get(id: string): DriveRoute {
+    const item = getCollection<DriveRoute>('drive_routes').find(r => r.route_id === id);
+    if (!item) throw new Error('Route introuvable');
+    return item;
+  },
+
+  create(campaignId: string, data: Partial<DriveRoute>): DriveRoute {
+    const items = getCollection<DriveRoute>('drive_routes');
+    const route: DriveRoute = {
+      route_id: uid(),
+      campaign_id: campaignId,
+      name: data.name || 'Nouvelle route',
+      route_geojson: data.route_geojson || null,
+      checkpoints_geojson: data.checkpoints_geojson || null,
+      expected_duration_min: data.expected_duration_min || 30,
+      created_at: now(),
+      updated_at: now(),
+    };
+    items.push(route);
+    setCollection('drive_routes', items);
+    return route;
+  },
+
+  update(id: string, data: Partial<DriveRoute>): DriveRoute {
+    const items = getCollection<DriveRoute>('drive_routes');
+    const idx = items.findIndex(r => r.route_id === id);
+    if (idx === -1) throw new Error('Route introuvable');
+    items[idx] = { ...items[idx], ...data, updated_at: now() };
+    setCollection('drive_routes', items);
+    return items[idx];
+  },
+
+  delete(id: string): void {
+    const items = getCollection<DriveRoute>('drive_routes').filter(r => r.route_id !== id);
+    setCollection('drive_routes', items);
+  },
+};
+
+// ─── Test Devices ─────────────────────────────────────────────────────────
+
+export const localTestDevices = {
+  list(projectId: string, params?: { page?: number; limit?: number; type?: string }): PaginatedResponse<TestDevice> {
+    let items = getCollection<TestDevice>('test_devices').filter(d => d.project_id === projectId);
+    if (params?.type) items = items.filter(d => d.type === params.type);
+    return paginate(items, params?.page, params?.limit);
+  },
+
+  get(id: string): TestDevice {
+    const item = getCollection<TestDevice>('test_devices').find(d => d.device_id === id);
+    if (!item) throw new Error('Équipement introuvable');
+    return item;
+  },
+
+  create(projectId: string, data: Partial<TestDevice>): TestDevice {
+    const items = getCollection<TestDevice>('test_devices');
+    const device: TestDevice = {
+      device_id: uid(),
+      project_id: projectId,
+      type: data.type || 'ANDROID',
+      model: data.model || '',
+      os_version: data.os_version || '',
+      diag_capable: data.diag_capable ?? false,
+      tools_enabled: data.tools_enabled || [],
+      notes: data.notes || '',
+      created_at: now(),
+      updated_at: now(),
+    };
+    items.push(device);
+    setCollection('test_devices', items);
+    return device;
+  },
+
+  update(id: string, data: Partial<TestDevice>): TestDevice {
+    const items = getCollection<TestDevice>('test_devices');
+    const idx = items.findIndex(d => d.device_id === id);
+    if (idx === -1) throw new Error('Équipement introuvable');
+    items[idx] = { ...items[idx], ...data, updated_at: now() };
+    setCollection('test_devices', items);
+    return items[idx];
+  },
+
+  delete(id: string): void {
+    const items = getCollection<TestDevice>('test_devices').filter(d => d.device_id !== id);
+    setCollection('test_devices', items);
+  },
+};
+
+// ─── Drive Probe Configs ──────────────────────────────────────────────────
+
+export const localDriveProbeConfigs = {
+  list(projectId: string): DriveProbeConfig[] {
+    return getCollection<DriveProbeConfig>('drive_probe_configs').filter(p => p.project_id === projectId);
+  },
+
+  get(id: string): DriveProbeConfig {
+    const item = getCollection<DriveProbeConfig>('drive_probe_configs').find(p => p.probe_id === id);
+    if (!item) throw new Error('Configuration sonde introuvable');
+    return item;
+  },
+
+  create(projectId: string, data: Partial<DriveProbeConfig>): DriveProbeConfig {
+    const items = getCollection<DriveProbeConfig>('drive_probe_configs');
+    const config: DriveProbeConfig = {
+      probe_id: uid(),
+      project_id: projectId,
+      name: data.name || 'Nouvelle sonde',
+      location: data.location || 'RUNNER_HOST',
+      capture_type: data.capture_type || 'PCAP',
+      retention_days: data.retention_days ?? 30,
+      max_size_mb: data.max_size_mb ?? 500,
+      rotation: data.rotation ?? true,
+      output_target: data.output_target || 'MINIO',
+      enabled: data.enabled ?? true,
+      created_at: now(),
+      updated_at: now(),
+    };
+    items.push(config);
+    setCollection('drive_probe_configs', items);
+    return config;
+  },
+
+  update(id: string, data: Partial<DriveProbeConfig>): DriveProbeConfig {
+    const items = getCollection<DriveProbeConfig>('drive_probe_configs');
+    const idx = items.findIndex(p => p.probe_id === id);
+    if (idx === -1) throw new Error('Configuration sonde introuvable');
+    items[idx] = { ...items[idx], ...data, updated_at: now() };
+    setCollection('drive_probe_configs', items);
+    return items[idx];
+  },
+
+  delete(id: string): void {
+    const items = getCollection<DriveProbeConfig>('drive_probe_configs').filter(p => p.probe_id !== id);
+    setCollection('drive_probe_configs', items);
   },
 };

@@ -309,6 +309,11 @@ export const DATASET_TYPE_CATALOG: DatasetTypeSeed[] = [
   NETWORK_ENDPOINTS,
 ];
 
+import { DRIVE_TEST_DATASET_TYPES } from './driveTestCatalog';
+
+// Merge Drive Test dataset types into the main catalog
+DATASET_TYPE_CATALOG.push(...DRIVE_TEST_DATASET_TYPES);
+
 /** Lookup rapide par dataset_type_id */
 export const DATASET_TYPE_BY_ID: Record<string, DatasetTypeSeed> = Object.fromEntries(
   DATASET_TYPE_CATALOG.map(dt => [dt.dataset_type_id, dt])

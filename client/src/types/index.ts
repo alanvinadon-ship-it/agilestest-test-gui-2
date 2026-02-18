@@ -3,7 +3,7 @@
 export type UserRole = 'ADMIN' | 'MANAGER' | 'VIEWER';
 export type ProjectStatus = 'ACTIVE' | 'ARCHIVED' | 'DRAFT';
 export type ExecutionStatus = 'PENDING' | 'RUNNING' | 'PASSED' | 'FAILED' | 'ERROR' | 'CANCELLED';
-export type ArtifactType = 'LOG' | 'SCREENSHOT' | 'VIDEO' | 'HAR' | 'TRACE' | 'PCAP' | 'OTHER';
+export type ArtifactType = 'LOG' | 'SCREENSHOT' | 'VIDEO' | 'HAR' | 'TRACE' | 'PCAP' | 'SIP_TRACE' | 'KPI_SERIES' | 'GEOJSON_ROUTE' | 'DEVICE_LOGS' | 'IPERF_RESULTS' | 'SUMMARY_JSON' | 'OTHER';
 export type CaptureStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 export type CaptureTargetType = 'K8S' | 'SSH' | 'PROBE';
 export type ProbeType = 'LINUX_EDGE' | 'K8S_CLUSTER' | 'NETWORK_TAP';
@@ -22,7 +22,7 @@ export type BundleStatus = 'DRAFT' | 'ACTIVE' | 'DEPRECATED';
 /** Codes domaine normalisés pour les IDs de scénarios */
 export type DomainCode = 'WEB' | 'API' | 'MOB' | 'DESK' | 'IMS' | 'RAN' | 'EPC4' | '5GSA' | '5GNSA' | 'DRIVE';
 export type AnalysisStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
-export type ProjectDomain = 'WEB' | 'API' | 'IMS' | 'RAN' | 'EPC' | '5GC';
+export type ProjectDomain = 'WEB' | 'API' | 'IMS' | 'RAN' | 'EPC' | '5GC' | 'DRIVE_TEST';
 
 // ─── Domain Models ───────────────────────────────────────────────────────────
 
@@ -552,7 +552,7 @@ export interface DatasetType {
 
 export type RunnerJobStatus = 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED';
 
-export type ArtifactUploadPolicy = 'screenshot' | 'trace' | 'video' | 'log' | 'har';
+export type ArtifactUploadPolicy = 'screenshot' | 'trace' | 'video' | 'log' | 'har' | 'pcap' | 'sip_trace' | 'kpi_series' | 'geojson' | 'device_logs' | 'iperf_results' | 'summary_json';
 
 export interface RunnerJob {
   job_id: string;
@@ -616,4 +616,119 @@ export interface BundleResolveResult {
   merged_json: Record<string, unknown>;
   secrets_placeholder_keys: string[];
   resolved_at: string;
+}
+
+// ─── Drive Test Domain ────────────────────────────────────────────────────
+
+export type NetworkType = '4G' | '5G_SA' | '5G_NSA' | 'IMS' | 'IP';
+export type CampaignStatus = 'DRAFT' | 'READY' | 'RUNNING' | 'DONE';
+export type DeviceType = 'ANDROID' | 'MODEM' | 'CPE' | 'LAPTOP';
+export type DriveToolName = 'GNetTrack' | 'NSG' | 'QXDM' | 'Wireshark' | 'iperf3' | 'ping' | 'traceroute' | 'tcpdump';
+export type ProbeLocation = 'RUNNER_HOST' | 'EDGE_VM' | 'K8S_NODE' | 'SPAN_PORT' | 'MIRROR_TAP';
+export type DriveCaptureType = 'PCAP' | 'SIP_TRACE' | 'DIAMETER' | 'GTPU' | 'NGAP' | 'NAS' | 'HTTP' | 'DNS' | 'SYSLOG';
+export type ProbeOutputTarget = 'MINIO' | 'LOCAL' | 'BOTH';
+
+/** KPI cibles pour les profils Drive Test */
+export type DriveKpi =
+  | 'RSRP' | 'RSRQ' | 'SINR'
+  | 'THROUGHPUT_DL' | 'THROUGHPUT_UL'
+  | 'LATENCY' | 'JITTER' | 'PACKET_LOSS'
+  | 'ATTACH_SUCCESS' | 'DROP_CALL' | 'HANDOVER_SUCCESS'
+  | 'VOLTE_MOS' | 'VOLTE_SETUP_TIME'
+  | 'DNS_RESOLUTION_TIME' | 'HTTP_RESPONSE_TIME';
+
+/** Campagne de Drive Test */
+export interface DriveCampaign {
+  campaign_id: string;
+  project_id: string;
+  name: string;
+  description: string;
+  target_env: TargetEnv;
+  network_type: NetworkType;
+  area: string;
+  start_date: string;
+  end_date: string;
+  status: CampaignStatus;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Route de Drive Test (parcours terrain) */
+export interface DriveRoute {
+  route_id: string;
+  campaign_id: string;
+  name: string;
+  /** GeoJSON LineString du parcours */
+  route_geojson: GeoJSON.LineString | null;
+  /** GeoJSON FeatureCollection des checkpoints */
+  checkpoints_geojson: GeoJSON.FeatureCollection | null;
+  expected_duration_min: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Équipement de test (terminal, modem, CPE, laptop) */
+export interface TestDevice {
+  device_id: string;
+  project_id: string;
+  type: DeviceType;
+  model: string;
+  os_version: string;
+  diag_capable: boolean;
+  tools_enabled: DriveToolName[];
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Configuration de sonde pour la collecte Drive Test */
+export interface DriveProbeConfig {
+  probe_id: string;
+  project_id: string;
+  name: string;
+  location: ProbeLocation;
+  capture_type: DriveCaptureType;
+  retention_days: number;
+  max_size_mb: number;
+  rotation: boolean;
+  output_target: ProbeOutputTarget;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Namespace GeoJSON minimal pour éviter une dépendance externe */
+export namespace GeoJSON {
+  export interface Position extends Array<number> {}
+  export interface LineString {
+    type: 'LineString';
+    coordinates: number[][];
+  }
+  export interface Point {
+    type: 'Point';
+    coordinates: number[];
+  }
+  export interface Feature {
+    type: 'Feature';
+    geometry: Point | LineString;
+    properties: Record<string, unknown>;
+  }
+  export interface FeatureCollection {
+    type: 'FeatureCollection';
+    features: Feature[];
+  }
+}
+
+/** Template de scénario Drive Test */
+export interface DriveScenarioTemplate {
+  template_id: string;
+  scenario_code: string;
+  test_type: TestType;
+  name: string;
+  description: string;
+  steps: ScenarioStep[];
+  required_dataset_types: string[];
+  artifact_policy: ArtifactUploadPolicy[];
+  kpi_thresholds: Record<string, number>;
 }

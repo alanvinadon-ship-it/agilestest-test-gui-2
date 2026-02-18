@@ -28,6 +28,8 @@ import AdminUsersPage from "./pages/AdminUsersPage";
 import AdminProjectAccessPage from "./pages/AdminProjectAccessPage";
 import AdminRbacPage from "./pages/AdminRbacPage";
 import AdminAuditPage from "./pages/AdminAuditPage";
+import DriveCampaignsPage from "./pages/DriveCampaignsPage";
+import DriveReportingPage from "./pages/DriveReportingPage";
 
 // ─── Query Client ───────────────────────────────────────────────────────────
 const queryClient = new QueryClient({
@@ -108,6 +110,14 @@ function AppRouter() {
                 <RequireProject><CapturesPage /></RequireProject>
               </Route>
               <Route path="/probes" component={ProbesPage} />
+
+              {/* Drive Test pages */}
+              <Route path="/drive/campaigns">
+                <RequireProject><DriveCampaignsPage /></RequireProject>
+              </Route>
+              <Route path="/drive/reporting">
+                <RequireProject><DriveReportingPage /></RequireProject>
+              </Route>
 
               {/* Admin pages */}
               <Route path="/admin/users">

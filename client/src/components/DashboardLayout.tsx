@@ -20,6 +20,9 @@ import {
   ShieldCheck,
   ScrollText,
   KeyRound,
+  Signal,
+  BarChart3,
+  Navigation,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -65,6 +68,13 @@ const baseNavSections: NavSection[] = [
       { href: "/executions", icon: Play, label: "Exécutions" },
       { href: "/captures", icon: Network, label: "Captures" },
       { href: "/probes", icon: Radio, label: "Sondes" },
+    ],
+  },
+  {
+    label: "Drive Test",
+    items: [
+      { href: "/drive/campaigns", icon: Navigation, label: "Campagnes" },
+      { href: "/drive/reporting", icon: BarChart3, label: "Reporting" },
     ],
   },
   {

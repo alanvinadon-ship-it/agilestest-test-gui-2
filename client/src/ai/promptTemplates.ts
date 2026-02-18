@@ -222,12 +222,17 @@ Return ONLY the JSON, no markdown fences, no explanation.`;
   },
 };
 
+// ─── Drive Test Templates (imported) ─────────────────────────────────────
+
+import { DRIVE_PROMPT_TEMPLATES } from './driveTestTemplates';
+
 // ─── Registry ─────────────────────────────────────────────────────────────
 
 export const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
   PROMPT_SCRIPT_PLAN_v1,
   PROMPT_SCRIPT_GEN_v1,
   PROMPT_SCRIPT_REPAIR_v1,
+  ...DRIVE_PROMPT_TEMPLATES,
 };
 
 export function getPromptTemplate(id: string): PromptTemplate | undefined {
