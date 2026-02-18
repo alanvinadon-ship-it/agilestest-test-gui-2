@@ -9,6 +9,7 @@
  * 5. Delivery Logs — journal d'envoi + filtres + drill-down
  */
 import { useState, useMemo, useCallback, Fragment } from 'react';
+import { trpc } from '@/lib/trpc';
 import {
   Bell, Smartphone, Mail, FileText, GitBranch, ScrollText,
   Save, Send, Power, PowerOff, Eye, EyeOff, Edit2, Trash2,
@@ -520,16 +521,88 @@ function EmailTab({ canUpdate, canTest, canDisable, actor, refresh, rk }: {
     refresh();
   };
 
-  const handleTest = () => {
+  const testEmailMutation = trpc.notifications.testEmail.useMutation();
+
+  const handleTest = async () => {
     if (!testTo) { toast.error('Adresse email requise'); return; }
+
+    const isStubMode = !enabled || !host;
+    if (isStubMode) {
+      // Mode Stub : simulation locale
+      setTesting(true);
+      setTimeout(() => {
+        const result = localNotifSettings.testEmail({ to_email: testTo, subject: testSubject, body_text: testBody }, actor);
+        setTestResult(result);
+        setTesting(false);
+        if (result.status === 'OK') toast.success('Email test envoyé (mode stub)');
+        else toast.error(`Échec: ${result.error_message}`);
+      }, 800);
+      return;
+    }
+
+    // Mode Live : envoi réel via backend SMTP
     setTesting(true);
-    setTimeout(() => {
-      const result = localNotifSettings.testEmail({ to_email: testTo, subject: testSubject, body_text: testBody }, actor);
-      setTestResult(result);
+    setTestResult(null);
+    try {
+      // Lire les settings bruts (non masqués) depuis localStorage
+      const raw = localNotifSettings.getRawEmailSettings();
+      // Utiliser les valeurs du formulaire (qui peuvent être modifiées) ou les valeurs stockées
+      const smtpConfig = {
+        host: host,
+        port: port,
+        secure: secure,
+        username: username ?? raw.username ?? '',
+        password: password ?? raw.password ?? '',
+        from_email: fromEmail || raw.from_email || 'noreply@agilestest.io',
+        from_name: fromName || raw.from_name || 'AgilesTest',
+        reply_to: replyTo || raw.reply_to || undefined,
+        timeout_ms: timeoutMs,
+      };
+
+      if (!smtpConfig.username || !smtpConfig.password) {
+        toast.error('Username et Password SMTP requis pour le mode Live');
+        setTesting(false);
+        return;
+      }
+
+      const result = await testEmailMutation.mutateAsync({
+        smtp: smtpConfig,
+        to_email: testTo,
+      });
+
+      const traceId = `tr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+
+      if (result.success) {
+        const testSendResult: TestSendResult = {
+          status: 'OK',
+          provider_response: `SMTP: ${result.response || '250 OK'} (Message-ID: ${result.message_id || 'N/A'})`,
+          trace_id: traceId,
+          duration_ms: result.duration_ms,
+        };
+        setTestResult(testSendResult);
+        toast.success('Email test envoyé avec succès via SMTP');
+      } else {
+        const testSendResult: TestSendResult = {
+          status: 'ERROR',
+          error_message: result.error || 'Erreur SMTP inconnue',
+          trace_id: traceId,
+          duration_ms: result.duration_ms,
+        };
+        setTestResult(testSendResult);
+        toast.error(`Échec SMTP: ${result.error}`);
+      }
+    } catch (err: any) {
+      const traceId = `tr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+      setTestResult({
+        status: 'ERROR',
+        error_message: err.message || 'Erreur de communication avec le serveur',
+        trace_id: traceId,
+        duration_ms: 0,
+      });
+      toast.error(`Erreur: ${err.message || 'Impossible de contacter le serveur'}`);
+    } finally {
       setTesting(false);
-      if (result.status === 'OK') toast.success('Email test envoyé');
-      else toast.error(`Échec: ${result.error_message}`);
-    }, 800);
+    }
   };
 
   const isStub = !email.enabled || email.provider === 'NONE';

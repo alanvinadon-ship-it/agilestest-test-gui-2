@@ -46,7 +46,6 @@ const queryClient = new QueryClient({
     },
   },
 });
-
 // ─── Auth Guards ────────────────────────────────────────────────────────────
 function RequireAuth({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -82,6 +81,7 @@ function ProjectScoped({ children }: { children: ReactNode }) {
 function AppRouter() {
   const { isAuthenticated } = useAuth();
 
+  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
       {/* Login */}

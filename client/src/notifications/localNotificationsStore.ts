@@ -88,6 +88,11 @@ export const localNotifSettings = {
     return maskSettings(getSettings());
   },
 
+  /** Retourne les settings email bruts (non masqués) pour l'envoi SMTP via backend */
+  getRawEmailSettings(): NotificationSettings['email'] {
+    return getSettings().email;
+  },
+
   update(patch: { sms?: Partial<NotificationSettings['sms']>; email?: Partial<NotificationSettings['email']> }, actor: string): NotificationSettingsMasked {
     const current = getSettings();
     if (patch.sms) {

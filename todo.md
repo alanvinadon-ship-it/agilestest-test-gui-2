@@ -1,0 +1,21 @@
+# Project TODO
+
+- [x] DRIVE-CAPTURE-POLICY-1: Dual capture modes (Runner tcpdump vs Probe SPAN/TAP)
+- [x] PILOT-ORANGE-RUNBOOK-1: Comprehensive pilot runbook, checklist, GO/NOGO template
+- [x] PROBE-HARDEN-1: Probe mode B hardening (health, heartbeat, auth, quotas)
+- [x] DRIVE-CORRELATION-1: KPI↔route↔artifacts correlation with auto-incidents
+- [x] DRIVE-REPAIR-REAL-2: Operator-grade Drive repair with multi-layer diagnosis
+- [x] ADMIN-NOTIFICATIONS-1: Notifications module (SMS, Email, Templates, Rules, Delivery Logs)
+- [x] PACKAGING-DUAL-1: Docker Compose + Kubernetes GitOps dual packaging
+- [x] PILOT-ORANGE-RUNBOOK-UPDATE-1: Updated pilot documents to V2
+- [x] Fix: Mode Stub/Live toggle in SMS and Email tabs
+- [x] Fix: SecretField eye toggle for password visibility
+- [x] Fix: Username field as plain text (not masked)
+- [x] Upgrade to full-stack architecture (Express + tRPC + DB)
+- [x] Install Nodemailer for real SMTP email sending
+- [x] Create backend emailService.ts with Nodemailer transporter
+- [x] Create tRPC notifications router (testEmail, verifySmtp, sendEmail)
+- [x] Connect frontend EmailTab to backend tRPC endpoint for real SMTP sending
+- [x] Add getRawEmailSettings to localNotificationsStore for credential access
+- [x] Port/security validation (465+STARTTLS, 587+TLS rejection)
+- [x] Vitest tests for email service (8 tests passing)
