@@ -19,6 +19,7 @@ import ExecutionsPage from "./pages/ExecutionsPage";
 import ExecutionDetailPage from "./pages/ExecutionDetailPage";
 import CapturesPage from "./pages/CapturesPage";
 import ProbesPage from "./pages/ProbesPage";
+import DatasetTypesPage from "./pages/DatasetTypesPage";
 
 // ─── Query Client ───────────────────────────────────────────────────────────
 const queryClient = new QueryClient({
@@ -66,6 +67,9 @@ function AppRouter() {
               </Route>
               <Route path="/datasets">
                 <RequireProject><DatasetsPage /></RequireProject>
+              </Route>
+              <Route path="/dataset-types">
+                <RequireProject><DatasetTypesPage /></RequireProject>
               </Route>
               <Route path="/executions">
                 <RequireProject><ExecutionsPage /></RequireProject>

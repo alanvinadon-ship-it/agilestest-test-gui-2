@@ -3,11 +3,12 @@ import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { repositoryApi } from '../api/repositoryApi';
-import type { TestProfile, TestScenario, TestType } from '../types';
+import type { TestProfile, TestScenario, TestType, DatasetType } from '../types';
 import {
   Plus, FileText, Loader2, Trash2, X, AlertCircle, Search,
-  ChevronDown, GripVertical, ClipboardCheck, Shield, Gauge, Filter, Edit2, Sparkles
+  ChevronDown, GripVertical, ClipboardCheck, Shield, Gauge, Filter, Edit2, Sparkles, Database
 } from 'lucide-react';
+import { localDatasetTypes } from '../api/localStore';
 import SuggestScenariosModal from '../components/SuggestScenariosModal';
 import {
   type ProfileDomain, DOMAIN_META, PROFILE_TYPE_META, type ProfileType,
@@ -477,6 +478,14 @@ export default function ScenariosPage() {
                               <p className="text-xs text-muted-foreground">
                                 {scenario.steps?.length || 0} étape(s) — Créé le {new Date(scenario.created_at).toLocaleDateString('fr-FR')}
                               </p>
+                              {scenario.required_dataset_types && scenario.required_dataset_types.length > 0 && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  <Database className="w-3 h-3 text-orange-400/60" />
+                                  {scenario.required_dataset_types.map(dtId => (
+                                    <span key={dtId} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-400/80 border border-orange-500/20">{dtId}</span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                             {canWrite && (
                               <div className="flex items-center gap-1">
@@ -542,7 +551,21 @@ function EditScenarioModal({ scenario, profile, onClose }: {
   const [name, setName] = useState(scenario.name);
   const [description, setDescription] = useState(scenario.description || '');
   const [steps, setSteps] = useState(scenario.steps || [{ id: 'step-1', order: 0, action: '', description: '', expected_result: '', parameters: {} }]);
+  const [requiredDatasetTypes, setRequiredDatasetTypes] = useState<string[]>(scenario.required_dataset_types || []);
   const [error, setError] = useState<string | null>(null);
+
+  // Load available dataset types
+  const { data: datasetTypesData } = useQuery({
+    queryKey: ['dataset-types-for-scenario', profile?.domain, profile?.test_type],
+    queryFn: () => localDatasetTypes.list({ domain: profile?.domain, test_type: profile?.test_type }),
+  });
+  const availableDatasetTypes = datasetTypesData?.data || [];
+
+  const toggleDatasetType = (dtId: string) => {
+    setRequiredDatasetTypes(prev =>
+      prev.includes(dtId) ? prev.filter(id => id !== dtId) : [...prev, dtId]
+    );
+  };
 
   const mutation = useMutation({
     mutationFn: (data: Partial<TestScenario>) => repositoryApi.updateScenario(scenario.id, data),
@@ -591,6 +614,7 @@ function EditScenarioModal({ scenario, profile, onClose }: {
       name: name.trim(),
       description: description.trim(),
       steps,
+      required_dataset_types: requiredDatasetTypes,
     });
   };
 
@@ -642,6 +666,40 @@ function EditScenarioModal({ scenario, profile, onClose }: {
                 placeholder="Description optionnelle du scénario..."
                 rows={2}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 resize-none" />
+            </div>
+
+            {/* Required Dataset Types */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Database className="w-4 h-4 text-orange-400" />
+                <label className="text-sm font-medium text-foreground">Datasets requis</label>
+                <span className="text-xs text-muted-foreground">({requiredDatasetTypes.length} sélectionné{requiredDatasetTypes.length !== 1 ? 's' : ''})</span>
+              </div>
+              {availableDatasetTypes.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">Aucun gabarit disponible pour ce domaine.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {availableDatasetTypes.map(dt => {
+                    const isSelected = requiredDatasetTypes.includes(dt.dataset_type_id);
+                    return (
+                      <button
+                        key={dt.id}
+                        type="button"
+                        onClick={() => toggleDatasetType(dt.dataset_type_id)}
+                        className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
+                          isSelected
+                            ? 'bg-orange-500/15 border-orange-500/40 text-orange-400 font-semibold'
+                            : 'bg-muted/30 border-border text-muted-foreground hover:border-orange-500/30 hover:text-foreground'
+                        }`}
+                      >
+                        <span className="font-mono text-[10px]">{dt.dataset_type_id}</span>
+                        <span>·</span>
+                        <span>{dt.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div>

@@ -6,12 +6,13 @@
 
 import type {
   Project, CreateProjectRequest, UpdateProjectRequest,
-  TestProfile, TestScenario, Dataset,
+  TestProfile, TestScenario, Dataset, DatasetType,
   Execution, Artifact, Incident,
   CaptureJob, CaptureDetail, CreateCaptureRequest,
   Probe, ProbeWithPolicy, ProbeWithScope, CreateProbeRequest, UpdateProbeRequest,
   PaginatedResponse,
 } from '../types';
+import { DATASET_TYPE_CATALOG } from '../config/datasetTypeCatalog';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -208,6 +209,118 @@ export const localScenarios = {
   delete(id: string): void {
     const items = getCollection<TestScenario>('scenarios').filter(s => s.id !== id);
     setCollection('scenarios', items);
+  },
+};
+
+// ─── Dataset Types (Gabarits) ──────────────────────────────────────────────
+
+function ensureDefaultDatasetTypes(): void {
+  const existing = getCollection<DatasetType>('dataset_types');
+  if (existing.length === 0) {
+    const defaults: DatasetType[] = DATASET_TYPE_CATALOG.map(seed => ({
+      id: seed.dataset_type_id,
+      dataset_type_id: seed.dataset_type_id,
+      domain: seed.domain,
+      test_type: seed.test_type,
+      name: seed.name,
+      description: seed.description,
+      schema_fields: seed.schema_fields,
+      example_placeholders: seed.example_placeholders,
+      tags: seed.tags,
+      created_at: now(),
+      updated_at: now(),
+    }));
+    setCollection('dataset_types', defaults);
+  }
+}
+
+export const localDatasetTypes = {
+  list(params?: { domain?: string; test_type?: string; page?: number; limit?: number }): PaginatedResponse<DatasetType> {
+    ensureDefaultDatasetTypes();
+    let items = getCollection<DatasetType>('dataset_types');
+    if (params?.domain) {
+      items = items.filter(dt => dt.domain === params.domain || dt.domain === 'API');
+    }
+    if (params?.test_type) {
+      items = items.filter(dt => !dt.test_type || dt.test_type === params.test_type);
+    }
+    return paginate(items, params?.page, params?.limit);
+  },
+
+  get(id: string): DatasetType {
+    ensureDefaultDatasetTypes();
+    const item = getCollection<DatasetType>('dataset_types').find(dt => dt.id === id || dt.dataset_type_id === id);
+    if (!item) throw new Error('Dataset Type introuvable');
+    return item;
+  },
+
+  create(data: Partial<DatasetType>): DatasetType {
+    ensureDefaultDatasetTypes();
+    if (!data.dataset_type_id || !data.name || !data.domain) {
+      throw new Error('dataset_type_id, name et domain sont obligatoires.');
+    }
+    const items = getCollection<DatasetType>('dataset_types');
+    // Vérifier unicité du slug
+    if (items.some(dt => dt.dataset_type_id === data.dataset_type_id)) {
+      throw new Error(`Le dataset_type_id "${data.dataset_type_id}" existe déjà (409).`);
+    }
+    const dt: DatasetType = {
+      id: data.dataset_type_id,
+      dataset_type_id: data.dataset_type_id,
+      domain: data.domain,
+      test_type: data.test_type,
+      name: data.name,
+      description: data.description || '',
+      schema_fields: data.schema_fields || [],
+      example_placeholders: data.example_placeholders || {},
+      tags: data.tags || [],
+      created_at: now(),
+      updated_at: now(),
+    };
+    items.push(dt);
+    setCollection('dataset_types', items);
+    return dt;
+  },
+
+  update(id: string, data: Partial<DatasetType>): DatasetType {
+    ensureDefaultDatasetTypes();
+    const items = getCollection<DatasetType>('dataset_types');
+    const idx = items.findIndex(dt => dt.id === id || dt.dataset_type_id === id);
+    if (idx === -1) throw new Error('Dataset Type introuvable');
+    // Ne pas permettre de changer le slug si des scénarios le référencent
+    if (data.dataset_type_id && data.dataset_type_id !== items[idx].dataset_type_id) {
+      const scenarios = getCollection<{required_dataset_types?: string[]}>('scenarios');
+      const isReferenced = scenarios.some(s => s.required_dataset_types?.includes(items[idx].dataset_type_id));
+      if (isReferenced) {
+        throw new Error('Impossible de modifier le slug : des scénarios référencent ce dataset type (409).');
+      }
+    }
+    items[idx] = { ...items[idx], ...data, updated_at: now() };
+    setCollection('dataset_types', items);
+    return items[idx];
+  },
+
+  delete(id: string): void {
+    ensureDefaultDatasetTypes();
+    const items = getCollection<DatasetType>('dataset_types');
+    const target = items.find(dt => dt.id === id || dt.dataset_type_id === id);
+    if (!target) throw new Error('Dataset Type introuvable');
+    // Vérifier qu'aucun scénario ne le référence
+    const scenarios = getCollection<{required_dataset_types?: string[]}>('scenarios');
+    const isReferenced = scenarios.some(s => s.required_dataset_types?.includes(target.dataset_type_id));
+    if (isReferenced) {
+      throw new Error('Impossible de supprimer : des scénarios référencent ce dataset type (409).');
+    }
+    setCollection('dataset_types', items.filter(dt => dt.id !== target.id));
+  },
+
+  /** Valider que tous les dataset_type_ids existent */
+  validateRefs(datasetTypeIds: string[]): { valid: boolean; missing: string[] } {
+    ensureDefaultDatasetTypes();
+    const items = getCollection<DatasetType>('dataset_types');
+    const knownIds = new Set(items.map(dt => dt.dataset_type_id));
+    const missing = datasetTypeIds.filter(id => !knownIds.has(id));
+    return { valid: missing.length === 0, missing };
   },
 };
 

@@ -34,6 +34,7 @@ const navSections = [
       { href: "/profiles", icon: Settings2, label: "Profils de test" },
       { href: "/scenarios", icon: FileText, label: "Scénarios" },
       { href: "/datasets", icon: Database, label: "Jeux de données" },
+      { href: "/dataset-types", icon: Database, label: "Gabarits Datasets" },
     ],
   },
   {

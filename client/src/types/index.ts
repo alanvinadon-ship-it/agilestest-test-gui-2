@@ -372,6 +372,8 @@ export interface TestScenario {
   name: string;
   description: string;
   steps: ScenarioStep[];
+  /** Dataset types requis pour ce scénario (slugs normalisés) */
+  required_dataset_types?: string[];
   created_at: string;
   updated_at: string;
 }
@@ -394,6 +396,36 @@ export interface Dataset {
   row_count: number;
   size_bytes: number;
   storage_url: string;
+  /** Référence vers un DatasetType (gabarit) */
+  dataset_type_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// ─── Dataset Type (Gabarit) ────────────────────────────────────────────────
+
+export interface DatasetTypeField {
+  name: string;
+  type: 'string' | 'number' | 'boolean' | 'email' | 'url' | 'date' | 'phone' | 'ip' | 'enum';
+  required: boolean;
+  description: string;
+  example?: string;
+  enum_values?: string[];
+  min?: number;
+  max?: number;
+  pattern?: string;
+}
+
+export interface DatasetType {
+  id: string;
+  dataset_type_id: string; // slug normalisé ex: user_admin
+  domain: string; // WEB, API, IMS, 5GC, etc.
+  test_type?: TestType; // optionnel
+  name: string;
+  description: string;
+  schema_fields: DatasetTypeField[];
+  example_placeholders: Record<string, string>;
+  tags: string[];
   created_at: string;
   updated_at: string;
 }
