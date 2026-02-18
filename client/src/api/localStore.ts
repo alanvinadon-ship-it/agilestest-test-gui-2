@@ -11,6 +11,9 @@ import type {
   CaptureJob, CaptureDetail, CreateCaptureRequest,
   Probe, ProbeWithPolicy, ProbeWithScope, CreateProbeRequest, UpdateProbeRequest,
   PaginatedResponse, AuditLogEntry,
+  DatasetInstance, TargetEnv, DatasetInstanceStatus,
+  DatasetBundle, BundleStatus, BundleItem, DatasetSecretKey,
+  BundleValidationResult, ScenarioDatasetValidation,
 } from '../types';
 import { DATASET_TYPE_CATALOG } from '../config/datasetTypeCatalog';
 
@@ -674,5 +677,391 @@ export const localProbes = {
 
   regenerateToken(probeId: string): { token: string } {
     return { token: `probe-token-${uid()}` };
+  },
+};
+
+// ─── Dataset Instances (DATASET-1) ────────────────────────────────────────
+
+export const localDatasetInstances = {
+  list(projectId: string, params?: {
+    env?: TargetEnv; dataset_type_id?: string; status?: DatasetInstanceStatus;
+    page?: number; limit?: number;
+  }): PaginatedResponse<DatasetInstance> {
+    let items = getCollection<DatasetInstance>('dataset_instances').filter(d => d.project_id === projectId);
+    if (params?.env) items = items.filter(d => d.env === params.env);
+    if (params?.dataset_type_id) items = items.filter(d => d.dataset_type_id === params.dataset_type_id);
+    if (params?.status) items = items.filter(d => d.status === params.status);
+    items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return paginate(items, params?.page, params?.limit);
+  },
+
+  get(id: string): DatasetInstance {
+    const item = getCollection<DatasetInstance>('dataset_instances').find(d => d.dataset_id === id);
+    if (!item) throw new Error('Dataset instance introuvable');
+    return item;
+  },
+
+  create(projectId: string, data: {
+    dataset_type_id: string; env: TargetEnv; values_json?: Record<string, unknown>; notes?: string;
+  }): DatasetInstance {
+    // Vérifier que le dataset_type_id existe
+    const dtItems = getCollection<DatasetType>('dataset_types');
+    const dt = dtItems.find(t => t.dataset_type_id === data.dataset_type_id);
+    if (!dt) throw new Error(`Dataset type "${data.dataset_type_id}" introuvable.`);
+
+    // Pré-remplir les valeurs depuis les exemples du gabarit
+    const defaultValues: Record<string, unknown> = {};
+    if (dt.example_placeholders) {
+      for (const [key, val] of Object.entries(dt.example_placeholders)) {
+        defaultValues[key] = String(val).replace(/\{\{index\}\}/g, '1');
+      }
+    }
+
+    const items = getCollection<DatasetInstance>('dataset_instances');
+    const instance: DatasetInstance = {
+      dataset_id: uid(),
+      project_id: projectId,
+      dataset_type_id: data.dataset_type_id,
+      env: data.env,
+      version: 1,
+      status: 'DRAFT',
+      values_json: data.values_json || defaultValues,
+      notes: data.notes || '',
+      created_by: 'local-admin-001',
+      created_at: now(),
+      updated_at: now(),
+    };
+    items.push(instance);
+    setCollection('dataset_instances', items);
+    return instance;
+  },
+
+  update(id: string, data: Partial<Pick<DatasetInstance, 'values_json' | 'status' | 'notes'>>): DatasetInstance {
+    const items = getCollection<DatasetInstance>('dataset_instances');
+    const idx = items.findIndex(d => d.dataset_id === id);
+    if (idx === -1) throw new Error('Dataset instance introuvable');
+    if (data.values_json !== undefined) items[idx].values_json = data.values_json;
+    if (data.status !== undefined) items[idx].status = data.status;
+    if (data.notes !== undefined) items[idx].notes = data.notes;
+    items[idx].updated_at = now();
+    setCollection('dataset_instances', items);
+    return items[idx];
+  },
+
+  clone(id: string): DatasetInstance {
+    const items = getCollection<DatasetInstance>('dataset_instances');
+    const source = items.find(d => d.dataset_id === id);
+    if (!source) throw new Error('Dataset instance introuvable');
+    // Trouver la version max pour ce (project_id, dataset_type_id, env)
+    const sameGroup = items.filter(d =>
+      d.project_id === source.project_id &&
+      d.dataset_type_id === source.dataset_type_id &&
+      d.env === source.env
+    );
+    const maxVersion = Math.max(...sameGroup.map(d => d.version), 0);
+    const clone: DatasetInstance = {
+      ...source,
+      dataset_id: uid(),
+      version: maxVersion + 1,
+      status: 'DRAFT',
+      created_at: now(),
+      updated_at: now(),
+    };
+    items.push(clone);
+    setCollection('dataset_instances', items);
+    return clone;
+  },
+
+  delete(id: string): void {
+    // Vérifier qu'il n'est pas dans un bundle ACTIVE
+    const bundleItems = getCollection<BundleItem>('bundle_items');
+    const bundles = getCollection<DatasetBundle>('dataset_bundles');
+    const linkedBundleIds = bundleItems.filter(bi => bi.dataset_id === id).map(bi => bi.bundle_id);
+    const activeBundles = bundles.filter(b => linkedBundleIds.includes(b.bundle_id) && b.status === 'ACTIVE');
+    if (activeBundles.length > 0) {
+      throw new Error(`Impossible de supprimer : ce dataset est utilisé dans ${activeBundles.length} bundle(s) ACTIVE.`);
+    }
+    // Supprimer les bundle_items liés
+    setCollection('bundle_items', bundleItems.filter(bi => bi.dataset_id !== id));
+    // Supprimer les secrets liés
+    const secrets = getCollection<DatasetSecretKey>('dataset_secrets').filter(s => s.dataset_id !== id);
+    setCollection('dataset_secrets', secrets);
+    // Supprimer l'instance
+    const items = getCollection<DatasetInstance>('dataset_instances').filter(d => d.dataset_id !== id);
+    setCollection('dataset_instances', items);
+  },
+};
+
+// ─── Dataset Secret Keys ──────────────────────────────────────────────────
+
+export const localDatasetSecrets = {
+  list(datasetId: string): DatasetSecretKey[] {
+    return getCollection<DatasetSecretKey>('dataset_secrets').filter(s => s.dataset_id === datasetId);
+  },
+
+  set(datasetId: string, keyPath: string, isSecret: boolean): DatasetSecretKey {
+    const items = getCollection<DatasetSecretKey>('dataset_secrets');
+    const idx = items.findIndex(s => s.dataset_id === datasetId && s.key_path === keyPath);
+    if (idx !== -1) {
+      items[idx].is_secret = isSecret;
+    } else {
+      items.push({ dataset_id: datasetId, key_path: keyPath, is_secret: isSecret });
+    }
+    setCollection('dataset_secrets', items);
+    return items.find(s => s.dataset_id === datasetId && s.key_path === keyPath)!;
+  },
+
+  remove(datasetId: string, keyPath: string): void {
+    const items = getCollection<DatasetSecretKey>('dataset_secrets')
+      .filter(s => !(s.dataset_id === datasetId && s.key_path === keyPath));
+    setCollection('dataset_secrets', items);
+  },
+
+  /** Masque les valeurs secrètes dans un values_json */
+  maskValues(datasetId: string, valuesJson: Record<string, unknown>): Record<string, unknown> {
+    const secrets = this.list(datasetId);
+    const secretPaths = new Set(secrets.filter(s => s.is_secret).map(s => s.key_path));
+    const masked = { ...valuesJson };
+    for (const key of Object.keys(masked)) {
+      if (secretPaths.has(key)) {
+        masked[key] = '••••••••';
+      }
+    }
+    return masked;
+  },
+};
+
+// ─── Dataset Bundles ──────────────────────────────────────────────────────
+
+export const localBundles = {
+  list(projectId: string, params?: {
+    env?: TargetEnv; status?: BundleStatus; page?: number; limit?: number;
+  }): PaginatedResponse<DatasetBundle> {
+    let items = getCollection<DatasetBundle>('dataset_bundles').filter(b => b.project_id === projectId);
+    if (params?.env) items = items.filter(b => b.env === params.env);
+    if (params?.status) items = items.filter(b => b.status === params.status);
+    items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return paginate(items, params?.page, params?.limit);
+  },
+
+  get(id: string): DatasetBundle {
+    const item = getCollection<DatasetBundle>('dataset_bundles').find(b => b.bundle_id === id);
+    if (!item) throw new Error('Bundle introuvable');
+    return item;
+  },
+
+  create(projectId: string, data: {
+    name: string; env: TargetEnv; tags?: string[];
+  }): DatasetBundle {
+    const items = getCollection<DatasetBundle>('dataset_bundles');
+    const bundle: DatasetBundle = {
+      bundle_id: uid(),
+      project_id: projectId,
+      name: data.name,
+      env: data.env,
+      version: 1,
+      status: 'DRAFT',
+      tags: data.tags || [],
+      created_by: 'local-admin-001',
+      created_at: now(),
+      updated_at: now(),
+    };
+    items.push(bundle);
+    setCollection('dataset_bundles', items);
+    return bundle;
+  },
+
+  update(id: string, data: Partial<Pick<DatasetBundle, 'name' | 'status' | 'tags'>>): DatasetBundle {
+    const items = getCollection<DatasetBundle>('dataset_bundles');
+    const idx = items.findIndex(b => b.bundle_id === id);
+    if (idx === -1) throw new Error('Bundle introuvable');
+    if (data.name !== undefined) items[idx].name = data.name;
+    if (data.status !== undefined) items[idx].status = data.status;
+    if (data.tags !== undefined) items[idx].tags = data.tags;
+    items[idx].updated_at = now();
+    setCollection('dataset_bundles', items);
+    return items[idx];
+  },
+
+  clone(id: string): DatasetBundle {
+    const items = getCollection<DatasetBundle>('dataset_bundles');
+    const source = items.find(b => b.bundle_id === id);
+    if (!source) throw new Error('Bundle introuvable');
+    const sameGroup = items.filter(b => b.project_id === source.project_id && b.env === source.env);
+    const maxVersion = Math.max(...sameGroup.map(b => b.version), 0);
+    const clone: DatasetBundle = {
+      ...source,
+      bundle_id: uid(),
+      name: `${source.name}_V${maxVersion + 1}`,
+      version: maxVersion + 1,
+      status: 'DRAFT',
+      created_at: now(),
+      updated_at: now(),
+    };
+    items.push(clone);
+    setCollection('dataset_bundles', items);
+    // Cloner les bundle_items
+    const bundleItems = getCollection<BundleItem>('bundle_items');
+    const sourceItems = bundleItems.filter(bi => bi.bundle_id === id);
+    for (const si of sourceItems) {
+      bundleItems.push({ bundle_id: clone.bundle_id, dataset_id: si.dataset_id });
+    }
+    setCollection('bundle_items', bundleItems);
+    return clone;
+  },
+
+  delete(id: string): void {
+    const items = getCollection<DatasetBundle>('dataset_bundles').filter(b => b.bundle_id !== id);
+    setCollection('dataset_bundles', items);
+    // Supprimer les bundle_items liés
+    const bundleItems = getCollection<BundleItem>('bundle_items').filter(bi => bi.bundle_id !== id);
+    setCollection('bundle_items', bundleItems);
+  },
+};
+
+// ─── Bundle Items ─────────────────────────────────────────────────────────
+
+export const localBundleItems = {
+  list(bundleId: string): BundleItem[] {
+    return getCollection<BundleItem>('bundle_items').filter(bi => bi.bundle_id === bundleId);
+  },
+
+  add(bundleId: string, datasetId: string): BundleItem {
+    const items = getCollection<BundleItem>('bundle_items');
+    // Vérifier doublon exact
+    if (items.some(bi => bi.bundle_id === bundleId && bi.dataset_id === datasetId)) {
+      throw new Error('Ce dataset est déjà dans ce bundle.');
+    }
+    // Vérifier doublon de dataset_type_id dans le bundle
+    const bundle = localBundles.get(bundleId);
+    const dataset = localDatasetInstances.get(datasetId);
+    // Vérifier même env
+    if (dataset.env !== bundle.env) {
+      throw new Error(`Environnement incompatible : le dataset est ${dataset.env}, le bundle est ${bundle.env}.`);
+    }
+    const bundleDatasetIds = items.filter(bi => bi.bundle_id === bundleId).map(bi => bi.dataset_id);
+    const allInstances = getCollection<DatasetInstance>('dataset_instances');
+    const bundleDatasets = allInstances.filter(d => bundleDatasetIds.includes(d.dataset_id));
+    if (bundleDatasets.some(d => d.dataset_type_id === dataset.dataset_type_id)) {
+      throw new Error(`Conflit : le bundle contient déjà un dataset de type "${dataset.dataset_type_id}". Un seul par type autorisé.`);
+    }
+    const bi: BundleItem = { bundle_id: bundleId, dataset_id: datasetId };
+    items.push(bi);
+    setCollection('bundle_items', items);
+    return bi;
+  },
+
+  remove(bundleId: string, datasetId: string): void {
+    const items = getCollection<BundleItem>('bundle_items')
+      .filter(bi => !(bi.bundle_id === bundleId && bi.dataset_id === datasetId));
+    setCollection('bundle_items', items);
+  },
+};
+
+// ─── Validation Bundle ↔ Scénario ─────────────────────────────────────────
+
+export const localValidation = {
+  /** Valider un bundle pour un scénario donné */
+  validateBundleForScenario(bundleId: string, scenarioId: string): BundleValidationResult {
+    const scenario = localScenarios.get(scenarioId);
+    const requiredTypes = scenario.required_dataset_types || [];
+    const bundleItemsList = localBundleItems.list(bundleId);
+    const allInstances = getCollection<DatasetInstance>('dataset_instances');
+    const bundleDatasets = allInstances.filter(d =>
+      bundleItemsList.some(bi => bi.dataset_id === d.dataset_id)
+    );
+
+    // Types couverts par le bundle
+    const coveredTypes = new Set(bundleDatasets.map(d => d.dataset_type_id));
+    const missingTypes = requiredTypes.filter(t => !coveredTypes.has(t));
+
+    // Vérifier les conflits (>1 dataset par type)
+    const typeCount: Record<string, string[]> = {};
+    for (const d of bundleDatasets) {
+      if (!typeCount[d.dataset_type_id]) typeCount[d.dataset_type_id] = [];
+      typeCount[d.dataset_type_id].push(d.dataset_id);
+    }
+    const conflicts = Object.entries(typeCount)
+      .filter(([, ids]) => ids.length > 1)
+      .map(([dataset_type_id, dataset_ids]) => ({ dataset_type_id, dataset_ids }));
+
+    // Validation schema (vérifier champs requis)
+    const schemaErrors: Record<string, string[]> = {};
+    const dtItems = getCollection<DatasetType>('dataset_types');
+    for (const d of bundleDatasets) {
+      const dt = dtItems.find(t => t.dataset_type_id === d.dataset_type_id);
+      if (!dt) continue;
+      const requiredFields = dt.schema_fields.filter(f => f.required);
+      const errors: string[] = [];
+      for (const field of requiredFields) {
+        const val = d.values_json[field.name];
+        if (val === undefined || val === null || val === '') {
+          errors.push(`Champ requis "${field.name}" manquant ou vide.`);
+        }
+      }
+      if (errors.length > 0) schemaErrors[d.dataset_type_id] = errors;
+    }
+
+    const warnings: string[] = [];
+    const draftDatasets = bundleDatasets.filter(d => d.status === 'DRAFT');
+    if (draftDatasets.length > 0) {
+      warnings.push(`${draftDatasets.length} dataset(s) encore en DRAFT dans ce bundle.`);
+    }
+
+    return {
+      ok: missingTypes.length === 0 && conflicts.length === 0,
+      missing_types: missingTypes,
+      conflicts,
+      schema_errors_by_type: schemaErrors,
+      warnings,
+    };
+  },
+
+  /** Valider les datasets disponibles pour un scénario dans un env donné */
+  validateScenarioDatasets(scenarioId: string, env: TargetEnv): ScenarioDatasetValidation {
+    const scenario = localScenarios.get(scenarioId);
+    const requiredTypes = scenario.required_dataset_types || [];
+    const projectId = scenario.project_id;
+
+    // Trouver tous les bundles pour cet env et ce projet
+    const allBundles = getCollection<DatasetBundle>('dataset_bundles')
+      .filter(b => b.project_id === projectId && b.env === env);
+    const allBundleItems = getCollection<BundleItem>('bundle_items');
+    const allInstances = getCollection<DatasetInstance>('dataset_instances');
+
+    const compatibleBundles: ScenarioDatasetValidation['compatible_bundles'] = [];
+
+    for (const bundle of allBundles) {
+      const itemIds = allBundleItems.filter(bi => bi.bundle_id === bundle.bundle_id).map(bi => bi.dataset_id);
+      const datasets = allInstances.filter(d => itemIds.includes(d.dataset_id));
+      const coveredTypes = new Set(datasets.map(d => d.dataset_type_id));
+      const allCovered = requiredTypes.every(t => coveredTypes.has(t));
+      if (allCovered) {
+        compatibleBundles.push({
+          bundle_id: bundle.bundle_id,
+          name: bundle.name,
+          status: bundle.status,
+          version: bundle.version,
+        });
+      }
+    }
+
+    // Trier : ACTIVE en premier
+    compatibleBundles.sort((a, b) => {
+      if (a.status === 'ACTIVE' && b.status !== 'ACTIVE') return -1;
+      if (b.status === 'ACTIVE' && a.status !== 'ACTIVE') return 1;
+      return 0;
+    });
+
+    // Types manquants globalement dans cet env
+    const allEnvDatasets = allInstances.filter(d => d.project_id === projectId && d.env === env);
+    const allEnvTypes = new Set(allEnvDatasets.map(d => d.dataset_type_id));
+    const missingTypesGlobal = requiredTypes.filter(t => !allEnvTypes.has(t));
+
+    return {
+      compatible_bundles: compatibleBundles,
+      missing_types_global: missingTypesGlobal,
+      ok_for_env: compatibleBundles.length > 0,
+    };
   },
 };

@@ -13,6 +13,7 @@ import {
   ChevronRight,
   LogOut,
   User,
+  Package,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -33,7 +34,8 @@ const navSections = [
     items: [
       { href: "/profiles", icon: Settings2, label: "Profils de test" },
       { href: "/scenarios", icon: FileText, label: "Scénarios" },
-      { href: "/datasets", icon: Database, label: "Jeux de données" },
+      { href: "/datasets", icon: Database, label: "Datasets (Instances)" },
+      { href: "/bundles", icon: Package, label: "Bundles" },
       { href: "/dataset-types", icon: Database, label: "Gabarits Datasets" },
     ],
   },

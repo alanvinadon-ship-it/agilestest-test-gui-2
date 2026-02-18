@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { localDatasetTypes } from '../api/localStore';
 import SuggestScenariosModal from '../components/SuggestScenariosModal';
+import ScenarioDatasetSection from '../components/ScenarioDatasetSection';
 import {
   type ProfileDomain, DOMAIN_META, PROFILE_TYPE_META, type ProfileType,
 } from '../config/profileDomains';
@@ -703,6 +704,7 @@ export default function ScenariosPage() {
                                     ))}
                                   </div>
                                 )}
+                                <ScenarioDatasetSection scenario={scenario} />
                               </div>
                               {canWrite && (
                                 <div className="flex items-center gap-1 ml-3 flex-shrink-0">

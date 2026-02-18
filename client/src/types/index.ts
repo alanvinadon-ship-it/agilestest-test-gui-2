@@ -15,6 +15,9 @@ export type IncidentSeverity = 'CRITICAL' | 'MAJOR' | 'MINOR' | 'INFO';
 export type TestType = 'VABF' | 'VSR' | 'VABE';
 export type ScenarioStatus = 'DRAFT' | 'FINAL' | 'DEPRECATED';
 export type ImportMode = 'SKIP' | 'RENAME' | 'OVERWRITE';
+export type TargetEnv = 'DEV' | 'PREPROD' | 'PILOT_ORANGE' | 'PROD';
+export type DatasetInstanceStatus = 'DRAFT' | 'ACTIVE' | 'DEPRECATED';
+export type BundleStatus = 'DRAFT' | 'ACTIVE' | 'DEPRECATED';
 
 /** Codes domaine normalisés pour les IDs de scénarios */
 export type DomainCode = 'WEB' | 'API' | 'MOB' | 'DESK' | 'IMS' | 'RAN' | 'EPC4' | '5GSA' | '5GNSA' | 'DRIVE';
@@ -449,6 +452,60 @@ export interface Dataset {
   dataset_type_id?: string;
   created_at: string;
   updated_at: string;
+}
+
+// ─── Dataset Instances & Bundles (DATASET-1) ──────────────────────────────
+
+export interface DatasetInstance {
+  dataset_id: string;
+  project_id: string;
+  dataset_type_id: string;
+  env: TargetEnv;
+  version: number;
+  status: DatasetInstanceStatus;
+  values_json: Record<string, unknown>;
+  notes: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DatasetBundle {
+  bundle_id: string;
+  project_id: string;
+  name: string;
+  env: TargetEnv;
+  version: number;
+  status: BundleStatus;
+  tags: string[];
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BundleItem {
+  bundle_id: string;
+  dataset_id: string;
+}
+
+export interface DatasetSecretKey {
+  dataset_id: string;
+  key_path: string;
+  is_secret: boolean;
+}
+
+export interface BundleValidationResult {
+  ok: boolean;
+  missing_types: string[];
+  conflicts: Array<{ dataset_type_id: string; dataset_ids: string[] }>;
+  schema_errors_by_type: Record<string, string[]>;
+  warnings: string[];
+}
+
+export interface ScenarioDatasetValidation {
+  compatible_bundles: Array<{ bundle_id: string; name: string; status: BundleStatus; version: number }>;
+  missing_types_global: string[];
+  ok_for_env: boolean;
 }
 
 // ─── Dataset Type (Gabarit) ────────────────────────────────────────────────
