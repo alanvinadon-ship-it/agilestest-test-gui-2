@@ -6,6 +6,8 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
+import { usePermission } from '../hooks/usePermission';
+import { PermissionKey } from '../admin/permissions';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { repositoryApi } from '../api/repositoryApi';
 import { localScriptRepository } from '../ai/scriptRepository';
@@ -55,7 +57,8 @@ function RunCenterModal({ isOpen, onClose, projectId }: {
 }) {
   const queryClient = useQueryClient();
   const { adapter } = useDatasetStorage();
-  const { canWrite, hasRole } = useAuth();
+  const { can } = usePermission();
+  const canWrite = can(PermissionKey.EXECUTIONS_RUN);
 
   const [profileId, setProfileId] = useState('');
   const [scenarioId, setScenarioId] = useState('');
@@ -200,7 +203,7 @@ function RunCenterModal({ isOpen, onClose, projectId }: {
                   <Code2 className="w-4 h-4 text-primary" />
                   <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Script de test</span>
                 </div>
-                {hasRole('ADMIN', 'MANAGER') && allVersions.length > 1 && (
+                {can(PermissionKey.SCRIPTS_ACTIVATE) && allVersions.length > 1 && (
                   <button
                     onClick={() => setShowVersionPicker(!showVersionPicker)}
                     className="text-[10px] text-primary hover:text-primary/80 font-medium"

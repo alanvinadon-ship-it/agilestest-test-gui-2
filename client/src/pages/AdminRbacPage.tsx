@@ -1,26 +1,42 @@
 /**
  * AdminRbacPage — /admin/rbac
- * Matrice RBAC informative : rôles globaux + rôles projet × modules × permissions
+ * Matrice RBAC dynamique : affiche les permissions réelles des rôles (système + custom)
+ * depuis le catalogue permissions.ts
  */
-import { useState } from 'react';
-import { ShieldCheck, Check, Minus, Info } from 'lucide-react';
-import { RBAC_MATRIX, GLOBAL_ROLE_LABELS, PROJECT_ROLE_LABELS } from '../admin/types';
-import type { Permission } from '../admin/types';
+import { useState, useMemo } from 'react';
+import { ShieldCheck, Check, Minus, Info, Lock, Unlock, Search } from 'lucide-react';
+import {
+  PERMISSION_GROUPS,
+  getAllRoles,
+  PermissionKey,
+  type RoleDefinition,
+} from '../admin/permissions';
 
-const PERM_COLORS: Record<Permission, string> = {
-  READ: 'bg-blue-500/20 text-blue-400',
-  CREATE: 'bg-green-500/20 text-green-400',
-  UPDATE: 'bg-amber-500/20 text-amber-400',
-  DELETE: 'bg-red-500/20 text-red-400',
-  RUN: 'bg-purple-500/20 text-purple-400',
-  ACTIVATE: 'bg-cyan-500/20 text-cyan-400',
-  REPAIR: 'bg-orange-500/20 text-orange-400',
-};
-
-type ViewMode = 'global' | 'project';
+type ViewScope = 'GLOBAL' | 'PROJECT' | 'ALL';
 
 export default function AdminRbacPage() {
-  const [viewMode, setViewMode] = useState<ViewMode>('global');
+  const [scope, setScope] = useState<ViewScope>('GLOBAL');
+  const [searchPerm, setSearchPerm] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const roles = useMemo(() => {
+    void refreshKey;
+    if (scope === 'ALL') return getAllRoles();
+    return getAllRoles(scope);
+  }, [scope, refreshKey]);
+
+  const filteredGroups = useMemo(() => {
+    if (!searchPerm.trim()) return PERMISSION_GROUPS;
+    const q = searchPerm.toLowerCase();
+    return PERMISSION_GROUPS
+      .map(g => ({
+        ...g,
+        permissions: g.permissions.filter(
+          p => p.label.toLowerCase().includes(q) || p.key.toLowerCase().includes(q)
+        ),
+      }))
+      .filter(g => g.permissions.length > 0);
+  }, [searchPerm]);
 
   return (
     <div className="space-y-6">
@@ -32,132 +48,218 @@ export default function AdminRbacPage() {
           </div>
           <div>
             <h1 className="text-2xl font-heading font-bold text-foreground">Matrice RBAC</h1>
-            <p className="text-sm text-muted-foreground">Permissions par rôle et module (lecture seule)</p>
+            <p className="text-sm text-muted-foreground">
+              Permissions effectives par rôle — source : catalogue permissions.ts
+            </p>
           </div>
         </div>
+        <button
+          onClick={() => setRefreshKey(k => k + 1)}
+          className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground border border-border rounded-md transition-colors"
+        >
+          Rafraîchir
+        </button>
       </div>
 
       {/* Info banner */}
       <div className="flex items-start gap-3 p-4 bg-blue-500/5 border border-blue-500/20 rounded-lg">
         <Info className="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
-        <div className="text-sm text-muted-foreground">
-          <p>Cette matrice est <strong className="text-foreground">informative</strong>. Les permissions sont appliquées côté serveur via les guards RBAC.</p>
-          <p className="mt-1">Les <strong className="text-foreground">rôles globaux</strong> (Admin, Manager, Viewer) s'appliquent à toute la plateforme. Les <strong className="text-foreground">rôles projet</strong> sont spécifiques à chaque projet et s'ajoutent aux permissions globales.</p>
+        <div className="text-sm text-muted-foreground space-y-1">
+          <p>
+            Cette matrice reflète les <strong className="text-foreground">permissions réelles</strong> définies
+            dans le catalogue. Les rôles <Lock className="w-3 h-3 inline text-amber-400" /> système ne sont pas modifiables.
+            Les rôles <Unlock className="w-3 h-3 inline text-green-400" /> custom sont éditables depuis la page "Rôles & Permissions".
+          </p>
+          <p>
+            Le rôle <strong className="text-foreground">ADMIN global</strong> possède un override total :
+            toutes les permissions sont accordées indépendamment de la matrice.
+          </p>
         </div>
       </div>
 
-      {/* View mode toggle */}
-      <div className="flex items-center gap-1 bg-secondary/30 rounded-md p-1 w-fit">
-        <button
-          onClick={() => setViewMode('global')}
-          className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${viewMode === 'global' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-        >
-          Rôles globaux
-        </button>
-        <button
-          onClick={() => setViewMode('project')}
-          className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${viewMode === 'project' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-        >
-          Rôles projet
-        </button>
+      {/* Controls */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-1 bg-secondary/30 rounded-md p-1">
+          {(['GLOBAL', 'PROJECT', 'ALL'] as ViewScope[]).map(s => (
+            <button
+              key={s}
+              onClick={() => setScope(s)}
+              className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
+                scope === s ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {s === 'GLOBAL' ? 'Rôles globaux' : s === 'PROJECT' ? 'Rôles projet' : 'Tous'}
+            </button>
+          ))}
+        </div>
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Filtrer permissions..."
+            value={searchPerm}
+            onChange={e => setSearchPerm(e.target.value)}
+            className="w-full pl-10 pr-3 py-2 bg-card border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
       </div>
 
-      {/* Legend */}
-      <div className="flex flex-wrap items-center gap-3">
-        {Object.entries(PERM_COLORS).map(([perm, cls]) => (
-          <span key={perm} className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${cls}`}>
-            {perm}
-          </span>
-        ))}
+      {/* Stats */}
+      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+        <span>{roles.length} rôle(s) affichés</span>
+        <span className="text-border">|</span>
+        <span>{filteredGroups.reduce((a, g) => a + g.permissions.length, 0)} permission(s)</span>
+        <span className="text-border">|</span>
+        <span>{filteredGroups.length} groupe(s)</span>
       </div>
 
-      {/* Matrix table */}
+      {/* Matrix */}
       <div className="bg-card border border-border rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-secondary/30">
-                <th className="text-left px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider min-w-[160px]">
-                  Module
+                <th className="text-left px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider min-w-[200px] sticky left-0 bg-secondary/30 z-10">
+                  Permission
                 </th>
-                {viewMode === 'global' ? (
-                  <>
-                    <th className="text-center px-4 py-3 text-xs font-mono font-medium text-red-400 uppercase tracking-wider">
-                      {GLOBAL_ROLE_LABELS.ADMIN}
-                    </th>
-                    <th className="text-center px-4 py-3 text-xs font-mono font-medium text-amber-400 uppercase tracking-wider">
-                      {GLOBAL_ROLE_LABELS.MANAGER}
-                    </th>
-                    <th className="text-center px-4 py-3 text-xs font-mono font-medium text-blue-400 uppercase tracking-wider">
-                      {GLOBAL_ROLE_LABELS.VIEWER}
-                    </th>
-                  </>
-                ) : (
-                  <>
-                    <th className="text-center px-4 py-3 text-xs font-mono font-medium text-red-400 uppercase tracking-wider">
-                      {PROJECT_ROLE_LABELS.PROJECT_ADMIN}
-                    </th>
-                    <th className="text-center px-4 py-3 text-xs font-mono font-medium text-amber-400 uppercase tracking-wider">
-                      {PROJECT_ROLE_LABELS.PROJECT_EDITOR}
-                    </th>
-                    <th className="text-center px-4 py-3 text-xs font-mono font-medium text-blue-400 uppercase tracking-wider">
-                      {PROJECT_ROLE_LABELS.PROJECT_VIEWER}
-                    </th>
-                  </>
-                )}
+                {roles.map(role => (
+                  <th key={role.role_id} className="text-center px-3 py-3 min-w-[110px]">
+                    <div className="flex flex-col items-center gap-1">
+                      <span className={`text-xs font-mono font-medium ${
+                        role.role_id === 'ADMIN' ? 'text-red-400' :
+                        role.scope === 'GLOBAL' ? 'text-amber-400' : 'text-blue-400'
+                      }`}>
+                        {role.name}
+                      </span>
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground/60">
+                        {role.is_system ? (
+                          <Lock className="w-2.5 h-2.5 text-amber-400/60" />
+                        ) : (
+                          <Unlock className="w-2.5 h-2.5 text-green-400/60" />
+                        )}
+                        {role.scope}
+                      </span>
+                    </div>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {RBAC_MATRIX.map(row => {
-                const cols = viewMode === 'global'
-                  ? [row.admin, row.manager, row.viewer]
-                  : [row.project_admin, row.project_editor, row.project_viewer];
-
-                return (
-                  <tr key={row.module} className="border-b border-border last:border-0 hover:bg-secondary/10 transition-colors">
-                    <td className="px-4 py-3 font-medium text-foreground">{row.module}</td>
-                    {cols.map((perms, i) => (
-                      <td key={i} className="px-4 py-3 text-center">
-                        {perms.length === 0 ? (
-                          <Minus className="w-4 h-4 text-muted-foreground/30 mx-auto" />
-                        ) : (
-                          <div className="flex flex-wrap justify-center gap-1">
-                            {perms.map(p => (
-                              <span key={p} className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-medium ${PERM_COLORS[p]}`}>
-                                {p}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                    ))}
+              {filteredGroups.map(group => (
+                <>
+                  {/* Group header */}
+                  <tr key={`grp-${group.id}`} className="bg-secondary/10">
+                    <td
+                      colSpan={roles.length + 1}
+                      className="px-4 py-2 text-xs font-mono font-semibold text-primary uppercase tracking-wider sticky left-0 bg-secondary/10"
+                    >
+                      {group.label}
+                    </td>
                   </tr>
-                );
-              })}
+                  {/* Permission rows */}
+                  {group.permissions.map(perm => (
+                    <tr key={perm.key} className="border-b border-border/50 last:border-0 hover:bg-secondary/5 transition-colors">
+                      <td className="px-4 py-2 sticky left-0 bg-card z-10">
+                        <div>
+                          <span className="text-xs font-medium text-foreground">{perm.label}</span>
+                          <span className="block text-[10px] font-mono text-muted-foreground/60">{perm.key}</span>
+                        </div>
+                      </td>
+                      {roles.map(role => {
+                        const has = role.role_id === 'ADMIN' || role.permissions.includes(perm.key);
+                        const isAdminOverride = role.role_id === 'ADMIN';
+                        return (
+                          <td key={role.role_id} className="px-3 py-2 text-center">
+                            {has ? (
+                              <div className="flex justify-center">
+                                <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full ${
+                                  isAdminOverride
+                                    ? 'bg-red-500/20 text-red-400'
+                                    : 'bg-green-500/20 text-green-400'
+                                }`}>
+                                  <Check className="w-3 h-3" />
+                                </span>
+                              </div>
+                            ) : (
+                              <Minus className="w-4 h-4 text-muted-foreground/20 mx-auto" />
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </>
+              ))}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Explanation */}
+      {/* Summary per role */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {roles.map(role => {
+          const permCount = role.role_id === 'ADMIN'
+            ? Object.values(PermissionKey).length
+            : role.permissions.length;
+          const totalPerms = Object.values(PermissionKey).length;
+          const pct = Math.round((permCount / totalPerms) * 100);
+
+          return (
+            <div key={role.role_id} className="p-4 bg-card border border-border rounded-lg space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {role.is_system ? (
+                    <Lock className="w-3.5 h-3.5 text-amber-400" />
+                  ) : (
+                    <Unlock className="w-3.5 h-3.5 text-green-400" />
+                  )}
+                  <span className="text-sm font-heading font-semibold text-foreground">{role.name}</span>
+                </div>
+                <span className={`text-xs font-mono px-2 py-0.5 rounded ${
+                  role.scope === 'GLOBAL' ? 'bg-amber-500/10 text-amber-400' : 'bg-blue-500/10 text-blue-400'
+                }`}>
+                  {role.scope}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">{role.description}</p>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">{permCount} / {totalPerms} permissions</span>
+                  <span className="font-mono text-foreground">{pct}%</span>
+                </div>
+                <div className="w-full h-1.5 bg-secondary/30 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      pct === 100 ? 'bg-red-500' : pct > 70 ? 'bg-amber-500' : pct > 30 ? 'bg-blue-500' : 'bg-muted-foreground'
+                    }`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Resolution rules */}
       <div className="bg-card border border-border rounded-lg p-5 space-y-3">
         <h3 className="text-sm font-heading font-semibold text-foreground">Règles de résolution</h3>
         <ul className="space-y-2 text-sm text-muted-foreground">
           <li className="flex items-start gap-2">
             <Check className="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
-            <span>Le rôle <strong className="text-foreground">ADMIN global</strong> a accès à toutes les fonctionnalités, y compris l'administration.</span>
+            <span>Le rôle <strong className="text-foreground">ADMIN global</strong> a un override total : toutes les permissions sont accordées.</span>
           </li>
           <li className="flex items-start gap-2">
             <Check className="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
-            <span>Les <strong className="text-foreground">rôles projet</strong> s'appliquent uniquement au projet concerné et ne donnent pas accès à l'administration.</span>
+            <span>Les <strong className="text-foreground">rôles projet</strong> s'appliquent uniquement au projet concerné via le membership.</span>
           </li>
           <li className="flex items-start gap-2">
             <Check className="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
-            <span>La permission effective est l'<strong className="text-foreground">union</strong> du rôle global et du rôle projet (le plus permissif l'emporte).</span>
+            <span>La permission effective est vérifiée par <code className="text-xs font-mono bg-secondary/50 px-1 rounded">hasPermission(user, key, &#123;projectId&#125;)</code>.</span>
           </li>
           <li className="flex items-start gap-2">
             <Check className="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
-            <span>Un VIEWER global avec PROJECT_EDITOR sur un projet peut éditer les ressources de ce projet uniquement.</span>
+            <span>Les rôles <Unlock className="w-3 h-3 inline text-green-400" /> custom sont créés depuis "Rôles & Permissions" et peuvent être assignés comme rôles projet.</span>
           </li>
         </ul>
       </div>

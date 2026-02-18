@@ -7,6 +7,7 @@ import { ProjectProvider } from "./state/projectStore";
 import { DatasetStorageProvider } from "./contexts/DatasetStorageContext";
 import DashboardLayout from "./components/DashboardLayout";
 import { RequireProject } from "./components/RequireProject";
+import { RequireProjectAccess } from "./components/RequireProjectAccess";
 import type { ReactNode } from "react";
 
 // ─── Pages ──────────────────────────────────────────────────────────────────
@@ -28,6 +29,7 @@ import AdminUsersPage from "./pages/AdminUsersPage";
 import AdminProjectAccessPage from "./pages/AdminProjectAccessPage";
 import AdminRbacPage from "./pages/AdminRbacPage";
 import AdminAuditPage from "./pages/AdminAuditPage";
+import AdminRolesPage from "./pages/AdminRolesPage";
 import DriveCampaignsPage from "./pages/DriveCampaignsPage";
 import DriveReportingPage from "./pages/DriveReportingPage";
 
@@ -42,7 +44,7 @@ const queryClient = new QueryClient({
   },
 });
 
-// ─── Auth Guard ─────────────────────────────────────────────────────────────
+// ─── Auth Guards ────────────────────────────────────────────────────────────
 function RequireAuth({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth();
   if (!isAuthenticated) return <Redirect to="/login" />;
@@ -60,6 +62,17 @@ function RequireAdmin({ children }: { children: ReactNode }) {
     );
   }
   return <>{children}</>;
+}
+
+/** Combines RequireProject + RequireProjectAccess for project-scoped routes */
+function ProjectScoped({ children }: { children: ReactNode }) {
+  return (
+    <RequireProject>
+      <RequireProjectAccess>
+        {children}
+      </RequireProjectAccess>
+    </RequireProject>
+  );
 }
 
 // ─── Router ─────────────────────────────────────────────────────────────────
@@ -81,42 +94,44 @@ function AppRouter() {
               <Route path="/" component={Home} />
               <Route path="/projects" component={ProjectsPage} />
 
-              {/* Project-scoped pages */}
+              {/* Project-scoped pages (membership required) */}
               <Route path="/profiles">
-                <RequireProject><ProfilesPage /></RequireProject>
+                <ProjectScoped><ProfilesPage /></ProjectScoped>
               </Route>
               <Route path="/scenarios">
-                <RequireProject><ScenariosPage /></RequireProject>
+                <ProjectScoped><ScenariosPage /></ProjectScoped>
               </Route>
               <Route path="/datasets">
-                <RequireProject><DatasetsPage /></RequireProject>
+                <ProjectScoped><DatasetsPage /></ProjectScoped>
               </Route>
               <Route path="/dataset-types">
-                <RequireProject><DatasetTypesPage /></RequireProject>
+                <ProjectScoped><DatasetTypesPage /></ProjectScoped>
               </Route>
               <Route path="/bundles">
-                <RequireProject><BundlesPage /></RequireProject>
+                <ProjectScoped><BundlesPage /></ProjectScoped>
               </Route>
               <Route path="/scripts">
-                <RequireProject><GeneratedScriptsPage /></RequireProject>
+                <ProjectScoped><GeneratedScriptsPage /></ProjectScoped>
               </Route>
               <Route path="/executions">
-                <RequireProject><ExecutionsPage /></RequireProject>
+                <ProjectScoped><ExecutionsPage /></ProjectScoped>
               </Route>
               <Route path="/executions/:id">
-                <RequireProject><ExecutionDetailPage /></RequireProject>
+                <ProjectScoped><ExecutionDetailPage /></ProjectScoped>
               </Route>
               <Route path="/captures">
-                <RequireProject><CapturesPage /></RequireProject>
+                <ProjectScoped><CapturesPage /></ProjectScoped>
               </Route>
-              <Route path="/probes" component={ProbesPage} />
+              <Route path="/probes">
+                <ProjectScoped><ProbesPage /></ProjectScoped>
+              </Route>
 
-              {/* Drive Test pages */}
+              {/* Drive Test pages (project-scoped) */}
               <Route path="/drive/campaigns">
-                <RequireProject><DriveCampaignsPage /></RequireProject>
+                <ProjectScoped><DriveCampaignsPage /></ProjectScoped>
               </Route>
               <Route path="/drive/reporting">
-                <RequireProject><DriveReportingPage /></RequireProject>
+                <ProjectScoped><DriveReportingPage /></ProjectScoped>
               </Route>
 
               {/* Admin pages */}
@@ -125,6 +140,9 @@ function AppRouter() {
               </Route>
               <Route path="/admin/project-access">
                 <RequireAdmin><AdminProjectAccessPage /></RequireAdmin>
+              </Route>
+              <Route path="/admin/roles">
+                <RequireAdmin><AdminRolesPage /></RequireAdmin>
               </Route>
               <Route path="/admin/rbac">
                 <RequireAdmin><AdminRbacPage /></RequireAdmin>

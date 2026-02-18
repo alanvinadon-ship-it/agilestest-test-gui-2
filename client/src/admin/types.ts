@@ -7,7 +7,7 @@ import type { UserRole, User } from '../types';
 // ─── Enums ──────────────────────────────────────────────────────────────
 
 export type ProjectRole = 'PROJECT_ADMIN' | 'PROJECT_EDITOR' | 'PROJECT_VIEWER';
-export type UserStatus = 'ACTIVE' | 'DISABLED';
+export type UserStatus = 'ACTIVE' | 'DISABLED' | 'INVITED';
 export type AuditAction =
   | 'USER_CREATED'
   | 'USER_UPDATED'
@@ -16,9 +16,17 @@ export type AuditAction =
   | 'USER_PASSWORD_RESET'
   | 'MEMBERSHIP_ADDED'
   | 'MEMBERSHIP_UPDATED'
-  | 'MEMBERSHIP_REMOVED';
+  | 'MEMBERSHIP_REMOVED'
+  | 'INVITE_SENT'
+  | 'INVITE_RESENT'
+  | 'INVITE_REVOKED'
+  | 'INVITE_ACCEPTED'
+  | 'ROLE_CREATED'
+  | 'ROLE_UPDATED'
+  | 'ROLE_DELETED'
+  | 'PROJECT_ACCESS_DENIED';
 
-export type AuditEntityType = 'user' | 'membership';
+export type AuditEntityType = 'user' | 'membership' | 'invite' | 'role' | 'access';
 
 // ─── Admin User (extended) ──────────────────────────────────────────────
 
@@ -212,3 +220,32 @@ export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 export type AddMemberInput = z.infer<typeof addMemberSchema>;
 export type UpdateMemberInput = z.infer<typeof updateMemberSchema>;
+
+// ─── Invitations ───────────────────────────────────────────────────────
+
+export type InviteStatus = 'PENDING' | 'ACCEPTED' | 'EXPIRED' | 'REVOKED';
+
+export interface Invite {
+  id: string;
+  email: string;
+  role: UserRole;
+  project_id?: string;
+  project_role?: ProjectRole;
+  status: InviteStatus;
+  token: string;
+  invited_by_id: string;
+  invited_by_name: string;
+  created_at: string;
+  expires_at: string;
+  accepted_at?: string;
+  revoked_at?: string;
+}
+
+export const inviteSchema = z.object({
+  email: z.string().email('Adresse email invalide'),
+  role: z.enum(['ADMIN', 'MANAGER', 'VIEWER'] as const),
+  project_id: z.string().optional(),
+  project_role: z.enum(['PROJECT_ADMIN', 'PROJECT_EDITOR', 'PROJECT_VIEWER'] as const).optional(),
+});
+
+export type InviteInput = z.infer<typeof inviteSchema>;

@@ -2,19 +2,20 @@
  * AdminUsersPage — /admin/users
  * CRUD utilisateurs, filtres, disable/enable, reset password, view memberships
  */
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, Fragment } from 'react';
 import {
   Users, Plus, Search, Filter, Edit2, UserX, UserCheck,
   KeyRound, Eye, MoreHorizontal, Shield, X, ChevronLeft, ChevronRight,
+  Mail, MailX, MailCheck, RefreshCw, Send,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../auth/AuthContext';
-import { adminUsers, adminMemberships } from '../admin/adminStore';
+import { adminUsers, adminMemberships, adminInvites } from '../admin/adminStore';
 import {
   GLOBAL_ROLE_LABELS, GLOBAL_ROLE_COLORS, PROJECT_ROLE_LABELS, PROJECT_ROLE_COLORS,
   createUserSchema, updateUserSchema,
 } from '../admin/types';
-import type { AdminUser, UserStatus, CreateUserInput, UpdateUserInput, ProjectMembership } from '../admin/types';
+import type { AdminUser, UserStatus, CreateUserInput, UpdateUserInput, ProjectMembership, Invite, InviteInput } from '../admin/types';
 import type { UserRole } from '../types';
 
 // ─── Component ──────────────────────────────────────────────────────────
@@ -37,6 +38,8 @@ export default function AdminUsersPage() {
   const [editUser, setEditUser] = useState<AdminUser | null>(null);
   const [viewMembershipsUser, setViewMembershipsUser] = useState<AdminUser | null>(null);
   const [confirmDisable, setConfirmDisable] = useState<AdminUser | null>(null);
+  const [showInvite, setShowInvite] = useState(false);
+  const [showInvitesList, setShowInvitesList] = useState(false);
 
   const refresh = useCallback(() => setRefreshKey(k => k + 1), []);
 
@@ -98,13 +101,29 @@ export default function AdminUsersPage() {
             <p className="text-sm text-muted-foreground">Gestion des comptes et rôles globaux</p>
           </div>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Créer utilisateur
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowInvitesList(true)}
+            className="flex items-center gap-2 px-3 py-2 bg-secondary text-foreground rounded-md text-sm font-medium hover:bg-secondary/80 transition-colors"
+          >
+            <Mail className="w-4 h-4" />
+            Invitations
+          </button>
+          <button
+            onClick={() => setShowInvite(true)}
+            className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 transition-colors"
+          >
+            <Send className="w-4 h-4" />
+            Inviter
+          </button>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Créer utilisateur
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -137,6 +156,7 @@ export default function AdminUsersPage() {
           <option value="">Tous les statuts</option>
           <option value="ACTIVE">Actif</option>
           <option value="DISABLED">Désactivé</option>
+          <option value="INVITED">Invité</option>
         </select>
       </div>
 
@@ -183,9 +203,13 @@ export default function AdminUsersPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${u.status === 'ACTIVE' ? 'text-green-400' : 'text-red-400'}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${u.status === 'ACTIVE' ? 'bg-green-400' : 'bg-red-400'}`} />
-                        {u.status === 'ACTIVE' ? 'Actif' : 'Désactivé'}
+                      <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                        u.status === 'ACTIVE' ? 'text-green-400' : u.status === 'INVITED' ? 'text-indigo-400' : 'text-red-400'
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                          u.status === 'ACTIVE' ? 'bg-green-400' : u.status === 'INVITED' ? 'bg-indigo-400' : 'bg-red-400'
+                        }`} />
+                        {u.status === 'ACTIVE' ? 'Actif' : u.status === 'INVITED' ? 'Invité' : 'Désactivé'}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground text-xs font-mono">{u.memberships_count}</td>
@@ -291,6 +315,22 @@ export default function AdminUsersPage() {
         <MembershipsDrawer
           user={viewMembershipsUser}
           onClose={() => setViewMembershipsUser(null)}
+        />
+      )}
+
+      {/* Invite Modal */}
+      {showInvite && (
+        <InviteModal
+          onClose={() => setShowInvite(false)}
+          onSent={() => { setShowInvite(false); refresh(); }}
+        />
+      )}
+
+      {/* Invites List Drawer */}
+      {showInvitesList && (
+        <InvitesListDrawer
+          onClose={() => setShowInvitesList(false)}
+          onRefresh={refresh}
         />
       )}
 
@@ -569,6 +609,224 @@ function MembershipsDrawer({ user, onClose }: { user: AdminUser; onClose: () => 
                 </div>
               ))}
             </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Invite Modal ──────────────────────────────────────────────────────
+
+function InviteModal({ onClose, onSent }: { onClose: () => void; onSent: () => void }) {
+  const { user: currentUser } = useAuth();
+  const actor = currentUser
+    ? { id: currentUser.id, name: currentUser.full_name, email: currentUser.email }
+    : { id: '', name: '', email: '' };
+
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState<UserRole>('VIEWER');
+  const [sending, setSending] = useState(false);
+
+  const handleSend = useCallback(() => {
+    if (!email.trim()) { toast.error('Email requis'); return; }
+    setSending(true);
+    try {
+      adminInvites.create({ email, role }, actor);
+      toast.success(`Invitation envoyée à ${email} (simulé)`);
+      onSent();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setSending(false);
+    }
+  }, [email, role, actor, onSent]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-lg shadow-xl w-full max-w-md">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <h2 className="text-lg font-heading font-bold text-foreground flex items-center gap-2">
+            <Send className="w-5 h-5 text-indigo-400" />
+            Inviter un utilisateur
+          </h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="px-6 py-4 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Adresse email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="utilisateur@exemple.com"
+              className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm text-foreground"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Rôle global</label>
+            <select
+              value={role}
+              onChange={e => setRole(e.target.value as UserRole)}
+              className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm text-foreground"
+            >
+              <option value="VIEWER">Lecteur</option>
+              <option value="MANAGER">Manager</option>
+              <option value="ADMIN">Administrateur</option>
+            </select>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            L'utilisateur recevra un email d'invitation (simulé) avec un lien d'activation valide 7 jours.
+            Son statut sera "Invité" jusqu'à l'acceptation.
+          </p>
+        </div>
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground">
+            Annuler
+          </button>
+          <button
+            onClick={handleSend}
+            disabled={sending}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+          >
+            <Send className="w-4 h-4" />
+            Envoyer l'invitation
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Invites List Drawer ───────────────────────────────────────────────
+
+const INVITE_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'En attente',
+  ACCEPTED: 'Acceptée',
+  EXPIRED: 'Expirée',
+  REVOKED: 'Révoquée',
+};
+
+const INVITE_STATUS_COLORS: Record<string, string> = {
+  PENDING: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+  ACCEPTED: 'bg-green-500/10 text-green-400 border-green-500/20',
+  EXPIRED: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+  REVOKED: 'bg-red-500/10 text-red-400 border-red-500/20',
+};
+
+function InvitesListDrawer({ onClose, onRefresh }: { onClose: () => void; onRefresh: () => void }) {
+  const { user: currentUser } = useAuth();
+  const actor = currentUser
+    ? { id: currentUser.id, name: currentUser.full_name, email: currentUser.email }
+    : { id: '', name: '', email: '' };
+
+  const [refreshKey, setRefreshKey] = useState(0);
+  const invites = useMemo(() => {
+    void refreshKey;
+    return adminInvites.list();
+  }, [refreshKey]);
+
+  const handleResend = useCallback((inv: Invite) => {
+    try {
+      adminInvites.resend(inv.id, actor);
+      toast.success(`Invitation renvoyée à ${inv.email}`);
+      setRefreshKey(k => k + 1);
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  }, [actor]);
+
+  const handleRevoke = useCallback((inv: Invite) => {
+    try {
+      adminInvites.revoke(inv.id, actor);
+      toast.success(`Invitation révoquée pour ${inv.email}`);
+      setRefreshKey(k => k + 1);
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  }, [actor, onRefresh]);
+
+  const handleSimulateAccept = useCallback((inv: Invite) => {
+    try {
+      adminInvites.accept(inv.id, inv.email.split('@')[0].replace('.', ' '));
+      toast.success(`Invitation acceptée (simulation) pour ${inv.email}`);
+      setRefreshKey(k => k + 1);
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  }, [onRefresh]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-lg bg-card border-l border-border h-full overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div>
+            <h3 className="text-lg font-heading font-semibold text-foreground flex items-center gap-2">
+              <Mail className="w-5 h-5 text-indigo-400" />
+              Invitations
+            </h3>
+            <p className="text-xs text-muted-foreground">{invites.length} invitation(s) au total</p>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-6 space-y-3">
+          {invites.length === 0 ? (
+            <div className="text-center py-12">
+              <Mail className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+              <p className="text-sm text-muted-foreground">Aucune invitation envoyée.</p>
+            </div>
+          ) : (
+            invites.map(inv => (
+              <div key={inv.id} className="p-4 bg-secondary/30 rounded-lg border border-border space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{inv.email}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Invité par {inv.invited_by_name} le {new Date(inv.created_at).toLocaleDateString('fr-FR')}
+                    </p>
+                  </div>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono border ${INVITE_STATUS_COLORS[inv.status] || ''}`}>
+                    {INVITE_STATUS_LABELS[inv.status] || inv.status}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>Rôle : <strong className="text-foreground">{GLOBAL_ROLE_LABELS[inv.role]}</strong></span>
+                  <span className="text-border">|</span>
+                  <span>Expire : {new Date(inv.expires_at).toLocaleDateString('fr-FR')}</span>
+                </div>
+                {(inv.status === 'PENDING' || inv.status === 'EXPIRED') && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={() => handleResend(inv)}
+                      className="flex items-center gap-1 px-2 py-1 text-xs bg-indigo-600/10 text-indigo-400 rounded hover:bg-indigo-600/20 transition-colors"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      Renvoyer
+                    </button>
+                    {inv.status === 'PENDING' && (
+                      <>
+                        <button
+                          onClick={() => handleRevoke(inv)}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-red-600/10 text-red-400 rounded hover:bg-red-600/20 transition-colors"
+                        >
+                          <MailX className="w-3 h-3" />
+                          Révoquer
+                        </button>
+                        <button
+                          onClick={() => handleSimulateAccept(inv)}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-green-600/10 text-green-400 rounded hover:bg-green-600/20 transition-colors"
+                        >
+                          <MailCheck className="w-3 h-3" />
+                          Simuler acceptation
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))
           )}
         </div>
       </div>

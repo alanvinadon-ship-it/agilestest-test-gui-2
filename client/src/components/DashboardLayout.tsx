@@ -83,6 +83,7 @@ const baseNavSections: NavSection[] = [
     items: [
       { href: "/admin/users", icon: Users, label: "Utilisateurs" },
       { href: "/admin/project-access", icon: KeyRound, label: "Accès Projets" },
+      { href: "/admin/roles", icon: ShieldCheck, label: "Rôles & Permissions" },
       { href: "/admin/rbac", icon: ShieldCheck, label: "Matrice RBAC" },
       { href: "/admin/audit", icon: ScrollText, label: "Journal d'audit" },
     ],

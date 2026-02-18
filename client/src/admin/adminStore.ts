@@ -14,6 +14,9 @@ import type {
   CreateUserInput,
   UpdateUserInput,
   AddMemberInput,
+  Invite,
+  InviteInput,
+  InviteStatus,
 } from './types';
 
 // ─── Helpers ────────────────────────────────────────────────────────────
@@ -409,5 +412,225 @@ export const adminAudit = {
 
     const limit = params?.limit || 100;
     return entries.slice(0, limit);
+  },
+};
+
+// ─── Invitations CRUD ──────────────────────────────────────────────────
+
+const INVITE_EXPIRY_DAYS = 7;
+
+export const adminInvites = {
+  list(params?: { status?: InviteStatus; email?: string }): Invite[] {
+    let invites = getStore<Invite>('agilestest_invites');
+
+    if (params?.status) {
+      invites = invites.filter(i => i.status === params.status);
+    }
+    if (params?.email) {
+      const q = params.email.toLowerCase();
+      invites = invites.filter(i => i.email.toLowerCase().includes(q));
+    }
+
+    // Auto-expire old invites
+    const nowMs = Date.now();
+    let changed = false;
+    for (const inv of invites) {
+      if (inv.status === 'PENDING' && new Date(inv.expires_at).getTime() < nowMs) {
+        inv.status = 'EXPIRED';
+        changed = true;
+      }
+    }
+    if (changed) {
+      setStore('agilestest_invites', getStore<Invite>('agilestest_invites').map(i => {
+        const match = invites.find(x => x.id === i.id);
+        return match || i;
+      }));
+    }
+
+    return invites.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  },
+
+  create(
+    input: InviteInput,
+    actor: { id: string; name: string; email: string }
+  ): Invite {
+    const invites = getStore<Invite>('agilestest_invites');
+
+    // Check if already invited (pending)
+    if (invites.some(i => i.email.toLowerCase() === input.email.toLowerCase() && i.status === 'PENDING')) {
+      throw new Error(`Une invitation est déjà en attente pour ${input.email}.`);
+    }
+
+    // Check if user already exists
+    ensureSeed();
+    const users = getStore<AdminUser>('agilestest_admin_users');
+    if (users.some(u => u.email.toLowerCase() === input.email.toLowerCase() && u.status === 'ACTIVE')) {
+      throw new Error(`L'utilisateur ${input.email} existe déjà et est actif.`);
+    }
+
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + INVITE_EXPIRY_DAYS);
+
+    const invite: Invite = {
+      id: `inv-${uid()}`,
+      email: input.email,
+      role: input.role,
+      project_id: input.project_id,
+      project_role: input.project_role,
+      status: 'PENDING',
+      token: `tok_${uid()}_${Math.random().toString(36).slice(2)}`,
+      invited_by_id: actor.id,
+      invited_by_name: actor.name,
+      created_at: now(),
+      expires_at: expiresAt.toISOString(),
+    };
+
+    invites.push(invite);
+    setStore('agilestest_invites', invites);
+
+    // Also create user in INVITED status
+    const invitedUser: AdminUser = {
+      id: `user-${uid()}`,
+      email: input.email,
+      full_name: input.email.split('@')[0],
+      role: input.role,
+      is_active: false,
+      status: 'INVITED',
+      last_login_at: null,
+      memberships_count: 0,
+      created_at: now(),
+      updated_at: now(),
+    };
+    users.push(invitedUser);
+    setStore('agilestest_admin_users', users);
+
+    logAudit(actor.id, actor.name, actor.email, 'INVITE_SENT', 'invite', invite.id, input.email, {
+      role: input.role,
+      project_id: input.project_id,
+      project_role: input.project_role,
+      expires_at: invite.expires_at,
+    });
+
+    return invite;
+  },
+
+  resend(
+    inviteId: string,
+    actor: { id: string; name: string; email: string }
+  ): Invite {
+    const invites = getStore<Invite>('agilestest_invites');
+    const idx = invites.findIndex(i => i.id === inviteId);
+    if (idx === -1) throw new Error('Invitation non trouvée');
+    if (invites[idx].status !== 'PENDING' && invites[idx].status !== 'EXPIRED') {
+      throw new Error('Seules les invitations en attente ou expirées peuvent être renvoyées.');
+    }
+
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + INVITE_EXPIRY_DAYS);
+
+    invites[idx].status = 'PENDING';
+    invites[idx].expires_at = expiresAt.toISOString();
+    invites[idx].token = `tok_${uid()}_${Math.random().toString(36).slice(2)}`;
+    setStore('agilestest_invites', invites);
+
+    logAudit(actor.id, actor.name, actor.email, 'INVITE_RESENT', 'invite', inviteId, invites[idx].email);
+
+    return invites[idx];
+  },
+
+  revoke(
+    inviteId: string,
+    actor: { id: string; name: string; email: string }
+  ): Invite {
+    const invites = getStore<Invite>('agilestest_invites');
+    const idx = invites.findIndex(i => i.id === inviteId);
+    if (idx === -1) throw new Error('Invitation non trouvée');
+    if (invites[idx].status !== 'PENDING') {
+      throw new Error('Seules les invitations en attente peuvent être révoquées.');
+    }
+
+    invites[idx].status = 'REVOKED';
+    invites[idx].revoked_at = now();
+    setStore('agilestest_invites', invites);
+
+    // Also remove the INVITED user
+    const users = getStore<AdminUser>('agilestest_admin_users');
+    const uIdx = users.findIndex(u => u.email.toLowerCase() === invites[idx].email.toLowerCase() && u.status === 'INVITED');
+    if (uIdx !== -1) {
+      users.splice(uIdx, 1);
+      setStore('agilestest_admin_users', users);
+    }
+
+    logAudit(actor.id, actor.name, actor.email, 'INVITE_REVOKED', 'invite', inviteId, invites[idx].email);
+
+    return invites[idx];
+  },
+
+  accept(
+    inviteId: string,
+    fullName: string
+  ): { user: AdminUser; invite: Invite } {
+    const invites = getStore<Invite>('agilestest_invites');
+    const idx = invites.findIndex(i => i.id === inviteId);
+    if (idx === -1) throw new Error('Invitation non trouvée');
+    if (invites[idx].status !== 'PENDING') {
+      throw new Error('Cette invitation n\'est plus valide.');
+    }
+    if (new Date(invites[idx].expires_at).getTime() < Date.now()) {
+      invites[idx].status = 'EXPIRED';
+      setStore('agilestest_invites', invites);
+      throw new Error('Cette invitation a expiré.');
+    }
+
+    // Mark invite as accepted
+    invites[idx].status = 'ACCEPTED';
+    invites[idx].accepted_at = now();
+    setStore('agilestest_invites', invites);
+
+    // Activate the user
+    ensureSeed();
+    const users = getStore<AdminUser>('agilestest_admin_users');
+    const uIdx = users.findIndex(u => u.email.toLowerCase() === invites[idx].email.toLowerCase());
+    if (uIdx !== -1) {
+      users[uIdx].status = 'ACTIVE';
+      users[uIdx].is_active = true;
+      users[uIdx].full_name = fullName;
+      users[uIdx].updated_at = now();
+    }
+    setStore('agilestest_admin_users', users);
+
+    // Add project membership if specified
+    if (invites[idx].project_id && invites[idx].project_role && uIdx !== -1) {
+      const memberships = getStore<ProjectMembership>('agilestest_memberships');
+      if (!memberships.some(m => m.project_id === invites[idx].project_id && m.user_id === users[uIdx].id)) {
+        memberships.push({
+          id: `mem-${uid()}`,
+          project_id: invites[idx].project_id!,
+          project_name: invites[idx].project_id!,
+          user_id: users[uIdx].id,
+          user_email: users[uIdx].email,
+          user_name: fullName,
+          project_role: invites[idx].project_role!,
+          added_by: invites[idx].invited_by_id,
+          created_at: now(),
+          updated_at: now(),
+        });
+        setStore('agilestest_memberships', memberships);
+        users[uIdx].memberships_count = memberships.filter(m => m.user_id === users[uIdx].id).length;
+        setStore('agilestest_admin_users', users);
+      }
+    }
+
+    logAudit(
+      uIdx !== -1 ? users[uIdx].id : 'unknown',
+      fullName,
+      invites[idx].email,
+      'INVITE_ACCEPTED',
+      'invite',
+      inviteId,
+      invites[idx].email
+    );
+
+    return { user: uIdx !== -1 ? users[uIdx] : {} as AdminUser, invite: invites[idx] };
   },
 };
