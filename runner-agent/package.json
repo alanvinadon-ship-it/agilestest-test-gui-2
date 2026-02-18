@@ -1,0 +1,29 @@
+{
+  "name": "agilestest-runner-agent",
+  "version": "1.0.0",
+  "description": "AgilesTest Remote Runner Agent — Exécution Playwright + upload artefacts MinIO/S3",
+  "main": "dist/agent.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/agent.js",
+    "dev": "ts-node src/agent.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.500.0",
+    "@aws-sdk/lib-storage": "^3.500.0",
+    "@playwright/test": "^1.42.1",
+    "axios": "^1.6.0",
+    "dotenv": "^16.4.0",
+    "glob": "^10.3.0",
+    "mime-types": "^2.1.35",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/glob": "^8.1.0",
+    "@types/mime-types": "^2.1.4",
+    "@types/node": "^20.11.0",
+    "@types/uuid": "^9.0.7",
+    "typescript": "^5.3.0",
+    "ts-node": "^10.9.0"
+  }
+}

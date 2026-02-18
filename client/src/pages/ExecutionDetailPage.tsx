@@ -13,7 +13,7 @@ import { localScriptRepository } from '../ai/scriptRepository';
 import { localExecutions } from '../api/localStore';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
-import type { Execution, Artifact, Incident, ExecutionStatus, TargetEnv } from '../types';
+import type { Execution, Artifact, Incident, ExecutionStatus, TargetEnv, RunnerJob } from '../types';
 import type { GeneratedScript, RepairResult } from '../ai/types';
 import {
   ArrowLeft, Loader2, CheckCircle2, XCircle, Clock, AlertTriangle,
@@ -340,8 +340,15 @@ export default function ExecutionDetailPage() {
     enabled: !!executionId,
   });
 
+  const { data: jobData } = useQuery({
+    queryKey: ['job-by-execution', executionId],
+    queryFn: () => repositoryApi.getJobByExecution(executionId),
+    enabled: !!executionId,
+  });
+
   const artifacts = (artifactsData?.data || []) as Artifact[];
   const incidents = (incidentsData?.data || []) as Incident[];
+  const runnerJob = jobData as RunnerJob | null;
 
   // Load script info
   const [script, setScript] = useState<GeneratedScript | null>(null);
@@ -473,6 +480,48 @@ export default function ExecutionDetailPage() {
         </div>
       </div>
 
+      {/* Runner Job info */}
+      {runnerJob && (
+        <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-border">
+            <div className="flex items-center gap-2">
+              <Server className="w-4 h-4 text-primary" />
+              <h3 className="text-sm font-heading font-semibold text-foreground">Runner Job</h3>
+            </div>
+            <span className={`text-xs font-mono px-2 py-0.5 rounded ${
+              runnerJob.status === 'DONE' ? 'bg-green-500/10 text-green-400' :
+              runnerJob.status === 'RUNNING' ? 'bg-blue-500/10 text-blue-400' :
+              runnerJob.status === 'FAILED' ? 'bg-red-500/10 text-red-400' :
+              'bg-yellow-500/10 text-yellow-400'
+            }`}>{runnerJob.status}</span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 px-5 py-3">
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase">Job ID</p>
+              <p className="text-xs font-mono text-foreground">{runnerJob.job_id}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase">Runner</p>
+              <p className="text-xs font-mono text-foreground">{runnerJob.runner_id || 'Non assigné'}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase">Upload Policy</p>
+              <p className="text-xs text-foreground">{runnerJob.artifact_upload_policy.join(', ')}</p>
+            </div>
+            {runnerJob.metrics && (
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase">Tests</p>
+                <p className="text-xs text-foreground">
+                  <span className="text-green-400">{runnerJob.metrics.passed} passed</span>
+                  {runnerJob.metrics.failed > 0 && <span className="text-red-400 ml-1">{runnerJob.metrics.failed} failed</span>}
+                  {runnerJob.metrics.skipped > 0 && <span className="text-gray-400 ml-1">{runnerJob.metrics.skipped} skipped</span>}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Repair Panel — only for FAILED executions with a script */}
       {isFailed && script && canWrite && (
         <RepairPanel
@@ -506,7 +555,14 @@ export default function ExecutionDetailPage() {
 
       {/* Artifacts */}
       <div>
-        <h2 className="text-lg font-heading font-semibold text-foreground mb-3">Artefacts</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-heading font-semibold text-foreground">Artefacts</h2>
+          {artifacts.some(a => a.s3_uri) && (
+            <span className="inline-flex items-center gap-1 text-[10px] text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20">
+              <Server className="w-2.5 h-2.5" /> MinIO/S3
+            </span>
+          )}
+        </div>
         {artifacts.length === 0 ? (
           <div className="bg-card border border-border rounded-lg p-6 text-center">
             <File className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
@@ -519,6 +575,7 @@ export default function ExecutionDetailPage() {
                 <tr className="border-b border-border">
                   <th className="text-left px-5 py-3 text-xs font-mono font-medium text-muted-foreground uppercase">Type</th>
                   <th className="text-left px-5 py-3 text-xs font-mono font-medium text-muted-foreground uppercase">Fichier</th>
+                  <th className="text-left px-5 py-3 text-xs font-mono font-medium text-muted-foreground uppercase">Stockage</th>
                   <th className="text-left px-5 py-3 text-xs font-mono font-medium text-muted-foreground uppercase">Taille</th>
                   <th className="text-right px-5 py-3 text-xs font-mono font-medium text-muted-foreground uppercase">Actions</th>
                 </tr>
@@ -526,6 +583,8 @@ export default function ExecutionDetailPage() {
               <tbody>
                 {artifacts.map((art) => {
                   const ArtIcon = artifactIcons[art.type] || File;
+                  const isS3 = !!art.s3_uri;
+                  const isScreenshot = art.type === 'SCREENSHOT' && (art.download_url || art.storage_url);
                   return (
                     <tr key={art.id} className="border-b border-border last:border-0 hover:bg-secondary/20">
                       <td className="px-5 py-3">
@@ -534,15 +593,40 @@ export default function ExecutionDetailPage() {
                           <span className="font-mono text-primary">{art.type}</span>
                         </span>
                       </td>
-                      <td className="px-5 py-3 text-foreground">{art.filename || art.name || '—'}</td>
-                      <td className="px-5 py-3 text-muted-foreground font-mono">{formatBytes(art.size_bytes)}</td>
-                      <td className="px-5 py-3 text-right">
-                        {(art.download_url || art.storage_url) && (
-                          <a href={art.download_url || art.storage_url || '#'} target="_blank" rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80">
-                            <Download className="w-3.5 h-3.5" /> Télécharger
-                          </a>
+                      <td className="px-5 py-3">
+                        <p className="text-foreground">{art.filename || art.name || '—'}</p>
+                        {art.checksum && (
+                          <p className="text-[9px] font-mono text-muted-foreground mt-0.5">sha256:{art.checksum.slice(0, 16)}…</p>
                         )}
+                      </td>
+                      <td className="px-5 py-3">
+                        {isS3 ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-sky-400">
+                            <Server className="w-2.5 h-2.5" />
+                            <span className="font-mono">{art.s3_uri?.replace('s3://agilestest-artifacts/', '').slice(0, 30)}…</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground font-mono">local</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-muted-foreground font-mono text-xs">{formatBytes(art.size_bytes)}</td>
+                      <td className="px-5 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {isScreenshot && (
+                            <button
+                              onClick={() => window.open(art.download_url || art.storage_url || '', '_blank')}
+                              className="inline-flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300"
+                            >
+                              <Eye className="w-3.5 h-3.5" /> Preview
+                            </button>
+                          )}
+                          {(art.download_url || art.storage_url) && (
+                            <a href={art.download_url || art.storage_url || '#'} target="_blank" rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80">
+                              <Download className="w-3.5 h-3.5" /> {isS3 ? 'S3' : 'DL'}
+                            </a>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

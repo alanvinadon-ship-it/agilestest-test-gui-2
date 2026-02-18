@@ -14,6 +14,8 @@ import type {
   DatasetInstance, TargetEnv, DatasetInstanceStatus,
   DatasetBundle, BundleStatus, BundleItem, DatasetSecretKey,
   BundleValidationResult, ScenarioDatasetValidation,
+  RunnerJob, RunnerJobStatus, ArtifactUploadPolicy,
+  JobCompletePayload, ArtifactManifestEntry, BundleResolveResult,
 } from '../types';
 import { DATASET_TYPE_CATALOG } from '../config/datasetTypeCatalog';
 
@@ -1154,6 +1156,188 @@ export const localValidation = {
       compatible_bundles: compatibleBundles,
       missing_types_global: missingTypesGlobal,
       ok_for_env: compatibleBundles.length > 0,
+    };
+  },
+};
+
+// ─── Runner Jobs (Orchestration) ──────────────────────────────────────────
+
+export const localJobs = {
+  /** Liste les jobs d'un projet */
+  list(projectId: string, params?: { status?: RunnerJobStatus; runner_id?: string }): PaginatedResponse<RunnerJob> {
+    let items = getCollection<RunnerJob>('runner_jobs').filter(j => j.project_id === projectId);
+    if (params?.status) items = items.filter(j => j.status === params.status);
+    if (params?.runner_id) items = items.filter(j => j.runner_id === params.runner_id);
+    items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return paginate(items);
+  },
+
+  /** Récupère un job par ID */
+  get(jobId: string): RunnerJob {
+    const item = getCollection<RunnerJob>('runner_jobs').find(j => j.job_id === jobId);
+    if (!item) throw new Error('Job introuvable');
+    return item;
+  },
+
+  /** Récupère le job lié à une exécution */
+  getByExecution(executionId: string): RunnerJob | null {
+    return getCollection<RunnerJob>('runner_jobs').find(j => j.execution_id === executionId) || null;
+  },
+
+  /** Crée un job PENDING pour une exécution */
+  create(data: {
+    execution_id: string;
+    project_id: string;
+    script_id: string;
+    script_version: number;
+    dataset_bundle_id?: string;
+    target_env: TargetEnv;
+    artifact_upload_policy?: ArtifactUploadPolicy[];
+  }): RunnerJob {
+    const items = getCollection<RunnerJob>('runner_jobs');
+    const job: RunnerJob = {
+      job_id: 'job_' + uid(),
+      execution_id: data.execution_id,
+      project_id: data.project_id,
+      runner_id: null,
+      status: 'PENDING',
+      script_id: data.script_id,
+      script_version: data.script_version,
+      download_url: `/api/scripts/${data.script_id}/download`,
+      dataset_bundle_id: data.dataset_bundle_id || null,
+      target_env: data.target_env,
+      artifact_upload_policy: data.artifact_upload_policy || ['screenshot', 'trace', 'log'],
+      metrics: null,
+      artifact_manifest: null,
+      created_at: now(),
+      started_at: null,
+      finished_at: null,
+    };
+    items.push(job);
+    setCollection('runner_jobs', items);
+    return job;
+  },
+
+  /** Récupère le prochain job PENDING (lock pour un runner) */
+  claimNext(runnerId: string): RunnerJob | null {
+    const items = getCollection<RunnerJob>('runner_jobs');
+    const pending = items.find(j => j.status === 'PENDING');
+    if (!pending) return null;
+    pending.status = 'RUNNING';
+    pending.runner_id = runnerId;
+    pending.started_at = now();
+    setCollection('runner_jobs', items);
+
+    // Mettre à jour l'exécution liée
+    const executions = getCollection<Execution>('executions');
+    const execIdx = executions.findIndex(e => e.id === pending.execution_id);
+    if (execIdx !== -1) {
+      executions[execIdx].status = 'RUNNING';
+      executions[execIdx].runner_id = runnerId;
+      executions[execIdx].started_at = now();
+      setCollection('executions', executions);
+    }
+
+    return pending;
+  },
+
+  /** Heartbeat d'un job (mise à jour du timestamp) */
+  heartbeat(jobId: string): void {
+    // En local, pas d'action spécifique
+  },
+
+  /** Compléter un job (DONE ou FAILED) */
+  complete(jobId: string, payload: JobCompletePayload): RunnerJob {
+    const items = getCollection<RunnerJob>('runner_jobs');
+    const idx = items.findIndex(j => j.job_id === jobId);
+    if (idx === -1) throw new Error('Job introuvable');
+
+    items[idx].status = payload.status;
+    items[idx].finished_at = now();
+    items[idx].metrics = payload.metrics;
+    items[idx].artifact_manifest = payload.artifact_manifest;
+    setCollection('runner_jobs', items);
+
+    // Mettre à jour l'exécution liée
+    const executions = getCollection<Execution>('executions');
+    const execIdx = executions.findIndex(e => e.id === items[idx].execution_id);
+    if (execIdx !== -1) {
+      executions[execIdx].status = payload.status === 'DONE'
+        ? (payload.metrics.failed > 0 ? 'FAILED' : 'PASSED')
+        : 'ERROR';
+      executions[execIdx].finished_at = now();
+      executions[execIdx].duration_ms = payload.metrics.duration_ms;
+      executions[execIdx].artifacts_count = payload.artifact_manifest.length;
+      executions[execIdx].incidents_count = payload.metrics.failed;
+      setCollection('executions', executions);
+
+      // Créer les artefacts à partir du manifest
+      if (payload.artifact_manifest.length > 0) {
+        const artifacts = getCollection<Artifact>('artifacts');
+        for (const entry of payload.artifact_manifest) {
+          artifacts.push({
+            id: uid(),
+            execution_id: items[idx].execution_id,
+            type: entry.type,
+            filename: entry.filename,
+            mime_type: entry.mime_type,
+            size_bytes: entry.size_bytes,
+            storage_path: entry.s3_key,
+            s3_uri: entry.s3_uri,
+            checksum: entry.checksum,
+            capture_job_id: null,
+            download_url: entry.download_url,
+            created_at: now(),
+          });
+        }
+        setCollection('artifacts', artifacts);
+      }
+    }
+
+    return items[idx];
+  },
+};
+
+// ─── Bundle Resolve ──────────────────────────────────────────────────────
+
+export const localBundleResolve = {
+  /** Résout un bundle en JSON fusionné (sans secrets en clair) */
+  resolve(bundleId: string, env?: TargetEnv): BundleResolveResult {
+    const bundle = getCollection<DatasetBundle>('dataset_bundles').find(b => b.bundle_id === bundleId);
+    if (!bundle) throw new Error('Bundle introuvable');
+
+    const bundleItems = getCollection<BundleItem>('dataset_bundle_items').filter(bi => bi.bundle_id === bundleId);
+    const instances = getCollection<DatasetInstance>('dataset_instances');
+    const secrets = getCollection<DatasetSecretKey>('dataset_secret_keys');
+
+    const merged: Record<string, unknown> = {};
+    const secretKeys: string[] = [];
+
+    for (const item of bundleItems) {
+      const instance = instances.find(d => d.dataset_id === item.dataset_id);
+      if (!instance) continue;
+      if (env && instance.env !== env) continue;
+
+      // Fusionner les valeurs
+      for (const [key, value] of Object.entries(instance.values_json)) {
+        const fullKey = `${instance.dataset_type_id}.${key}`;
+        // Vérifier si c'est un secret
+        const isSecret = secrets.some(s => s.dataset_id === instance.dataset_id && s.key_path === key && s.is_secret);
+        if (isSecret) {
+          merged[fullKey] = `{{SECRET:${fullKey}}}`;
+          secretKeys.push(fullKey);
+        } else {
+          merged[fullKey] = value;
+        }
+      }
+    }
+
+    return {
+      bundle_id: bundleId,
+      env: env || bundle.env,
+      merged_json: merged,
+      secrets_placeholder_keys: secretKeys,
+      resolved_at: now(),
     };
   },
 };

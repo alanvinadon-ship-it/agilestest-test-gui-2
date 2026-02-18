@@ -4,6 +4,7 @@ import {
   localDatasets, localExecutions,
   localDatasetInstances, localDatasetSecrets, localBundles,
   localBundleItems, localValidation,
+  localJobs, localBundleResolve,
 } from './localStore';
 import type {
   Project, PaginatedResponse, Execution,
@@ -12,6 +13,7 @@ import type {
   DatasetInstance, TargetEnv, DatasetInstanceStatus,
   DatasetBundle, BundleStatus, BundleItem, DatasetSecretKey,
   BundleValidationResult, ScenarioDatasetValidation,
+  RunnerJob, RunnerJobStatus, JobCompletePayload, BundleResolveResult,
 } from '../types';
 
 const PREFIX = '/api/v1/repository';
@@ -346,5 +348,69 @@ export const repositoryApi = {
       `${PREFIX}/scenarios/${scenarioId}/validate-datasets`, { env }
     ).then(r => r.data.data),
     () => localValidation.validateScenarioDatasets(scenarioId, env),
+  ),
+
+  // ─── Runner Jobs (Orchestration) ────────────────────────────────────────────
+
+  listJobs: (projectId: string, params?: { status?: RunnerJobStatus; runner_id?: string }) => withFallback(
+    () => apiClient.get<PaginatedResponse<RunnerJob>>(
+      `/api/v1/jobs`, { params: { project_id: projectId, ...params } }
+    ).then(r => r.data),
+    () => localJobs.list(projectId, params),
+  ),
+
+  getJob: (jobId: string) => withFallback(
+    () => apiClient.get<{ data: RunnerJob }>(`/api/v1/jobs/${jobId}`).then(r => r.data.data),
+    () => localJobs.get(jobId),
+  ),
+
+  getJobByExecution: (executionId: string) => withFallback(
+    () => apiClient.get<{ data: RunnerJob | null }>(
+      `/api/v1/jobs/by-execution/${executionId}`
+    ).then(r => r.data.data),
+    () => localJobs.getByExecution(executionId),
+  ),
+
+  createExecutionWithJob: (projectId: string, data: {
+    profile_id: string;
+    scenario_id: string;
+    script_id: string;
+    script_version: number;
+    dataset_bundle_id?: string;
+    target_env: TargetEnv;
+    runner_id?: string;
+    artifact_upload_policy?: string[];
+  }) => withFallback(
+    () => apiClient.post<{ data: { execution: Execution; job: RunnerJob } }>(
+      `/api/v1/executions`, { project_id: projectId, ...data }
+    ).then(r => r.data.data),
+    () => {
+      const execution = localExecutions.create(projectId, data);
+      const job = localJobs.create({
+        execution_id: execution.id,
+        project_id: projectId,
+        script_id: data.script_id,
+        script_version: data.script_version,
+        dataset_bundle_id: data.dataset_bundle_id,
+        target_env: data.target_env,
+      });
+      return { execution, job };
+    },
+  ),
+
+  completeJob: (jobId: string, payload: JobCompletePayload) => withFallback(
+    () => apiClient.post<{ data: RunnerJob }>(
+      `/api/v1/jobs/${jobId}/complete`, payload
+    ).then(r => r.data.data),
+    () => localJobs.complete(jobId, payload),
+  ),
+
+  // ─── Bundle Resolve ─────────────────────────────────────────────────────────
+
+  resolveBundle: (bundleId: string, env?: TargetEnv) => withFallback(
+    () => apiClient.post<{ data: BundleResolveResult }>(
+      `${PREFIX}/dataset-bundles/${bundleId}/resolve`, { env }
+    ).then(r => r.data.data),
+    () => localBundleResolve.resolve(bundleId, env),
   ),
 };

@@ -547,3 +547,73 @@ export interface DatasetType {
   created_at: string;
   updated_at: string;
 }
+
+// ─── Runner Job (Orchestration) ─────────────────────────────────────────
+
+export type RunnerJobStatus = 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED';
+
+export type ArtifactUploadPolicy = 'screenshot' | 'trace' | 'video' | 'log' | 'har';
+
+export interface RunnerJob {
+  job_id: string;
+  execution_id: string;
+  project_id: string;
+  runner_id: string | null;
+  status: RunnerJobStatus;
+  /** Script à exécuter */
+  script_id: string;
+  script_version: number;
+  /** URL de téléchargement du script package (zip) */
+  download_url: string | null;
+  /** Bundle de datasets */
+  dataset_bundle_id: string | null;
+  /** Environnement cible */
+  target_env: TargetEnv;
+  /** Politique d'upload des artefacts */
+  artifact_upload_policy: ArtifactUploadPolicy[];
+  /** Métriques d'exécution renvoyées par le runner */
+  metrics: JobMetrics | null;
+  /** Manifest des artefacts uploadés */
+  artifact_manifest: ArtifactManifestEntry[] | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface JobMetrics {
+  total_tests: number;
+  passed: number;
+  failed: number;
+  skipped: number;
+  duration_ms: number;
+  playwright_version?: string;
+  browser?: string;
+}
+
+export interface ArtifactManifestEntry {
+  type: ArtifactType;
+  filename: string;
+  s3_key: string;
+  s3_uri: string;
+  size_bytes: number;
+  mime_type: string;
+  checksum: string | null;
+  download_url: string;
+}
+
+/** Payload pour compléter un job */
+export interface JobCompletePayload {
+  status: 'DONE' | 'FAILED';
+  metrics: JobMetrics;
+  artifact_manifest: ArtifactManifestEntry[];
+  error_message?: string;
+}
+
+/** Résultat de la résolution d'un bundle */
+export interface BundleResolveResult {
+  bundle_id: string;
+  env: TargetEnv;
+  merged_json: Record<string, unknown>;
+  secrets_placeholder_keys: string[];
+  resolved_at: string;
+}
