@@ -251,7 +251,8 @@ function SmsTab({ canUpdate, canTest, canDisable, actor, refresh, rk }: {
 
   const handleSave = () => {
     const patch: Record<string, unknown> = {
-      enabled, base_url: baseUrl, from_sender_id: senderId || null,
+      enabled, provider: enabled ? 'ORANGE' as const : 'NONE' as const,
+      base_url: baseUrl, from_sender_id: senderId || null,
       auth_mode: authMode, token_url: tokenUrl || null, scope: scope || null,
       timeout_ms: timeoutMs,
     };
@@ -284,6 +285,15 @@ function SmsTab({ canUpdate, canTest, canDisable, actor, refresh, rk }: {
 
   const isStub = !sms.enabled || sms.provider === 'NONE';
 
+  const toggleStubMode = () => {
+    if (!canUpdate) return;
+    const newProvider = isStub ? 'ORANGE' as const : 'NONE' as const;
+    localNotifSettings.update({ sms: { provider: newProvider, enabled: newProvider !== 'NONE' } as any }, actor);
+    if (newProvider !== 'NONE') { setEnabled(true); toast.success('Mode Live activé — les SMS seront envoyés via Orange API'); }
+    else { toast.success('Mode Stub activé — les SMS sont simulés localement'); }
+    refresh();
+  };
+
   return (
     <div className="space-y-6">
       {/* Status banner */}
@@ -296,7 +306,14 @@ function SmsTab({ canUpdate, canTest, canDisable, actor, refresh, rk }: {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {isStub && <span className="px-2 py-1 rounded text-xs bg-amber-500/10 text-amber-400 font-medium">Mode Stub</span>}
+          <button onClick={toggleStubMode} disabled={!canUpdate}
+            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+              isStub
+                ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'
+                : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+            } disabled:opacity-50 disabled:cursor-not-allowed`}>
+            {isStub ? 'Mode Stub' : 'Mode Live'}
+          </button>
           <StatusBadge enabled={sms.enabled} />
         </div>
       </div>
@@ -473,7 +490,8 @@ function EmailTab({ canUpdate, canTest, canDisable, actor, refresh, rk }: {
 
   const handleSave = () => {
     const patch: Record<string, unknown> = {
-      enabled, host, port, secure, from_email: fromEmail,
+      enabled, provider: enabled ? 'SMTP' as const : 'NONE' as const,
+      host, port, secure, from_email: fromEmail,
       from_name: fromName || null, reply_to: replyTo || null, timeout_ms: timeoutMs,
     };
     if (username !== null) patch.username = username;
@@ -504,6 +522,15 @@ function EmailTab({ canUpdate, canTest, canDisable, actor, refresh, rk }: {
 
   const isStub = !email.enabled || email.provider === 'NONE';
 
+  const toggleStubMode = () => {
+    if (!canUpdate) return;
+    const newProvider = isStub ? 'SMTP' as const : 'NONE' as const;
+    localNotifSettings.update({ email: { provider: newProvider, enabled: newProvider !== 'NONE' } as any }, actor);
+    if (newProvider !== 'NONE') { setEnabled(true); toast.success('Mode Live activé — les emails seront envoyés via SMTP'); }
+    else { toast.success('Mode Stub activé — les emails sont simulés localement'); }
+    refresh();
+  };
+
   return (
     <div className="space-y-6">
       {/* Status banner */}
@@ -516,7 +543,14 @@ function EmailTab({ canUpdate, canTest, canDisable, actor, refresh, rk }: {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {isStub && <span className="px-2 py-1 rounded text-xs bg-amber-500/10 text-amber-400 font-medium">Mode Stub</span>}
+          <button onClick={toggleStubMode} disabled={!canUpdate}
+            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+              isStub
+                ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'
+                : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+            } disabled:opacity-50 disabled:cursor-not-allowed`}>
+            {isStub ? 'Mode Stub' : 'Mode Live'}
+          </button>
           <StatusBadge enabled={email.enabled} />
         </div>
       </div>
