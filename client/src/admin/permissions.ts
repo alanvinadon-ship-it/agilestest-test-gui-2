@@ -87,6 +87,17 @@ export enum PermissionKey {
   ADMIN_AUDIT_READ = 'admin.audit.read',
   ADMIN_AUDIT_EXPORT = 'admin.audit.export',
   ADMIN_MEMBERSHIPS_MANAGE = 'admin.memberships.manage',
+  // Notifications Settings
+  SETTINGS_NOTIFICATIONS_READ = 'settings.notifications.read',
+  SETTINGS_NOTIFICATIONS_UPDATE = 'settings.notifications.update',
+  SETTINGS_NOTIFICATIONS_TEST = 'settings.notifications.test',
+  SETTINGS_NOTIFICATIONS_DISABLE = 'settings.notifications.disable',
+  // Notifications Templates & Rules
+  NOTIFICATIONS_TEMPLATES_READ = 'notifications.templates.read',
+  NOTIFICATIONS_TEMPLATES_UPDATE = 'notifications.templates.update',
+  NOTIFICATIONS_RULES_READ = 'notifications.rules.read',
+  NOTIFICATIONS_RULES_UPDATE = 'notifications.rules.update',
+  NOTIFICATIONS_DELIVERY_READ = 'notifications.delivery.read',
 }
 
 // ─── Permission Groups (for UI multi-select) ───────────────────────────
@@ -217,6 +228,21 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: PermissionKey.ADMIN_AUDIT_READ, label: 'Voir audit' },
       { key: PermissionKey.ADMIN_AUDIT_EXPORT, label: 'Exporter audit' },
       { key: PermissionKey.ADMIN_MEMBERSHIPS_MANAGE, label: 'Gérer memberships' },
+    ],
+  },
+  {
+    id: 'notifications',
+    label: 'Paramètres — Notifications',
+    permissions: [
+      { key: PermissionKey.SETTINGS_NOTIFICATIONS_READ, label: 'Lire config' },
+      { key: PermissionKey.SETTINGS_NOTIFICATIONS_UPDATE, label: 'Modifier config' },
+      { key: PermissionKey.SETTINGS_NOTIFICATIONS_TEST, label: 'Tester envoi' },
+      { key: PermissionKey.SETTINGS_NOTIFICATIONS_DISABLE, label: 'Désactiver canal' },
+      { key: PermissionKey.NOTIFICATIONS_TEMPLATES_READ, label: 'Lire templates' },
+      { key: PermissionKey.NOTIFICATIONS_TEMPLATES_UPDATE, label: 'Modifier templates' },
+      { key: PermissionKey.NOTIFICATIONS_RULES_READ, label: 'Lire règles' },
+      { key: PermissionKey.NOTIFICATIONS_RULES_UPDATE, label: 'Modifier règles' },
+      { key: PermissionKey.NOTIFICATIONS_DELIVERY_READ, label: 'Voir delivery logs' },
     ],
   },
 ];

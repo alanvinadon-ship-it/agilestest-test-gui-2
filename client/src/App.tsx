@@ -30,6 +30,7 @@ import AdminProjectAccessPage from "./pages/AdminProjectAccessPage";
 import AdminRbacPage from "./pages/AdminRbacPage";
 import AdminAuditPage from "./pages/AdminAuditPage";
 import AdminRolesPage from "./pages/AdminRolesPage";
+import AdminNotificationsPage from "./pages/AdminNotificationsPage";
 import DriveCampaignsPage from "./pages/DriveCampaignsPage";
 import DriveReportingPage from "./pages/DriveReportingPage";
 import DriveIncidentReportPage from "./pages/DriveIncidentReportPage";
@@ -159,6 +160,9 @@ function AppRouter() {
               </Route>
               <Route path="/admin/audit">
                 <RequireAdmin><AdminAuditPage /></RequireAdmin>
+              </Route>
+              <Route path="/admin/notifications">
+                <RequireAdmin><AdminNotificationsPage /></RequireAdmin>
               </Route>
               <Route path="/docs/:slug" component={DocsPage} />
               <Route path="/docs">

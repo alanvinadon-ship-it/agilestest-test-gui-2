@@ -23,6 +23,7 @@ import {
   Signal,
   BarChart3,
   Navigation,
+  Bell,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -87,6 +88,7 @@ const baseNavSections: NavSection[] = [
       { href: "/admin/roles", icon: ShieldCheck, label: "Rôles & Permissions" },
       { href: "/admin/rbac", icon: ShieldCheck, label: "Matrice RBAC" },
       { href: "/admin/audit", icon: ScrollText, label: "Journal d'audit" },
+      { href: "/admin/notifications", icon: Bell, label: "Notifications" },
     ],
   },
   {
