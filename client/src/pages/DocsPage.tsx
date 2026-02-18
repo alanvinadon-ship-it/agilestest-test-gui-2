@@ -13,7 +13,7 @@ import remarkGfm from 'remark-gfm';
 import {
   BookOpen, Search, ChevronRight, Copy, Check,
   User, Shield, Server, HelpCircle, FileText,
-  Hash, ExternalLink, Radio,
+  Hash, ExternalLink, Radio, ClipboardList, Target,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -33,6 +33,9 @@ const GUIDES: GuideEntry[] = [
   { slug: 'ops-guide', title: 'Guide Exploitation', icon: Server, file: '/docs/OPS_GUIDE.md', description: 'Runner Docker, MinIO, diagnostics' },
   { slug: 'troubleshooting', title: 'Troubleshooting', icon: HelpCircle, file: '/docs/TROUBLESHOOTING.md', description: 'FAQ et résolution de problèmes' },
   { slug: 'capture-policy', title: 'Capture Policy', icon: Radio, file: '/docs/CAPTURE_POLICY.md', description: 'Capture réseau PCAP — tcpdump & Probe SPAN/TAP' },
+  { slug: 'pilot-runbook', title: 'Runbook Pilote Orange', icon: BookOpen, file: '/docs/PILOT_ORANGE_RUNBOOK.md', description: 'Procédure complète du pilote V1 — 4 parcours' },
+  { slug: 'pilot-checklist', title: 'Checklist Pilote', icon: ClipboardList, file: '/docs/PILOT_ORANGE_CHECKLIST.md', description: 'Checklists J-7/J-2/Jour J et par parcours' },
+  { slug: 'pilot-gonogo', title: 'Grille GO/NOGO', icon: Target, file: '/docs/PILOT_ORANGE_GO_NOGO_TEMPLATE.md', description: 'Critères d’évaluation et décision GO/NOGO' },
 ];
 
 // ─── TOC extraction ─────────────────────────────────────────────────────
