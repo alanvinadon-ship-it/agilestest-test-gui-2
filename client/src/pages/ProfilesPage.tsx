@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
+import { usePermission, PermissionKey } from '../security';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { repositoryApi } from '../api/repositoryApi';
 import type { TestProfile, TestType } from '../types';
@@ -524,6 +525,10 @@ function CreateProfileModal({ isOpen, onClose, projectId, projectDomain }: {
 export default function ProfilesPage() {
   const { currentProject } = useProject();
   const { canWrite } = useAuth();
+  const { can } = usePermission();
+  const canCreateProfile = can(PermissionKey.PROFILES_CREATE);
+  const canUpdateProfile = can(PermissionKey.PROFILES_UPDATE);
+  const canDeleteProfile = can(PermissionKey.PROFILES_DELETE);
   const [showCreate, setShowCreate] = useState(false);
   const [editingProfile, setEditingProfile] = useState<TestProfile | null>(null);
   const [search, setSearch] = useState('');
@@ -611,7 +616,7 @@ export default function ProfilesPage() {
             )).reduce((acc: React.ReactNode[], el, i) => i === 0 ? [el] : [...acc, <span key={`sep-${i}`} className="text-muted-foreground">, </span>, el], [])}
           </p>
         </div>
-        {canWrite && (
+        {canCreateProfile && (
           <button onClick={() => setShowCreate(true)}
             className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
             <Plus className="w-4 h-4" /> Nouveau profil
@@ -689,7 +694,7 @@ export default function ProfilesPage() {
               ? `Aucun profil pour le domaine ${DOMAIN_META[domainFilter as ProfileDomain]?.label || domainFilter}.`
               : 'Créez un profil pour définir les paramètres de test.'}
           </p>
-          {canWrite && (
+          {canCreateProfile && (
             <button onClick={() => setShowCreate(true)}
               className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
               <Plus className="w-4 h-4" /> Nouveau profil
@@ -728,16 +733,20 @@ export default function ProfilesPage() {
                     )}
                   </div>
                 </div>
-                {canWrite && (
+                {(canUpdateProfile || canDeleteProfile) && (
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => setEditingProfile(profile)}
-                      className="text-muted-foreground hover:text-primary transition-colors p-1.5" title="Éditer">
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => deleteMutation.mutate(profile.id)}
-                      className="text-muted-foreground hover:text-destructive transition-colors p-1.5" title="Supprimer">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {canUpdateProfile && (
+                      <button onClick={() => setEditingProfile(profile)}
+                        className="text-muted-foreground hover:text-primary transition-colors p-1.5" title="Éditer">
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                    )}
+                    {canDeleteProfile && (
+                      <button onClick={() => deleteMutation.mutate(profile.id)}
+                        className="text-muted-foreground hover:text-destructive transition-colors p-1.5" title="Supprimer">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

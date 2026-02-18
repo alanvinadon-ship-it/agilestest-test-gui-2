@@ -163,6 +163,70 @@ En mode **local** (localStorage), le resolve fusionne les instances du bundle et
 
 ---
 
+## Gestion des utilisateurs et invitations
+
+### Onboarding par invitation
+
+Le processus d'onboarding des utilisateurs suit un flux d'invitation contrôlé :
+
+1. **L'administrateur crée une invitation** depuis **Administration → Utilisateurs → Inviter**
+2. L'invitation contient : email, rôle global assigné, date d'expiration (7 jours par défaut)
+3. Un lien d'activation est généré (simulé en MVP, email réel en production)
+4. L'utilisateur clique sur le lien et complète son profil
+5. Le statut passe de **INVITED** à **ACTIVE**
+
+### Gestion des invitations
+
+| Action | Description | Rôle requis |
+|--------|-------------|-------------|
+| **Inviter** | Créer une nouvelle invitation | ADMIN |
+| **Renvoyer** | Régénérer le lien d'activation (reset expiration) | ADMIN |
+| **Révoquer** | Annuler une invitation en attente | ADMIN |
+| **Voir la liste** | Consulter toutes les invitations (drawer) | ADMIN |
+
+### Expiration des invitations
+
+Les invitations expirent après **7 jours** par défaut. Une invitation expirée ne peut plus être utilisée. L'administrateur peut :
+
+- **Renvoyer** l'invitation pour réinitialiser le délai
+- **Révoquer** l'invitation et en créer une nouvelle
+
+> **Bonne pratique** : Vérifiez régulièrement les invitations en attente depuis le drawer "Invitations" et relancez ou révoquez celles qui sont expirées.
+
+### Révocation d'accès
+
+Pour retirer l'accès à un utilisateur :
+
+1. **Désactiver le compte** : depuis **Administration → Utilisateurs**, cliquez sur "Désactiver". L'utilisateur ne peut plus se connecter mais son historique est conservé.
+2. **Retirer d'un projet** : depuis **Administration → Accès Projets**, supprimez la membership. L'utilisateur perd l'accès au projet spécifique.
+3. **Rétrograder le rôle** : changez le rôle global de MANAGER à VIEWER pour limiter les permissions.
+
+### Audit et traçabilité
+
+Toutes les actions d'administration sont tracées dans le **Journal d'audit** (`/admin/audit`). Chaque entrée contient :
+
+| Champ | Description |
+|-------|-------------|
+| `actor` | Email de l'administrateur qui a effectué l'action |
+| `action` | Type d'action (create, update, delete, disable, enable, invite, revoke, resend, reset_password) |
+| `entity_type` | Type d'entité concernée (user, role, invite, access) |
+| `entity_id` | Identifiant de l'entité |
+| `metadata` | Détails supplémentaires en JSON |
+| `timestamp` | Horodatage ISO 8601 |
+
+### Export de l'audit
+
+L'audit est exportable en deux formats depuis la page `/admin/audit` :
+
+- **CSV** : pour import dans Excel, Google Sheets ou un SIEM
+- **JSON** : pour intégration programmatique ou archivage
+
+Les filtres actifs (action, entité, période, acteur) sont appliqués à l'export. Pour exporter l'intégralité, réinitialisez les filtres avant l'export.
+
+> **Conformité** : Conservez les exports d'audit pendant au moins 12 mois pour répondre aux exigences de traçabilité des accès.
+
+---
+
 ## Diagnostics
 
 ### Lecture du trace_id

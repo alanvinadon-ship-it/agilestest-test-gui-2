@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useProjects, useCreateProject, useDeleteProject } from '../hooks/useProjectQueries';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
+import { usePermission, PermissionKey } from '../security';
 import type { Project, ProjectDomain, CreateProjectRequest } from '../types';
 import {
   Plus, Trash2, Loader2, FolderOpen, Search,
@@ -222,6 +223,9 @@ function DeleteConfirmModal({ project, onClose, onConfirm, isPending }: {
 
 export default function ProjectsPage() {
   const { canWrite } = useAuth();
+  const { can } = usePermission();
+  const canCreate = can(PermissionKey.PROJECTS_CREATE);
+  const canDelete = can(PermissionKey.PROJECTS_DELETE);
   const { selectProject, currentProject } = useProject();
   const [showCreate, setShowCreate] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
@@ -259,7 +263,7 @@ export default function ProjectsPage() {
             Gérez vos projets de test. Sélectionnez un projet pour accéder aux profils, scénarios et exécutions.
           </p>
         </div>
-        {canWrite && (
+        {canCreate && (
           <button
             type="button"
             onClick={() => setShowCreate(true)}
@@ -304,7 +308,7 @@ export default function ProjectsPage() {
           <p className="text-sm text-muted-foreground mb-4">
             {search ? 'Essayez avec d\'autres termes.' : 'Créez votre premier projet pour commencer.'}
           </p>
-          {!search && canWrite && (
+          {!search && canCreate && (
             <button onClick={() => setShowCreate(true)}
               className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
               <Plus className="w-4 h-4" /> Nouveau projet
@@ -349,7 +353,7 @@ export default function ProjectsPage() {
                   >
                     {isSelected ? <><Check className="w-3 h-3" /> Sélectionné</> : 'Sélectionner'}
                   </button>
-                  {canWrite && (
+                  {canDelete && (
                     <button
                       onClick={() => setDeleteTarget(project)}
                       className="text-muted-foreground hover:text-destructive transition-colors p-1.5"

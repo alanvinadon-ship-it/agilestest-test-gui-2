@@ -1,5 +1,52 @@
 # Troubleshooting — AgilesTest
 
+## "Accès refusé" (403) — Page ou action bloquée
+
+**Symptôme** : Un écran "Accès refusé" s'affiche, ou un bouton est grisé/absent, ou une action retourne une erreur 403.
+
+**Diagnostic rapide** :
+
+| Vérification | Commande / Action | Résultat attendu |
+|-------------|-------------------|-------------------|
+| **1. Check membership** | Demander à un admin de vérifier **Admin → Accès Projets** | L'utilisateur doit avoir une membership active sur le projet |
+| **2. Check rôle global** | Demander à un admin de vérifier **Admin → Utilisateurs** | Le rôle global (VIEWER/MANAGER/ADMIN) détermine les permissions |
+| **3. Check permission spécifique** | Consulter **Admin → Matrice RBAC** | Vérifier que le rôle possède la permission requise pour l'action |
+| **4. Check statut compte** | Vérifier que le compte n'est pas désactivé | Un compte désactivé ne peut plus se connecter |
+
+**Cas courants** :
+
+### Cas 1 : Pas de membership projet
+
+L'utilisateur n'est pas membre du projet. Le guard `RequireProjectAccess` bloque l'accès à toutes les routes projet.
+
+**Solution** : L'administrateur ajoute l'utilisateur au projet via **Admin → Accès Projets → Ajouter un membre**.
+
+### Cas 2 : Rôle insuffisant pour l'action
+
+L'utilisateur est membre mais son rôle ne permet pas l'action tentée. Exemples :
+- VIEWER ne peut pas créer, modifier ou supprimer
+- MANAGER ne peut pas supprimer ni accéder à l'administration
+
+**Solution** : L'administrateur change le rôle global de l'utilisateur via **Admin → Utilisateurs → Modifier**.
+
+### Cas 3 : Rôle custom sans la permission requise
+
+Si l'utilisateur a un rôle personnalisé, celui-ci peut ne pas inclure la permission nécessaire.
+
+**Solution** : L'administrateur vérifie les permissions du rôle custom via **Admin → Rôles** et ajoute la permission manquante.
+
+### Utiliser le trace_id pour le diagnostic
+
+L'écran d'erreur 403 affiche un `trace_id` unique. Communiquez ce trace_id à l'administrateur pour faciliter le diagnostic :
+
+1. L'administrateur recherche le trace_id dans le **Journal d'audit** (`/admin/audit`)
+2. Le journal montre l'action tentée, l'entité concernée et le rôle de l'utilisateur
+3. L'administrateur peut alors ajuster les permissions ou la membership
+
+> **Astuce** : Le trace_id est aussi visible dans les logs du navigateur (console F12) pour les développeurs.
+
+---
+
 ## "No ACTIVE script" — Le Run Center bloque le lancement
 
 **Symptôme** : Le bouton "Lancer l'exécution" est désactivé et un message indique qu'aucun script ACTIVE n'existe pour le scénario sélectionné.

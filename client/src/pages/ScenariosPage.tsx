@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
+import { usePermission, PermissionKey } from '../security';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { repositoryApi } from '../api/repositoryApi';
 import { localScenarios } from '../api/localStore';
@@ -500,6 +501,12 @@ function EditScenarioModal({ scenario, profile, onClose }: {
 export default function ScenariosPage() {
   const { currentProject } = useProject();
   const { canWrite } = useAuth();
+  const { can } = usePermission();
+  const canCreateScenario = can(PermissionKey.SCENARIOS_CREATE);
+  const canUpdateScenario = can(PermissionKey.SCENARIOS_UPDATE);
+  const canDeleteScenario = can(PermissionKey.SCENARIOS_DELETE);
+  const canActivateScenario = can(PermissionKey.SCENARIOS_ACTIVATE);
+  const canCreateScript = can(PermissionKey.SCRIPTS_CREATE);
   const [showCreate, setShowCreate] = useState(false);
   const [editingScenario, setEditingScenario] = useState<TestScenario | null>(null);
   const [finalizingScenario, setFinalizingScenario] = useState<TestScenario | null>(null);
@@ -576,7 +583,7 @@ export default function ScenariosPage() {
             Workflow : <span className="font-mono text-xs">DRAFT → FINAL → DEPRECATED</span>
           </p>
         </div>
-        {canWrite && profiles.length > 0 && (
+        {canCreateScenario && profiles.length > 0 && (
           <button onClick={() => setShowCreate(true)}
             className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
             <Plus className="w-4 h-4" /> Nouveau scénario
@@ -654,7 +661,7 @@ export default function ScenariosPage() {
 
                 {isExpanded && (
                   <div className="border-t border-border px-5 py-4">
-                    {canWrite && (
+                    {canCreateScenario && (
                       <div className="flex items-center justify-end mb-3 gap-2">
                         <button onClick={(e) => { e.stopPropagation(); setSuggestProfile(profile); }}
                           className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 text-amber-400 hover:from-amber-500/20 hover:to-orange-500/20 transition-all font-medium">
@@ -711,33 +718,39 @@ export default function ScenariosPage() {
                                 )}
                                 <ScenarioDatasetSection scenario={scenario} />
                               </div>
-                              {canWrite && (
+                              {(canUpdateScenario || canDeleteScenario || canActivateScenario || canCreateScript) && (
                                 <div className="flex items-center gap-1 ml-3 flex-shrink-0">
-                                  {isDraft && (
+                                  {canActivateScenario && isDraft && (
                                     <button onClick={() => setFinalizingScenario(scenario)}
                                       className="text-green-400 hover:text-green-300 p-1.5 rounded hover:bg-green-500/10 transition-colors" title="Finaliser">
                                       <CheckCircle2 className="w-4 h-4" />
                                     </button>
                                   )}
-                                  {isFinal && (
+                                  {canActivateScenario && isFinal && (
                                     <button onClick={() => deprecateMutation.mutate(scenario.id)}
                                       className="text-red-400 hover:text-red-300 p-1.5 rounded hover:bg-red-500/10 transition-colors" title="Déprécier">
                                       <Archive className="w-4 h-4" />
                                     </button>
                                   )}
-                                  <button onClick={() => setPromptScenario({ scenario, profile })}
-                                    className="text-muted-foreground hover:text-violet-400 p-1.5 rounded hover:bg-violet-500/10 transition-colors" title="Générer Prompt IA">
-                                    <MessageSquare className="w-4 h-4" />
-                                  </button>
-                                  <button onClick={() => setScriptScenario({ scenario, profile })}
-                                    className="text-muted-foreground hover:text-cyan-400 p-1.5 rounded hover:bg-cyan-500/10 transition-colors" title="Générer Script">
-                                    <Code2 className="w-4 h-4" />
-                                  </button>
-                                  <button onClick={() => setEditingScenario(scenario)}
-                                    className="text-muted-foreground hover:text-primary p-1.5 rounded hover:bg-primary/10 transition-colors" title={isFinal ? 'Forker' : 'Éditer'}>
-                                    {isFinal ? <GitBranch className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
-                                  </button>
-                                  {isDraft && (
+                                  {canCreateScript && (
+                                    <button onClick={() => setPromptScenario({ scenario, profile })}
+                                      className="text-muted-foreground hover:text-violet-400 p-1.5 rounded hover:bg-violet-500/10 transition-colors" title="Générer Prompt IA">
+                                      <MessageSquare className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                  {canCreateScript && (
+                                    <button onClick={() => setScriptScenario({ scenario, profile })}
+                                      className="text-muted-foreground hover:text-cyan-400 p-1.5 rounded hover:bg-cyan-500/10 transition-colors" title="Générer Script">
+                                      <Code2 className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                  {canUpdateScenario && (
+                                    <button onClick={() => setEditingScenario(scenario)}
+                                      className="text-muted-foreground hover:text-primary p-1.5 rounded hover:bg-primary/10 transition-colors" title={isFinal ? 'Forker' : 'Éditer'}>
+                                      {isFinal ? <GitBranch className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
+                                    </button>
+                                  )}
+                                  {canDeleteScenario && isDraft && (
                                     <button onClick={() => deleteMutation.mutate(scenario.id)}
                                       className="text-muted-foreground hover:text-destructive p-1.5 rounded hover:bg-destructive/10 transition-colors" title="Supprimer">
                                       <Trash2 className="w-4 h-4" />

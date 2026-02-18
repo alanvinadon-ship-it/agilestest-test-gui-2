@@ -21,6 +21,50 @@
 
 ---
 
+## Accès et permissions
+
+### Membership obligatoire
+
+L'accès à un projet dans AgilesTest nécessite une **membership active**. Sans membership, vous verrez un écran d'erreur 403 avec le message "Accès refusé — Vous n'êtes pas membre de ce projet".
+
+Les memberships sont gérées par les administrateurs depuis **Administration → Accès Projets**. Chaque membership associe un utilisateur à un projet avec un rôle spécifique.
+
+### Rôles et permissions
+
+Chaque utilisateur possède un **rôle global** qui détermine ses permissions sur l'ensemble de la plateforme :
+
+| Rôle | Lecture | Création | Modification | Suppression | Administration |
+|------|---------|----------|-------------|-------------|----------------|
+| **VIEWER** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **MANAGER** | ✅ | ✅ | ✅ | ❌ | ❌ |
+| **ADMIN** | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+Les permissions sont **granulaires** : un MANAGER peut créer des scénarios et lancer des exécutions, mais ne peut pas supprimer de projets ni accéder à l'administration.
+
+### Demander l'accès à un projet
+
+Si vous n'avez pas accès à un projet :
+
+1. Contactez un administrateur de la plateforme
+2. L'administrateur vous ajoutera comme membre du projet via **Administration → Accès Projets**
+3. Vous recevrez un rôle projet (VIEWER, TESTER, MANAGER, LEAD, ADMIN)
+4. Rafraîchissez la page pour voir le projet apparaître
+
+> **Astuce** : Si vous voyez un écran 403, notez le `trace_id` affiché et communiquez-le à l'administrateur pour faciliter le diagnostic.
+
+### Comprendre les erreurs 403
+
+Une erreur 403 signifie que votre rôle ne possède pas la permission requise pour l'action tentée. Les causes courantes :
+
+| Situation | Cause probable | Solution |
+|-----------|---------------|----------|
+| Bouton grisé ou absent | Permission insuffisante pour cette action | Demander un rôle supérieur |
+| Page "Accès refusé" | Pas de membership sur ce projet | Demander l'ajout au projet |
+| Section admin invisible | Rôle non-ADMIN | Seuls les ADMIN voient la section Administration |
+| "Finaliser" désactivé | Rôle VIEWER (lecture seule) | Demander le rôle MANAGER |
+
+---
+
 ## Quickstart — Happy Path complet
 
 Ce guide décrit le parcours complet, de la création d'un projet jusqu'à la réparation automatique d'un test échoué.

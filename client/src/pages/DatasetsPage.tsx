@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
+import { usePermission, PermissionKey } from '../security';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { localDatasetTypes } from '../api/localStore';
 import { useDatasetStorage } from '../contexts/DatasetStorageContext';
@@ -403,6 +404,10 @@ function EditDatasetModal({ instance, onClose }: {
 export default function DatasetsPage() {
   const { currentProject } = useProject();
   const { canWrite } = useAuth();
+  const { can } = usePermission();
+  const canCreateDataset = can(PermissionKey.DATASETS_CREATE);
+  const canDeleteDataset = can(PermissionKey.DATASETS_DELETE);
+  const canActivateDataset = can(PermissionKey.DATASETS_ACTIVATE);
   const { adapter, mode } = useDatasetStorage();
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
@@ -487,7 +492,7 @@ export default function DatasetsPage() {
             </span>
           </p>
         </div>
-        {canWrite && (
+        {canCreateDataset && (
           <button onClick={() => setShowCreate(true)}
             className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
             <Plus className="w-4 h-4" /> Créer depuis gabarit
@@ -561,7 +566,7 @@ export default function DatasetsPage() {
           <p className="text-sm text-muted-foreground mb-4">
             Créez un dataset depuis un gabarit pour commencer.
           </p>
-          {canWrite && (
+          {canCreateDataset && (
             <button onClick={() => setShowCreate(true)}
               className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
               <Plus className="w-4 h-4" /> Créer depuis gabarit
@@ -610,7 +615,7 @@ export default function DatasetsPage() {
                           className="text-muted-foreground hover:text-cyan-400 p-1.5 rounded hover:bg-cyan-500/10 transition-colors" title="Cloner (nouvelle version)">
                           <Copy className="w-4 h-4" />
                         </button>
-                        {canWrite && inst.status !== 'ACTIVE' && (
+                        {canDeleteDataset && inst.status !== 'ACTIVE' && (
                           <button onClick={() => deleteMutation.mutate(inst.dataset_id)}
                             className="text-muted-foreground hover:text-destructive p-1.5 rounded hover:bg-destructive/10 transition-colors" title="Supprimer">
                             <Trash2 className="w-4 h-4" />

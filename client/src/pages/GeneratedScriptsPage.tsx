@@ -4,6 +4,7 @@
  */
 import { useState, useMemo } from 'react';
 import { useProject } from '../state/projectStore';
+import { usePermission, PermissionKey } from '../security';
 import { localScriptRepository } from '../ai/scriptRepository';
 import type { GeneratedScript, ScriptFramework, ScriptStatus } from '../ai/types';
 import type { TargetEnv } from '../types';
@@ -45,6 +46,9 @@ const ALL_ENVS: TargetEnv[] = ['DEV', 'PREPROD', 'PILOT_ORANGE', 'PROD'];
 export default function GeneratedScriptsPage() {
   const { currentProject } = useProject();
   const projectId = currentProject?.id || '';
+  const { can } = usePermission();
+  const canActivateScript = can(PermissionKey.SCRIPTS_ACTIVATE);
+  const canDeleteScript = can(PermissionKey.SCRIPTS_DELETE);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -237,7 +241,7 @@ export default function GeneratedScriptsPage() {
 
                   {/* Actions */}
                   <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                    {script.status !== 'ACTIVE' && (
+                    {canActivateScript && script.status !== 'ACTIVE' && (
                       <button
                         onClick={() => handleActivate(script.script_id)}
                         className="p-1.5 rounded hover:bg-green-500/10 text-muted-foreground hover:text-green-400 transition-colors"
@@ -253,13 +257,15 @@ export default function GeneratedScriptsPage() {
                     >
                       <Download className="w-3.5 h-3.5" />
                     </button>
-                    <button
-                      onClick={() => handleDelete(script.script_id)}
-                      className="p-1.5 rounded hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors"
-                      title="Supprimer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {canDeleteScript && (
+                      <button
+                        onClick={() => handleDelete(script.script_id)}
+                        className="p-1.5 rounded hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors"
+                        title="Supprimer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
 

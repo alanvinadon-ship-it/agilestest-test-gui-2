@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
+import { usePermission, PermissionKey } from '../security';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { localDatasetTypes } from '../api/localStore';
 import { repositoryApi } from '../api/repositoryApi';
@@ -285,6 +286,8 @@ function BundleDetail({ bundle, projectId }: { bundle: DatasetBundle; projectId:
   const queryClient = useQueryClient();
   const { adapter } = useDatasetStorage();
   const { canWrite } = useAuth();
+  const { can } = usePermission();
+  const canUpdateBundle = can(PermissionKey.BUNDLES_UPDATE);
   const [addingDataset, setAddingDataset] = useState(false);
 
   // Get bundle items via adapter
@@ -370,7 +373,7 @@ function BundleDetail({ bundle, projectId }: { bundle: DatasetBundle; projectId:
                   }`}>{d.status}</span>
                   <span className="text-[10px] font-mono text-muted-foreground">v{d.version}</span>
                 </div>
-                {canWrite && (
+                {canUpdateBundle && (
                   <button onClick={() => removeMutation.mutate(d.dataset_id)}
                     className="text-muted-foreground hover:text-destructive p-1 rounded hover:bg-destructive/10 transition-colors" title="Retirer">
                     <Unlink className="w-3.5 h-3.5" />
@@ -383,7 +386,7 @@ function BundleDetail({ bundle, projectId }: { bundle: DatasetBundle; projectId:
       )}
 
       {/* Add dataset */}
-      {canWrite && (
+      {canUpdateBundle && (
         <div>
           {addingDataset ? (
             <div className="bg-secondary/10 rounded-md p-3 space-y-2">
@@ -432,6 +435,10 @@ function BundleDetail({ bundle, projectId }: { bundle: DatasetBundle; projectId:
 export default function BundlesPage() {
   const { currentProject } = useProject();
   const { canWrite } = useAuth();
+  const { can } = usePermission();
+  const canCreateBundle = can(PermissionKey.BUNDLES_CREATE);
+  const canDeleteBundle = can(PermissionKey.BUNDLES_DELETE);
+  const canActivateBundle = can(PermissionKey.BUNDLES_ACTIVATE);
   const { adapter, mode } = useDatasetStorage();
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
@@ -519,7 +526,7 @@ export default function BundlesPage() {
             </span>
           </p>
         </div>
-        {canWrite && (
+        {canCreateBundle && (
           <button onClick={() => setShowCreate(true)}
             className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
             <Plus className="w-4 h-4" /> Nouveau bundle
@@ -580,7 +587,7 @@ export default function BundlesPage() {
           <p className="text-sm text-muted-foreground mb-4">
             Créez un bundle pour regrouper vos datasets par environnement.
           </p>
-          {canWrite && (
+          {canCreateBundle && (
             <button onClick={() => setShowCreate(true)}
               className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
               <Plus className="w-4 h-4" /> Nouveau bundle
@@ -607,13 +614,13 @@ export default function BundlesPage() {
                     <span className="text-[10px] text-muted-foreground">{itemCount} dataset(s)</span>
                   </div>
                   <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-                    {canWrite && bundle.status === 'DRAFT' && (
+                    {canActivateBundle && bundle.status === 'DRAFT' && (
                       <button onClick={() => activateMutation.mutate(bundle.bundle_id)}
                         className="text-green-400 hover:text-green-300 p-1.5 rounded hover:bg-green-500/10 transition-colors" title="Activer">
                         <CheckCircle2 className="w-4 h-4" />
                       </button>
                     )}
-                    {canWrite && bundle.status === 'ACTIVE' && (
+                    {canActivateBundle && bundle.status === 'ACTIVE' && (
                       <button onClick={() => deprecateMutation.mutate(bundle.bundle_id)}
                         className="text-red-400 hover:text-red-300 p-1.5 rounded hover:bg-red-500/10 transition-colors" title="Déprécier">
                         <Archive className="w-4 h-4" />
@@ -627,7 +634,7 @@ export default function BundlesPage() {
                       className="text-muted-foreground hover:text-cyan-400 p-1.5 rounded hover:bg-cyan-500/10 transition-colors" title="Cloner">
                       <Copy className="w-4 h-4" />
                     </button>
-                    {canWrite && bundle.status === 'DRAFT' && (
+                    {canDeleteBundle && bundle.status === 'DRAFT' && (
                       <button onClick={() => deleteMutation.mutate(bundle.bundle_id)}
                         className="text-muted-foreground hover:text-destructive p-1.5 rounded hover:bg-destructive/10 transition-colors" title="Supprimer">
                         <Trash2 className="w-4 h-4" />

@@ -311,6 +311,8 @@ function RunCenterModal({ isOpen, onClose, projectId }: {
 export default function ExecutionsPage() {
   const { currentProject } = useProject();
   const { canWrite } = useAuth();
+  const { can: canPerm } = usePermission();
+  const canRunExecution = canPerm(PermissionKey.EXECUTIONS_RUN);
   const [showLaunch, setShowLaunch] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
@@ -360,7 +362,7 @@ export default function ExecutionsPage() {
             Lancez et suivez les exécutions de test pour <strong className="text-foreground">{currentProject.name}</strong>.
           </p>
         </div>
-        {canWrite && (
+        {canRunExecution && (
           <button onClick={() => setShowLaunch(true)}
             className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
             <Play className="w-4 h-4" /> Nouvelle exécution
@@ -396,7 +398,7 @@ export default function ExecutionsPage() {
           <Play className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
           <h3 className="text-base font-heading font-semibold text-foreground mb-1">Aucune exécution</h3>
           <p className="text-sm text-muted-foreground mb-4">Lancez votre première exécution de test.</p>
-          {canWrite && (
+          {canRunExecution && (
             <button onClick={() => setShowLaunch(true)}
               className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
               <Play className="w-4 h-4" /> Lancer

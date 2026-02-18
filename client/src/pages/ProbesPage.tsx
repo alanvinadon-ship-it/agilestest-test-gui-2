@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
+import { usePermission, PermissionKey } from '../security';
 import { useProbes, useCreateProbe, useDeleteProbe, useRegenerateProbeToken } from '../hooks/useProbeQueries';
 import type { Probe, ProbeType, ProbeCapability, ProbeStatus, CreateProbeRequest } from '../types';
 import {
@@ -181,6 +182,8 @@ function CreateProbeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
 
 export default function ProbesPage() {
   const { canWrite } = useAuth();
+  const { can } = usePermission();
+  const canManageProbes = can(PermissionKey.EXECUTIONS_RUN);
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -205,7 +208,7 @@ export default function ProbesPage() {
             Gérez les sondes de collecte déployées sur vos sites.
           </p>
         </div>
-        {canWrite && (
+        {canManageProbes && (
           <button onClick={() => setShowCreate(true)}
             className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
             <Plus className="w-4 h-4" /> Nouvelle sonde
@@ -267,7 +270,7 @@ export default function ProbesPage() {
                     )}
                   </div>
                 </div>
-                {canWrite && (
+                {canManageProbes && (
                   <div className="flex items-center gap-2">
                     <button onClick={() => regenerateMutation.mutate(probe.probe_id)}
                       className="text-muted-foreground hover:text-primary p-1.5 transition-colors" title="Régénérer le token">

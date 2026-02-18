@@ -13,6 +13,7 @@ import { localScriptRepository } from '../ai/scriptRepository';
 import { localExecutions } from '../api/localStore';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
+import { usePermission, PermissionKey } from '../security';
 import type { Execution, Artifact, Incident, ExecutionStatus, TargetEnv, RunnerJob } from '../types';
 import type { GeneratedScript, RepairResult } from '../ai/types';
 import {
@@ -315,6 +316,9 @@ export default function ExecutionDetailPage() {
   const queryClient = useQueryClient();
   const { currentProject } = useProject();
   const { canWrite } = useAuth();
+  const { can } = usePermission();
+  const canRerunExecution = can(PermissionKey.EXECUTIONS_RERUN);
+  const canRepairScript = can(PermissionKey.SCRIPTS_CREATE);
 
   const [repairScript, setRepairScript] = useState<GeneratedScript | null>(null);
 
@@ -413,7 +417,7 @@ export default function ExecutionDetailPage() {
             )}
           </div>
           <div className="flex items-center gap-2">
-            {canWrite && (execution.status === 'PASSED' || execution.status === 'FAILED') && (
+            {canRerunExecution && (execution.status === 'PASSED' || execution.status === 'FAILED') && (
               <button
                 onClick={handleRerun}
                 className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary transition-colors"
@@ -523,7 +527,7 @@ export default function ExecutionDetailPage() {
       )}
 
       {/* Repair Panel — only for FAILED executions with a script */}
-      {isFailed && script && canWrite && (
+      {isFailed && script && canRepairScript && (
         <RepairPanel
           execution={execution}
           script={script}

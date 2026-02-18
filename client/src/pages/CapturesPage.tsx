@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
+import { usePermission, PermissionKey } from '../security';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { collectorApi } from '../api/collectorApi';
 import { repositoryApi } from '../api/repositoryApi';
@@ -166,6 +167,8 @@ function CreateCaptureModal({ isOpen, onClose, projectId }: {
 export default function CapturesPage() {
   const { currentProject } = useProject();
   const { canWrite } = useAuth();
+  const { can } = usePermission();
+  const canCreateCapture = can(PermissionKey.EXECUTIONS_RUN);
   const [showCreate, setShowCreate] = useState(false);
   const queryClient = useQueryClient();
 
@@ -214,7 +217,7 @@ export default function CapturesPage() {
             Captures réseau PCAP et collecte de logs pour <strong className="text-foreground">{currentProject.name}</strong>.
           </p>
         </div>
-        {canWrite && (
+        {canCreateCapture && (
           <button onClick={() => setShowCreate(true)}
             className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
             <Plus className="w-4 h-4" /> Nouvelle capture

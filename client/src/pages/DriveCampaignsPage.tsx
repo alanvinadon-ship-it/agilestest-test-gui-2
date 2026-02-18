@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/auth/AuthContext';
+import { usePermission, PermissionKey } from '@/security';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -98,7 +99,12 @@ const STATUS_ICONS: Record<CampaignStatus, typeof Clock> = {
 
 export default function DriveCampaignsPage() {
   const { hasRole } = useAuth();
+  const { can } = usePermission();
   const canWrite = hasRole('MANAGER') || hasRole('ADMIN');
+  const canCreateCampaign = can(PermissionKey.DRIVE_CAMPAIGNS_CREATE);
+  const canUpdateCampaign = can(PermissionKey.DRIVE_CAMPAIGNS_UPDATE);
+  const canDeleteCampaign = can(PermissionKey.DRIVE_CAMPAIGNS_DELETE);
+  const canRunCampaign = can(PermissionKey.DRIVE_CAMPAIGNS_UPDATE);
 
   // Project selection
   const [projects] = useState(() => localProjects.list({ limit: 200 }).data);
@@ -477,7 +483,7 @@ export default function DriveCampaignsPage() {
                 {NETWORK_TYPES.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
               </SelectContent>
             </Select>
-            {canWrite && (
+            {canCreateCampaign && (
               <Button onClick={openNewCampaign} size="sm" className="ml-auto">
                 <Plus className="w-4 h-4 mr-1" /> Nouvelle campagne
               </Button>
@@ -489,7 +495,7 @@ export default function DriveCampaignsPage() {
             <div className="text-center py-12 text-muted-foreground">
               <Navigation className="w-12 h-12 mx-auto mb-3 opacity-40" />
               <p>Aucune campagne drive test</p>
-              {canWrite && <p className="text-sm mt-1">Cliquez sur "Nouvelle campagne" pour commencer</p>}
+              {canCreateCampaign && <p className="text-sm mt-1">Cliquez sur "Nouvelle campagne" pour commencer</p>}
             </div>
           ) : (
             <div className="space-y-2">
@@ -520,12 +526,12 @@ export default function DriveCampaignsPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                        {canWrite && c.status === 'DRAFT' && (
+                        {canUpdateCampaign && c.status === 'DRAFT' && (
                           <Button size="sm" variant="ghost" onClick={() => updateCampaignStatus(c.campaign_id, 'READY')}>
                             <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Ready
                           </Button>
                         )}
-                        {canWrite && (c.status === 'READY' || c.status === 'DONE') && (
+                        {canRunCampaign && (c.status === 'READY' || c.status === 'DONE') && (
                           <Button size="sm" variant="ghost" className="text-emerald-400" onClick={() => openRunCampaign(c)}>
                             <Play className="w-3.5 h-3.5 mr-1" /> {c.status === 'DONE' ? 'Relancer' : 'Run'}
                           </Button>
@@ -533,7 +539,7 @@ export default function DriveCampaignsPage() {
                         {c.status === 'RUNNING' && (
                           <Badge className="bg-amber-500/20 text-amber-300 animate-pulse"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> En cours</Badge>
                         )}
-                        {canWrite && (
+                        {canUpdateCampaign && (
                           <>
                             <Button size="sm" variant="ghost" onClick={() => openEditCampaign(c)}>
                               <Edit className="w-3.5 h-3.5" />
@@ -554,7 +560,7 @@ export default function DriveCampaignsPage() {
                             <MapPin className="w-4 h-4 text-emerald-400" />
                             Routes ({campaignRoutes.length})
                           </h3>
-                          {canWrite && (
+                          {canUpdateCampaign && (
                             <Button size="sm" variant="outline" onClick={() => openNewRoute(c.campaign_id)}>
                               <Plus className="w-3.5 h-3.5 mr-1" /> Route
                             </Button>
@@ -573,7 +579,7 @@ export default function DriveCampaignsPage() {
                                     <Badge variant="outline" className="ml-2 text-xs">GeoJSON</Badge>
                                   )}
                                 </div>
-                                {canWrite && (
+                                {canDeleteCampaign && (
                                   <Button size="sm" variant="ghost" className="text-red-400" onClick={() => deleteRoute(r.route_id, c.campaign_id)}>
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </Button>
@@ -651,7 +657,7 @@ export default function DriveCampaignsPage() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">{devices.length} équipement(s) enregistré(s)</p>
-            {canWrite && (
+            {canCreateCampaign && (
               <Button size="sm" onClick={openNewDevice}>
                 <Plus className="w-4 h-4 mr-1" /> Nouvel équipement
               </Button>
@@ -668,7 +674,7 @@ export default function DriveCampaignsPage() {
                 <div key={d.device_id} className="border border-border rounded-lg p-4 space-y-2">
                   <div className="flex items-center justify-between">
                     <Badge variant="outline">{d.type}</Badge>
-                    {canWrite && (
+                    {canDeleteCampaign && (
                       <Button size="sm" variant="ghost" className="text-red-400" onClick={() => deleteDevice(d.device_id)}>
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
@@ -695,7 +701,7 @@ export default function DriveCampaignsPage() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">{probeConfigs.length} sonde(s) configurée(s)</p>
-            {canWrite && (
+            {canCreateCampaign && (
               <Button size="sm" onClick={openNewProbe}>
                 <Plus className="w-4 h-4 mr-1" /> Nouvelle sonde
               </Button>
@@ -736,7 +742,7 @@ export default function DriveCampaignsPage() {
                         </Badge>
                       </td>
                       <td className="py-2 px-3">
-                        {canWrite && (
+                        {canDeleteCampaign && (
                           <Button size="sm" variant="ghost" className="text-red-400" onClick={() => deleteProbe(p.probe_id)}>
                             <Trash2 className="w-3.5 h-3.5" />
                           </Button>
