@@ -6,8 +6,9 @@ import { repositoryApi } from '../api/repositoryApi';
 import type { TestProfile, TestScenario, TestType } from '../types';
 import {
   Plus, FileText, Loader2, Trash2, X, AlertCircle, Search,
-  ChevronDown, GripVertical, ClipboardCheck, Shield, Gauge, Filter, Edit2
+  ChevronDown, GripVertical, ClipboardCheck, Shield, Gauge, Filter, Edit2, Sparkles
 } from 'lucide-react';
+import SuggestScenariosModal from '../components/SuggestScenariosModal';
 import {
   type ProfileDomain, DOMAIN_META, PROFILE_TYPE_META, type ProfileType,
 } from '../config/profileDomains';
@@ -273,6 +274,7 @@ export default function ScenariosPage() {
   const { canWrite } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
   const [editingScenario, setEditingScenario] = useState<TestScenario | null>(null);
+  const [suggestProfile, setSuggestProfile] = useState<TestProfile | null>(null);
   const [search, setSearch] = useState('');
   const [testTypeFilter, setTestTypeFilter] = useState<string>('ALL');
   const [expandedProfile, setExpandedProfile] = useState<string | null>(null);
@@ -433,14 +435,36 @@ export default function ScenariosPage() {
 
                 {isExpanded && (
                   <div className="border-t border-border px-5 py-4">
+                    {/* Suggest button for this profile */}
+                    {canWrite && (
+                      <div className="flex items-center justify-end mb-3 gap-2">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setSuggestProfile(profile); }}
+                          className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 text-amber-400 hover:from-amber-500/20 hover:to-orange-500/20 transition-all font-medium"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          Suggérer des scénarios (IA)
+                        </button>
+                      </div>
+                    )}
+
                     {loadingScenarios ? (
                       <div className="flex items-center justify-center py-8">
                         <Loader2 className="w-5 h-5 text-primary animate-spin" />
                       </div>
                     ) : scenarios.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-4">
-                        Aucun scénario pour ce profil.
-                      </p>
+                      <div className="text-center py-6">
+                        <p className="text-sm text-muted-foreground mb-3">
+                          Aucun scénario pour ce profil.
+                        </p>
+                        <button
+                          onClick={() => setSuggestProfile(profile)}
+                          className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-md bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 text-amber-400 hover:from-amber-500/20 hover:to-orange-500/20 transition-all font-medium"
+                        >
+                          <Sparkles className="w-4 h-4" />
+                          Suggérer des scénarios avec l'IA
+                        </button>
+                      </div>
                     ) : (
                       <div className="space-y-2">
                         {scenarios.map((scenario) => (
@@ -489,6 +513,20 @@ export default function ScenariosPage() {
           scenario={editingScenario}
           profile={profiles.find(p => p.id === editingScenario.profile_id)}
           onClose={() => setEditingScenario(null)}
+        />
+      )}
+
+      {/* Suggest Scenarios Modal */}
+      {suggestProfile && (
+        <SuggestScenariosModal
+          profile={suggestProfile}
+          projectId={currentProject.id}
+          projectName={currentProject.name}
+          open={!!suggestProfile}
+          onClose={() => setSuggestProfile(null)}
+          onImported={() => {
+            queryClient.invalidateQueries({ queryKey: ['scenarios'] });
+          }}
         />
       )}
     </div>
