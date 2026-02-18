@@ -2,11 +2,16 @@ import apiClient from './client';
 import {
   localProjects, localProfiles, localScenarios,
   localDatasets, localExecutions,
+  localDatasetInstances, localDatasetSecrets, localBundles,
+  localBundleItems, localValidation,
 } from './localStore';
 import type {
   Project, PaginatedResponse, Execution,
   CreateProjectRequest, UpdateProjectRequest,
   TestProfile, TestScenario, Dataset,
+  DatasetInstance, TargetEnv, DatasetInstanceStatus,
+  DatasetBundle, BundleStatus, BundleItem, DatasetSecretKey,
+  BundleValidationResult, ScenarioDatasetValidation,
 } from '../types';
 
 const PREFIX = '/api/v1/repository';
@@ -191,4 +196,155 @@ export const repositoryApi = {
       () => apiClient.delete(`${PREFIX}/datasets/${datasetId}`).then(r => r.data),
       () => localDatasets.delete(datasetId),
     ),
+
+  // ─── Dataset Instances (DATASET-1B) ────────────────────────────────────────
+
+  listDatasetInstances: (projectId: string, params?: {
+    env?: TargetEnv; dataset_type_id?: string; status?: DatasetInstanceStatus;
+    page?: number; limit?: number;
+  }) => withFallback(
+    () => apiClient.get<PaginatedResponse<DatasetInstance>>(
+      `${PREFIX}/projects/${projectId}/dataset-instances`, { params }
+    ).then(r => r.data),
+    () => localDatasetInstances.list(projectId, params),
+  ),
+
+  getDatasetInstance: (id: string) => withFallback(
+    () => apiClient.get<{ data: DatasetInstance }>(`${PREFIX}/dataset-instances/${id}`).then(r => r.data.data),
+    () => localDatasetInstances.get(id),
+  ),
+
+  createDatasetInstance: (projectId: string, data: {
+    dataset_type_id: string; env: TargetEnv; values_json?: Record<string, unknown>; notes?: string;
+  }) => withFallback(
+    () => apiClient.post<{ data: DatasetInstance }>(
+      `${PREFIX}/projects/${projectId}/dataset-instances`, data
+    ).then(r => r.data.data),
+    () => localDatasetInstances.create(projectId, data),
+  ),
+
+  updateDatasetInstance: (id: string, data: Partial<Pick<DatasetInstance, 'values_json' | 'status' | 'notes'>>) =>
+    withFallback(
+      () => apiClient.patch<{ data: DatasetInstance }>(`${PREFIX}/dataset-instances/${id}`, data).then(r => r.data.data),
+      () => localDatasetInstances.update(id, data),
+    ),
+
+  cloneDatasetInstance: (id: string) => withFallback(
+    () => apiClient.post<{ data: DatasetInstance }>(`${PREFIX}/dataset-instances/${id}/clone`).then(r => r.data.data),
+    () => localDatasetInstances.clone(id),
+  ),
+
+  deleteDatasetInstance: (id: string) => withFallback(
+    () => apiClient.delete(`${PREFIX}/dataset-instances/${id}`).then(() => undefined),
+    () => localDatasetInstances.delete(id),
+  ),
+
+  // ─── Dataset Secrets (DATASET-1B) ──────────────────────────────────────────
+
+  listDatasetSecrets: (datasetId: string) => withFallback(
+    () => apiClient.get<{ data: DatasetSecretKey[] }>(
+      `${PREFIX}/dataset-instances/${datasetId}/secrets`
+    ).then(r => r.data.data),
+    () => localDatasetSecrets.list(datasetId),
+  ),
+
+  setDatasetSecret: (datasetId: string, keyPath: string, isSecret: boolean) => withFallback(
+    () => apiClient.put<{ data: DatasetSecretKey }>(
+      `${PREFIX}/dataset-instances/${datasetId}/secrets`, { key_path: keyPath, is_secret: isSecret }
+    ).then(r => r.data.data),
+    () => localDatasetSecrets.set(datasetId, keyPath, isSecret),
+  ),
+
+  removeDatasetSecret: (datasetId: string, keyPath: string) => withFallback(
+    () => apiClient.delete(
+      `${PREFIX}/dataset-instances/${datasetId}/secrets/${encodeURIComponent(keyPath)}`
+    ).then(() => undefined),
+    () => localDatasetSecrets.remove(datasetId, keyPath),
+  ),
+
+  maskDatasetValues: (datasetId: string, valuesJson: Record<string, unknown>) => withFallback(
+    () => apiClient.post<{ data: Record<string, unknown> }>(
+      `${PREFIX}/dataset-instances/${datasetId}/mask-values`, { values_json: valuesJson }
+    ).then(r => r.data.data),
+    () => localDatasetSecrets.maskValues(datasetId, valuesJson),
+  ),
+
+  // ─── Dataset Bundles (DATASET-1B) ──────────────────────────────────────────
+
+  listBundles: (projectId: string, params?: {
+    env?: TargetEnv; status?: BundleStatus; page?: number; limit?: number;
+  }) => withFallback(
+    () => apiClient.get<PaginatedResponse<DatasetBundle>>(
+      `${PREFIX}/projects/${projectId}/dataset-bundles`, { params }
+    ).then(r => r.data),
+    () => localBundles.list(projectId, params),
+  ),
+
+  getBundle: (id: string) => withFallback(
+    () => apiClient.get<{ data: DatasetBundle }>(`${PREFIX}/dataset-bundles/${id}`).then(r => r.data.data),
+    () => localBundles.get(id),
+  ),
+
+  createBundle: (projectId: string, data: { name: string; env: TargetEnv; tags?: string[] }) =>
+    withFallback(
+      () => apiClient.post<{ data: DatasetBundle }>(
+        `${PREFIX}/projects/${projectId}/dataset-bundles`, data
+      ).then(r => r.data.data),
+      () => localBundles.create(projectId, data),
+    ),
+
+  updateBundle: (id: string, data: Partial<Pick<DatasetBundle, 'name' | 'status' | 'tags'>>) =>
+    withFallback(
+      () => apiClient.patch<{ data: DatasetBundle }>(`${PREFIX}/dataset-bundles/${id}`, data).then(r => r.data.data),
+      () => localBundles.update(id, data),
+    ),
+
+  cloneBundle: (id: string) => withFallback(
+    () => apiClient.post<{ data: DatasetBundle }>(`${PREFIX}/dataset-bundles/${id}/clone`).then(r => r.data.data),
+    () => localBundles.clone(id),
+  ),
+
+  deleteBundle: (id: string) => withFallback(
+    () => apiClient.delete(`${PREFIX}/dataset-bundles/${id}`).then(() => undefined),
+    () => localBundles.delete(id),
+  ),
+
+  // ─── Bundle Items (DATASET-1B) ─────────────────────────────────────────────
+
+  listBundleItems: (bundleId: string) => withFallback(
+    () => apiClient.get<{ data: BundleItem[] }>(
+      `${PREFIX}/dataset-bundles/${bundleId}/items`
+    ).then(r => r.data.data),
+    () => localBundleItems.list(bundleId),
+  ),
+
+  addBundleItem: (bundleId: string, datasetId: string) => withFallback(
+    () => apiClient.post<{ data: BundleItem }>(
+      `${PREFIX}/dataset-bundles/${bundleId}/items`, { dataset_id: datasetId }
+    ).then(r => r.data.data),
+    () => localBundleItems.add(bundleId, datasetId),
+  ),
+
+  removeBundleItem: (bundleId: string, datasetId: string) => withFallback(
+    () => apiClient.delete(
+      `${PREFIX}/dataset-bundles/${bundleId}/items/${datasetId}`
+    ).then(() => undefined),
+    () => localBundleItems.remove(bundleId, datasetId),
+  ),
+
+  // ─── Validation (DATASET-1B) ───────────────────────────────────────────────
+
+  validateBundleForScenario: (bundleId: string, scenarioId: string) => withFallback(
+    () => apiClient.post<{ data: BundleValidationResult }>(
+      `${PREFIX}/dataset-bundles/${bundleId}/validate-for-scenario`, { scenario_id: scenarioId }
+    ).then(r => r.data.data),
+    () => localValidation.validateBundleForScenario(bundleId, scenarioId),
+  ),
+
+  validateScenarioDatasets: (scenarioId: string, env: TargetEnv) => withFallback(
+    () => apiClient.post<{ data: ScenarioDatasetValidation }>(
+      `${PREFIX}/scenarios/${scenarioId}/validate-datasets`, { env }
+    ).then(r => r.data.data),
+    () => localValidation.validateScenarioDatasets(scenarioId, env),
+  ),
 };

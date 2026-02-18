@@ -2,9 +2,8 @@ import { useState, useMemo } from 'react';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  localDatasetInstances, localDatasetSecrets, localDatasetTypes,
-} from '../api/localStore';
+import { localDatasetTypes } from '../api/localStore';
+import { useDatasetStorage } from '../contexts/DatasetStorageContext';
 import type { DatasetInstance, DatasetType, TargetEnv, DatasetInstanceStatus } from '../types';
 import {
   Plus, Database, Loader2, Trash2, X, Search, Filter, Copy,
@@ -56,6 +55,7 @@ function CreateDatasetModal({ isOpen, onClose, projectId }: {
   isOpen: boolean; onClose: () => void; projectId: string;
 }) {
   const queryClient = useQueryClient();
+  const { adapter } = useDatasetStorage();
   const [env, setEnv] = useState<TargetEnv>('PREPROD');
   const [datasetTypeId, setDatasetTypeId] = useState('');
   const [notes, setNotes] = useState('');
@@ -67,7 +67,7 @@ function CreateDatasetModal({ isOpen, onClose, projectId }: {
   const datasetTypes = (dtData?.data || []) as DatasetType[];
 
   const mutation = useMutation({
-    mutationFn: async () => localDatasetInstances.create(projectId, { dataset_type_id: datasetTypeId, env, notes }),
+    mutationFn: async () => adapter.instances.create(projectId, { dataset_type_id: datasetTypeId, env, notes }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dataset_instances'] });
       toast.success('Dataset instance créé');
@@ -154,6 +154,7 @@ function EditDatasetModal({ instance, onClose }: {
   instance: DatasetInstance; onClose: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { adapter } = useDatasetStorage();
   const [valuesJson, setValuesJson] = useState<Record<string, unknown>>({ ...instance.values_json });
   const [notes, setNotes] = useState(instance.notes || '');
   const [jsonError, setJsonError] = useState<string | null>(null);
@@ -164,12 +165,16 @@ function EditDatasetModal({ instance, onClose }: {
     try { return localDatasetTypes.get(instance.dataset_type_id); } catch { return null; }
   }, [instance.dataset_type_id]);
 
-  // Charger les secrets
-  const secrets = useMemo(() => localDatasetSecrets.list(instance.dataset_id), [instance.dataset_id]);
+  // Charger les secrets via adapter
+  const { data: secretsData } = useQuery({
+    queryKey: ['dataset_secrets', instance.dataset_id],
+    queryFn: () => adapter.secrets.list(instance.dataset_id),
+  });
+  const secrets = secretsData || [];
   const secretPaths = useMemo(() => new Set(secrets.filter(s => s.is_secret).map(s => s.key_path)), [secrets]);
 
   const saveMutation = useMutation({
-    mutationFn: async () => localDatasetInstances.update(instance.dataset_id, { values_json: valuesJson, notes }),
+    mutationFn: async () => adapter.instances.update(instance.dataset_id, { values_json: valuesJson, notes }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dataset_instances'] });
       toast.success('Dataset sauvegardé');
@@ -179,7 +184,7 @@ function EditDatasetModal({ instance, onClose }: {
   });
 
   const activateMutation = useMutation({
-    mutationFn: async () => localDatasetInstances.update(instance.dataset_id, { status: 'ACTIVE', values_json: valuesJson, notes }),
+    mutationFn: async () => adapter.instances.update(instance.dataset_id, { status: 'ACTIVE', values_json: valuesJson, notes }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dataset_instances'] });
       toast.success('Dataset activé');
@@ -188,7 +193,7 @@ function EditDatasetModal({ instance, onClose }: {
   });
 
   const deprecateMutation = useMutation({
-    mutationFn: async () => localDatasetInstances.update(instance.dataset_id, { status: 'DEPRECATED' }),
+    mutationFn: async () => adapter.instances.update(instance.dataset_id, { status: 'DEPRECATED' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dataset_instances'] });
       toast.success('Dataset déprécié');
@@ -196,9 +201,10 @@ function EditDatasetModal({ instance, onClose }: {
     },
   });
 
-  const toggleSecret = (keyPath: string) => {
+  const toggleSecret = async (keyPath: string) => {
     const isCurrentlySecret = secretPaths.has(keyPath);
-    localDatasetSecrets.set(instance.dataset_id, keyPath, !isCurrentlySecret);
+    await adapter.secrets.set(instance.dataset_id, keyPath, !isCurrentlySecret);
+    queryClient.invalidateQueries({ queryKey: ['dataset_secrets'] });
     queryClient.invalidateQueries({ queryKey: ['dataset_instances'] });
   };
 
@@ -397,6 +403,7 @@ function EditDatasetModal({ instance, onClose }: {
 export default function DatasetsPage() {
   const { currentProject } = useProject();
   const { canWrite } = useAuth();
+  const { adapter, mode } = useDatasetStorage();
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [editingInstance, setEditingInstance] = useState<DatasetInstance | null>(null);
@@ -407,7 +414,7 @@ export default function DatasetsPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['dataset_instances', currentProject?.id, envFilter, statusFilter, typeFilter],
-    queryFn: () => localDatasetInstances.list(currentProject!.id, {
+    queryFn: () => adapter.instances.list(currentProject!.id, {
       env: envFilter !== 'ALL' ? envFilter as TargetEnv : undefined,
       status: statusFilter !== 'ALL' ? statusFilter as DatasetInstanceStatus : undefined,
       dataset_type_id: typeFilter !== 'ALL' ? typeFilter : undefined,
@@ -436,7 +443,7 @@ export default function DatasetsPage() {
   }, [instances, search, dtMap]);
 
   const cloneMutation = useMutation({
-    mutationFn: async (id: string) => localDatasetInstances.clone(id),
+    mutationFn: async (id: string) => adapter.instances.clone(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dataset_instances'] });
       toast.success('Dataset cloné (nouvelle version)');
@@ -445,7 +452,7 @@ export default function DatasetsPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => localDatasetInstances.delete(id),
+    mutationFn: async (id: string) => adapter.instances.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dataset_instances'] });
       toast.success('Dataset supprimé');
@@ -475,6 +482,9 @@ export default function DatasetsPage() {
           <p className="text-sm text-muted-foreground mt-1">
             Instances de datasets par environnement pour <strong className="text-foreground">{currentProject.name}</strong>.
             Workflow : <span className="font-mono text-xs">DRAFT → ACTIVE → DEPRECATED</span>
+            <span className="ml-2 text-[10px] font-mono px-1.5 py-0.5 rounded bg-secondary/50 border border-border">
+              mode: {mode}
+            </span>
           </p>
         </div>
         {canWrite && (

@@ -4,6 +4,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { ProjectProvider } from "./state/projectStore";
+import { DatasetStorageProvider } from "./contexts/DatasetStorageContext";
 import DashboardLayout from "./components/DashboardLayout";
 import { RequireProject } from "./components/RequireProject";
 import type { ReactNode } from "react";
@@ -108,8 +109,10 @@ function App() {
       <ThemeProvider defaultTheme="dark" storageKey="agilestest-theme">
         <AuthProvider>
           <ProjectProvider>
-            <AppRouter />
-            <Toaster />
+            <DatasetStorageProvider>
+              <AppRouter />
+              <Toaster />
+            </DatasetStorageProvider>
           </ProjectProvider>
         </AuthProvider>
       </ThemeProvider>

@@ -2,11 +2,9 @@ import { useState, useMemo } from 'react';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  localBundles, localBundleItems, localDatasetInstances,
-  localDatasetTypes, localValidation, localScenarios,
-} from '../api/localStore';
+import { localDatasetTypes } from '../api/localStore';
 import { repositoryApi } from '../api/repositoryApi';
+import { useDatasetStorage } from '../contexts/DatasetStorageContext';
 import type {
   DatasetBundle, DatasetInstance, DatasetType, TargetEnv, BundleStatus,
   TestScenario, BundleValidationResult,
@@ -62,6 +60,7 @@ function CreateBundleModal({ isOpen, onClose, projectId, projectDomain }: {
   isOpen: boolean; onClose: () => void; projectId: string; projectDomain: string;
 }) {
   const queryClient = useQueryClient();
+  const { adapter } = useDatasetStorage();
   const [env, setEnv] = useState<TargetEnv>('PREPROD');
   const [name, setName] = useState('');
   const [tags, setTags] = useState('');
@@ -72,7 +71,7 @@ function CreateBundleModal({ isOpen, onClose, projectId, projectDomain }: {
   }, [env, projectDomain]);
 
   const mutation = useMutation({
-    mutationFn: async () => localBundles.create(projectId, {
+    mutationFn: async () => adapter.bundles.create(projectId, {
       name: name || suggestedName,
       env,
       tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : [],
@@ -154,6 +153,7 @@ function CreateBundleModal({ isOpen, onClose, projectId, projectDomain }: {
 function ValidateBundleModal({ bundle, onClose, projectId }: {
   bundle: DatasetBundle; onClose: () => void; projectId: string;
 }) {
+  const { adapter } = useDatasetStorage();
   const [scenarioId, setScenarioId] = useState('');
   const [result, setResult] = useState<BundleValidationResult | null>(null);
 
@@ -164,10 +164,10 @@ function ValidateBundleModal({ bundle, onClose, projectId }: {
   });
   const scenarios = (scenariosData?.data || []) as TestScenario[];
 
-  const handleValidate = () => {
+  const handleValidate = async () => {
     if (!scenarioId) return;
     try {
-      const res = localValidation.validateBundleForScenario(bundle.bundle_id, scenarioId);
+      const res = await adapter.validation.validateBundleForScenario(bundle.bundle_id, scenarioId);
       setResult(res);
     } catch (err: unknown) {
       toast.error((err as Error).message);
@@ -283,14 +283,19 @@ function ValidateBundleModal({ bundle, onClose, projectId }: {
 
 function BundleDetail({ bundle, projectId }: { bundle: DatasetBundle; projectId: string }) {
   const queryClient = useQueryClient();
+  const { adapter } = useDatasetStorage();
   const { canWrite } = useAuth();
   const [addingDataset, setAddingDataset] = useState(false);
 
-  // Get bundle items
-  const bundleItems = useMemo(() => localBundleItems.list(bundle.bundle_id), [bundle.bundle_id]);
+  // Get bundle items via adapter
+  const { data: bundleItemsData } = useQuery({
+    queryKey: ['bundle_items', bundle.bundle_id],
+    queryFn: () => adapter.bundleItems.list(bundle.bundle_id),
+  });
+  const bundleItems = bundleItemsData || [];
   const allInstances = useQuery({
     queryKey: ['dataset_instances', projectId],
-    queryFn: () => localDatasetInstances.list(projectId),
+    queryFn: () => adapter.instances.list(projectId),
   });
   const allDatasets = (allInstances.data?.data || []) as DatasetInstance[];
 
@@ -321,8 +326,9 @@ function BundleDetail({ bundle, projectId }: { bundle: DatasetBundle; projectId:
   }, [allDatasets, bundleItems, bundleDatasets, bundle.env]);
 
   const addMutation = useMutation({
-    mutationFn: async (datasetId: string) => localBundleItems.add(bundle.bundle_id, datasetId),
+    mutationFn: async (datasetId: string) => adapter.bundleItems.add(bundle.bundle_id, datasetId),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bundle_items'] });
       queryClient.invalidateQueries({ queryKey: ['dataset_bundles'] });
       queryClient.invalidateQueries({ queryKey: ['dataset_instances'] });
       toast.success('Dataset ajouté au bundle');
@@ -331,8 +337,9 @@ function BundleDetail({ bundle, projectId }: { bundle: DatasetBundle; projectId:
   });
 
   const removeMutation = useMutation({
-    mutationFn: async (datasetId: string) => localBundleItems.remove(bundle.bundle_id, datasetId),
+    mutationFn: async (datasetId: string) => adapter.bundleItems.remove(bundle.bundle_id, datasetId),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bundle_items'] });
       queryClient.invalidateQueries({ queryKey: ['dataset_bundles'] });
       toast.success('Dataset retiré du bundle');
     },
@@ -425,6 +432,7 @@ function BundleDetail({ bundle, projectId }: { bundle: DatasetBundle; projectId:
 export default function BundlesPage() {
   const { currentProject } = useProject();
   const { canWrite } = useAuth();
+  const { adapter, mode } = useDatasetStorage();
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [validatingBundle, setValidatingBundle] = useState<DatasetBundle | null>(null);
@@ -435,7 +443,7 @@ export default function BundlesPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['dataset_bundles', currentProject?.id, envFilter, statusFilter],
-    queryFn: () => localBundles.list(currentProject!.id, {
+    queryFn: () => adapter.bundles.list(currentProject!.id, {
       env: envFilter !== 'ALL' ? envFilter as TargetEnv : undefined,
       status: statusFilter !== 'ALL' ? statusFilter as BundleStatus : undefined,
     }),
@@ -454,7 +462,7 @@ export default function BundlesPage() {
   }, [bundles, search]);
 
   const activateMutation = useMutation({
-    mutationFn: async (id: string) => localBundles.update(id, { status: 'ACTIVE' }),
+    mutationFn: async (id: string) => adapter.bundles.update(id, { status: 'ACTIVE' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dataset_bundles'] });
       toast.success('Bundle activé');
@@ -462,7 +470,7 @@ export default function BundlesPage() {
   });
 
   const deprecateMutation = useMutation({
-    mutationFn: async (id: string) => localBundles.update(id, { status: 'DEPRECATED' }),
+    mutationFn: async (id: string) => adapter.bundles.update(id, { status: 'DEPRECATED' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dataset_bundles'] });
       toast.success('Bundle déprécié');
@@ -470,7 +478,7 @@ export default function BundlesPage() {
   });
 
   const cloneMutation = useMutation({
-    mutationFn: async (id: string) => localBundles.clone(id),
+    mutationFn: async (id: string) => adapter.bundles.clone(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dataset_bundles'] });
       toast.success('Bundle cloné');
@@ -479,7 +487,7 @@ export default function BundlesPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => localBundles.delete(id),
+    mutationFn: async (id: string) => adapter.bundles.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dataset_bundles'] });
       toast.success('Bundle supprimé');
@@ -506,6 +514,9 @@ export default function BundlesPage() {
           <p className="text-sm text-muted-foreground mt-1">
             Regroupez les datasets par environnement pour <strong className="text-foreground">{currentProject.name}</strong>.
             Un bundle = 1 dataset max par type.
+            <span className="ml-2 text-[10px] font-mono px-1.5 py-0.5 rounded bg-secondary/50 border border-border">
+              mode: {mode}
+            </span>
           </p>
         </div>
         {canWrite && (
@@ -580,7 +591,8 @@ export default function BundlesPage() {
         <div className="space-y-2">
           {filtered.map(bundle => {
             const isExpanded = expandedBundle === bundle.bundle_id;
-            const itemCount = localBundleItems.list(bundle.bundle_id).length;
+            // Item count will be fetched when expanded; show placeholder
+            const itemCount = 0; // Loaded dynamically in BundleDetail
 
             return (
               <div key={bundle.bundle_id} className="bg-card border border-border rounded-lg overflow-hidden">

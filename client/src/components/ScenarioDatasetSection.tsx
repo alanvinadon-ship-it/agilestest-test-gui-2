@@ -1,12 +1,15 @@
 /**
  * ScenarioDatasetSection — Section "Datasets & Bundles" intégrée dans chaque scénario.
  * Affiche la compatibilité par environnement et les bundles disponibles.
+ * Utilise le DatasetStorageAdapter (local ou API selon feature flag).
  */
 import { useState, useMemo } from 'react';
-import { localValidation, localDatasetInstances, localDatasetTypes } from '../api/localStore';
+import { useQuery } from '@tanstack/react-query';
+import { localDatasetTypes } from '../api/localStore';
+import { useDatasetStorage } from '../contexts/DatasetStorageContext';
 import type { TestScenario, TargetEnv, ScenarioDatasetValidation, DatasetType } from '../types';
 import {
-  Database, Package, CheckCircle2, AlertTriangle, XCircle,
+  Package, CheckCircle2, AlertTriangle, XCircle,
   ChevronDown, ChevronRight,
 } from 'lucide-react';
 
@@ -25,6 +28,7 @@ interface Props {
 
 export default function ScenarioDatasetSection({ scenario }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const { adapter } = useDatasetStorage();
   const requiredTypes = scenario.required_dataset_types || [];
 
   // Charger les noms des dataset types
@@ -35,25 +39,32 @@ export default function ScenarioDatasetSection({ scenario }: Props) {
     } catch { return new Map<string, string>(); }
   }, []);
 
-  // Validation par env
-  const validationByEnv = useMemo(() => {
-    if (requiredTypes.length === 0) return new Map<TargetEnv, ScenarioDatasetValidation>();
-    const map = new Map<TargetEnv, ScenarioDatasetValidation>();
-    for (const env of ALL_ENVS) {
-      try {
-        map.set(env, localValidation.validateScenarioDatasets(scenario.id, env));
-      } catch {
-        // ignore
+  // Validation par env via adapter (async-compatible)
+  const { data: validationByEnv } = useQuery({
+    queryKey: ['scenario_dataset_validation', scenario.id, requiredTypes.join(',')],
+    queryFn: async () => {
+      if (requiredTypes.length === 0) return new Map<TargetEnv, ScenarioDatasetValidation>();
+      const map = new Map<TargetEnv, ScenarioDatasetValidation>();
+      for (const env of ALL_ENVS) {
+        try {
+          const result = await adapter.validation.validateScenarioDatasets(scenario.id, env);
+          map.set(env, result);
+        } catch {
+          // ignore
+        }
       }
-    }
-    return map;
-  }, [scenario.id, requiredTypes]);
+      return map;
+    },
+    enabled: requiredTypes.length > 0,
+    staleTime: 10_000,
+  });
 
   if (requiredTypes.length === 0) {
     return null; // Pas de dataset requis, ne rien afficher
   }
 
-  const okCount = Array.from(validationByEnv.values()).filter(v => v.ok_for_env).length;
+  const envMap = validationByEnv || new Map<TargetEnv, ScenarioDatasetValidation>();
+  const okCount = Array.from(envMap.values()).filter(v => v.ok_for_env).length;
 
   return (
     <div className="mt-2">
@@ -77,7 +88,7 @@ export default function ScenarioDatasetSection({ scenario }: Props) {
       {expanded && (
         <div className="mt-2 space-y-2 pl-4 border-l-2 border-border" onClick={e => e.stopPropagation()}>
           {ALL_ENVS.map(env => {
-            const validation = validationByEnv.get(env);
+            const validation = envMap.get(env);
             if (!validation) return null;
             const meta = ENV_META[env];
 
