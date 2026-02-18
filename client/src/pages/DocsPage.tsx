@@ -13,7 +13,7 @@ import remarkGfm from 'remark-gfm';
 import {
   BookOpen, Search, ChevronRight, Copy, Check,
   User, Shield, Server, HelpCircle, FileText,
-  Hash, ExternalLink,
+  Hash, ExternalLink, Radio,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -32,6 +32,7 @@ const GUIDES: GuideEntry[] = [
   { slug: 'admin-guide', title: 'Guide Administration', icon: Shield, file: '/docs/ADMIN_GUIDE.md', description: 'Admin / DSI — RBAC, gouvernance, secrets' },
   { slug: 'ops-guide', title: 'Guide Exploitation', icon: Server, file: '/docs/OPS_GUIDE.md', description: 'Runner Docker, MinIO, diagnostics' },
   { slug: 'troubleshooting', title: 'Troubleshooting', icon: HelpCircle, file: '/docs/TROUBLESHOOTING.md', description: 'FAQ et résolution de problèmes' },
+  { slug: 'capture-policy', title: 'Capture Policy', icon: Radio, file: '/docs/CAPTURE_POLICY.md', description: 'Capture réseau PCAP — tcpdump & Probe SPAN/TAP' },
 ];
 
 // ─── TOC extraction ─────────────────────────────────────────────────────

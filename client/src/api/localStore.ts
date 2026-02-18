@@ -23,6 +23,8 @@ import type {
   DriveImportResult,
 } from '../types';
 import { DATASET_TYPE_CATALOG } from '../config/datasetTypeCatalog';
+import type { CapturePolicy, CaptureSession, CaptureSessionStatus } from '../capture/types';
+import { DEFAULT_CAPTURE_POLICY } from '../capture/types';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -1910,5 +1912,200 @@ export const localDriveImports = {
   delete(id: string): void {
     const items = getCollection<DriveImportResult>('drive_imports').filter(i => i.import_id !== id);
     setCollection('drive_imports', items);
+  },
+};
+
+// ─── Capture Policies ──────────────────────────────────────────────────────
+
+type CapturePolicyScope = 'project' | 'campaign' | 'scenario';
+
+interface StoredCapturePolicy {
+  id: string;
+  scope: CapturePolicyScope;
+  scope_id: string; // project_id, campaign_id, or scenario_id
+  policy: CapturePolicy;
+  updated_at: string;
+}
+
+export const localCapturePolicies = {
+  /** Récupérer la policy pour un scope donné */
+  get(scope: CapturePolicyScope, scopeId: string): CapturePolicy | null {
+    const items = getCollection<StoredCapturePolicy>('capture_policies');
+    const found = items.find(p => p.scope === scope && p.scope_id === scopeId);
+    return found ? found.policy : null;
+  },
+
+  /** Sauvegarder ou mettre à jour la policy pour un scope */
+  upsert(scope: CapturePolicyScope, scopeId: string, policy: CapturePolicy): StoredCapturePolicy {
+    const items = getCollection<StoredCapturePolicy>('capture_policies');
+    const idx = items.findIndex(p => p.scope === scope && p.scope_id === scopeId);
+    if (idx >= 0) {
+      items[idx] = { ...items[idx], policy, updated_at: now() };
+      setCollection('capture_policies', items);
+      return items[idx];
+    }
+    const entry: StoredCapturePolicy = {
+      id: uid(),
+      scope,
+      scope_id: scopeId,
+      policy,
+      updated_at: now(),
+    };
+    items.push(entry);
+    setCollection('capture_policies', items);
+    return entry;
+  },
+
+  /** Supprimer l'override d'un scope (revient au défaut parent) */
+  remove(scope: CapturePolicyScope, scopeId: string): void {
+    const items = getCollection<StoredCapturePolicy>('capture_policies')
+      .filter(p => !(p.scope === scope && p.scope_id === scopeId));
+    setCollection('capture_policies', items);
+  },
+
+  /** Lister toutes les policies (pour debug/admin) */
+  list(): StoredCapturePolicy[] {
+    return getCollection<StoredCapturePolicy>('capture_policies');
+  },
+};
+
+// ─── Capture Sessions (Mode B — Probe SPAN/TAP) ───────────────────────────
+
+export const localCaptureSessions = {
+  list(params?: {
+    project_id?: string;
+    campaign_id?: string;
+    drive_job_id?: string;
+    status?: CaptureSessionStatus;
+    page?: number;
+    limit?: number;
+  }): PaginatedResponse<CaptureSession> {
+    let items = getCollection<CaptureSession>('capture_sessions');
+    if (params?.project_id) items = items.filter(s => s.project_id === params.project_id);
+    if (params?.campaign_id) items = items.filter(s => s.campaign_id === params.campaign_id);
+    if (params?.drive_job_id) items = items.filter(s => s.drive_job_id === params.drive_job_id);
+    if (params?.status) items = items.filter(s => s.status === params.status);
+    items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return paginate(items, params?.page, params?.limit);
+  },
+
+  get(sessionId: string): CaptureSession {
+    const item = getCollection<CaptureSession>('capture_sessions').find(s => s.session_id === sessionId);
+    if (!item) throw new Error('Session de capture introuvable');
+    return item;
+  },
+
+  /** Créer une session de capture (appelé avant le démarrage de la probe) */
+  create(data: {
+    project_id: string;
+    campaign_id?: string;
+    drive_job_id?: string;
+    execution_id?: string;
+    probe_id: string;
+    iface: string;
+    bpf_filter: string;
+    vlan_filter?: number;
+  }): CaptureSession {
+    const items = getCollection<CaptureSession>('capture_sessions');
+    const session: CaptureSession = {
+      session_id: uid(),
+      project_id: data.project_id,
+      campaign_id: data.campaign_id,
+      drive_job_id: data.drive_job_id,
+      execution_id: data.execution_id,
+      probe_id: data.probe_id,
+      iface: data.iface,
+      bpf_filter: data.bpf_filter,
+      vlan_filter: data.vlan_filter,
+      status: 'PENDING',
+      artifacts: [],
+      created_at: now(),
+    };
+    items.push(session);
+    setCollection('capture_sessions', items);
+    return session;
+  },
+
+  /** Démarrer la session (PENDING → RUNNING) */
+  start(sessionId: string): CaptureSession {
+    const items = getCollection<CaptureSession>('capture_sessions');
+    const idx = items.findIndex(s => s.session_id === sessionId);
+    if (idx === -1) throw new Error('Session introuvable');
+    items[idx] = { ...items[idx], status: 'RUNNING', started_at: now() };
+    setCollection('capture_sessions', items);
+    return items[idx];
+  },
+
+  /** Arrêter la session (RUNNING → COMPLETED) */
+  stop(sessionId: string): CaptureSession {
+    const items = getCollection<CaptureSession>('capture_sessions');
+    const idx = items.findIndex(s => s.session_id === sessionId);
+    if (idx === -1) throw new Error('Session introuvable');
+    items[idx] = { ...items[idx], status: 'COMPLETED', stopped_at: now() };
+    setCollection('capture_sessions', items);
+    return items[idx];
+  },
+
+  /** Marquer en erreur */
+  fail(sessionId: string, errorMessage: string): CaptureSession {
+    const items = getCollection<CaptureSession>('capture_sessions');
+    const idx = items.findIndex(s => s.session_id === sessionId);
+    if (idx === -1) throw new Error('Session introuvable');
+    items[idx] = { ...items[idx], status: 'FAILED', stopped_at: now(), error_message: errorMessage };
+    setCollection('capture_sessions', items);
+    return items[idx];
+  },
+
+  /** Annuler la session */
+  cancel(sessionId: string): CaptureSession {
+    const items = getCollection<CaptureSession>('capture_sessions');
+    const idx = items.findIndex(s => s.session_id === sessionId);
+    if (idx === -1) throw new Error('Session introuvable');
+    items[idx] = { ...items[idx], status: 'CANCELLED', stopped_at: now() };
+    setCollection('capture_sessions', items);
+    return items[idx];
+  },
+
+  /** Ajouter des artefacts à une session */
+  addArtifacts(sessionId: string, artifacts: CaptureSession['artifacts']): CaptureSession {
+    const items = getCollection<CaptureSession>('capture_sessions');
+    const idx = items.findIndex(s => s.session_id === sessionId);
+    if (idx === -1) throw new Error('Session introuvable');
+    items[idx] = { ...items[idx], artifacts: [...items[idx].artifacts, ...artifacts] };
+    setCollection('capture_sessions', items);
+    return items[idx];
+  },
+
+  /** Simuler un cycle complet de capture probe (pour le mode local/demo) */
+  simulateCapture(data: {
+    project_id: string;
+    campaign_id?: string;
+    drive_job_id?: string;
+    probe_id: string;
+    iface: string;
+    bpf_filter: string;
+    vlan_filter?: number;
+  }): CaptureSession {
+    // Créer
+    const session = this.create(data);
+    // Démarrer
+    this.start(session.session_id);
+    // Simuler des artefacts
+    const fakeArtifacts = [
+      {
+        filename: `capture_${session.session_id}.pcapng`,
+        minio_path: `artifacts/${data.project_id}/${session.session_id}/capture.pcapng`,
+        size_bytes: Math.floor(Math.random() * 50_000_000) + 1_000_000,
+        sha256: Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(''),
+      },
+    ];
+    this.addArtifacts(session.session_id, fakeArtifacts);
+    // Compléter
+    return this.stop(session.session_id);
+  },
+
+  delete(sessionId: string): void {
+    const items = getCollection<CaptureSession>('capture_sessions').filter(s => s.session_id !== sessionId);
+    setCollection('capture_sessions', items);
   },
 };

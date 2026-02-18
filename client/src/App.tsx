@@ -32,6 +32,7 @@ import AdminAuditPage from "./pages/AdminAuditPage";
 import AdminRolesPage from "./pages/AdminRolesPage";
 import DriveCampaignsPage from "./pages/DriveCampaignsPage";
 import DriveReportingPage from "./pages/DriveReportingPage";
+import ProjectSettingsPage from "./pages/ProjectSettingsPage";
 
 // ─── Query Client ───────────────────────────────────────────────────────────
 const queryClient = new QueryClient({
@@ -124,6 +125,11 @@ function AppRouter() {
               </Route>
               <Route path="/probes">
                 <ProjectScoped><ProbesPage /></ProjectScoped>
+              </Route>
+
+              {/* Project settings */}
+              <Route path="/settings">
+                <ProjectScoped><ProjectSettingsPage /></ProjectScoped>
               </Route>
 
               {/* Drive Test pages (project-scoped) */}

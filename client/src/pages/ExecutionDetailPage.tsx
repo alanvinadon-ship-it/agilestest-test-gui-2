@@ -21,9 +21,12 @@ import {
   Ban, Download, FileText, Image, Video, FileCode, File,
   AlertCircle, Activity, Wrench, Sparkles, Play, RotateCcw,
   Code2, Globe, Package, Server, ChevronDown, ChevronRight,
-  Save, Zap, Eye, FileDiff,
+  Save, Zap, Eye, FileDiff, Shield,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { resolveCapturePolicy, CaptureModeBadge, captureModeLabel, captureSourceLabel } from '../capture';
+import { localCapturePolicies, localCaptureSessions } from '../api/localStore';
+import type { CaptureSession } from '../capture/types';
 
 const statusConfig: Record<ExecutionStatus, { icon: typeof CheckCircle2; label: string; cls: string; bg: string }> = {
   PENDING: { icon: Clock, label: 'En attente', cls: 'text-yellow-400', bg: 'bg-yellow-400/10' },
@@ -525,6 +528,116 @@ export default function ExecutionDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Capture Policy & Session */}
+      {execution && (() => {
+        const pid = currentProject?.id || execution.project_id || '';
+        const projectPolicy = localCapturePolicies.get('project', pid);
+        const captureResult = resolveCapturePolicy(projectPolicy);
+        const captureSessions = localCaptureSessions.list({ project_id: pid }).data.filter(
+          (s: CaptureSession) => s.execution_id === execution.id
+        );
+        const pcapArtifacts = artifacts.filter(a => a.type === 'PCAP');
+        
+        return (
+          <div className="bg-card border border-border rounded-lg overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 text-amber-400" />
+                <h3 className="text-sm font-heading font-semibold text-foreground">Capture Réseau</h3>
+              </div>
+              <CaptureModeBadge mode={captureResult.mode} />
+            </div>
+            <div className="px-5 py-3 space-y-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase">Mode</p>
+                  <p className="text-xs text-foreground">{captureModeLabel(captureResult.mode)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase">Source</p>
+                  <p className="text-xs text-foreground">{captureSourceLabel(captureResult.source)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase">Rétention</p>
+                  <p className="text-xs text-foreground">{captureResult.policy.retention_days} jours</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase">PCAP</p>
+                  <p className="text-xs text-foreground">{pcapArtifacts.length} fichier(s)</p>
+                </div>
+              </div>
+
+              {captureResult.validation_errors.length > 0 && (
+                <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/20 rounded-md p-2">
+                  <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
+                  <div className="text-xs text-red-400">
+                    {captureResult.validation_errors.map((e, i) => <p key={i}>{e}</p>)}
+                  </div>
+                </div>
+              )}
+
+              {captureResult.warnings.length > 0 && (
+                <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/20 rounded-md p-2">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="text-xs text-amber-400">
+                    {captureResult.warnings.map((w, i) => <p key={i}>{w}</p>)}
+                  </div>
+                </div>
+              )}
+
+              {/* Capture Sessions (Mode B) */}
+              {captureSessions.length > 0 && (
+                <div className="border-t border-border/50 pt-3">
+                  <p className="text-[10px] text-muted-foreground uppercase mb-2">Sessions de capture probe</p>
+                  <div className="space-y-1">
+                    {captureSessions.map((sess: CaptureSession) => (
+                      <div key={sess.session_id} className="flex items-center justify-between text-xs bg-secondary/20 rounded px-3 py-1.5">
+                        <span className="font-mono text-foreground">{sess.session_id.slice(0, 12)}...</span>
+                        <span className="text-muted-foreground">probe={sess.probe_id}</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                          sess.status === 'COMPLETED' ? 'text-green-400 bg-green-500/10' :
+                          sess.status === 'RUNNING' ? 'text-blue-400 bg-blue-500/10' :
+                          sess.status === 'FAILED' ? 'text-red-400 bg-red-500/10' :
+                          'text-yellow-400 bg-yellow-500/10'
+                        }`}>{sess.status}</span>
+                        {sess.artifacts.length > 0 && (
+                          <span className="text-muted-foreground">{sess.artifacts.length} pcap(s)</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* PCAP artifacts quick links */}
+              {pcapArtifacts.length > 0 && (
+                <div className="border-t border-border/50 pt-3">
+                  <p className="text-[10px] text-muted-foreground uppercase mb-2">Fichiers PCAP</p>
+                  <div className="space-y-1">
+                    {pcapArtifacts.map(art => (
+                      <div key={art.id} className="flex items-center justify-between text-xs bg-secondary/20 rounded px-3 py-1.5">
+                        <div className="flex items-center gap-2">
+                          <FileCode className="w-3 h-3 text-primary" />
+                          <span className="font-mono text-foreground">{art.filename}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-muted-foreground">{(art.size_bytes / 1024 / 1024).toFixed(1)} MB</span>
+                          {art.download_url && (
+                            <a href={art.download_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                              <Download className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Repair Panel — only for FAILED executions with a script */}
       {isFailed && script && canRepairScript && (

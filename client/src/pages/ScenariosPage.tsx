@@ -17,6 +17,9 @@ import GenerateScriptModal from '../components/GenerateScriptModal';
 import { localDatasetTypes } from '../api/localStore';
 import SuggestScenariosModal from '../components/SuggestScenariosModal';
 import ScenarioDatasetSection from '../components/ScenarioDatasetSection';
+import { CapturePolicyEditor } from '../capture';
+import type { CapturePolicy } from '../capture/types';
+import { localCapturePolicies } from '../api/localStore';
 import {
   type ProfileDomain, DOMAIN_META, PROFILE_TYPE_META, type ProfileType,
 } from '../config/profileDomains';
@@ -717,6 +720,18 @@ export default function ScenariosPage() {
                                   </div>
                                 )}
                                 <ScenarioDatasetSection scenario={scenario} />
+                                {/* Capture Policy Override */}
+                                <CapturePolicyEditor
+                                  value={localCapturePolicies.get('scenario', scenario.id)}
+                                  onChange={(p: CapturePolicy) => {
+                                    localCapturePolicies.upsert('scenario', scenario.id, p);
+                                  }}
+                                  showRemoveOverride={!!localCapturePolicies.get('scenario', scenario.id)}
+                                  onRemoveOverride={() => localCapturePolicies.remove('scenario', scenario.id)}
+                                  scopeLabel="Scénario"
+                                  readOnly={!canUpdateScenario}
+                                  compact
+                                />
                               </div>
                               {(canUpdateScenario || canDeleteScenario || canActivateScenario || canCreateScript) && (
                                 <div className="flex items-center gap-1 ml-3 flex-shrink-0">

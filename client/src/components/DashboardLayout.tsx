@@ -49,6 +49,7 @@ const baseNavSections: NavSection[] = [
     items: [
       { href: "/", icon: LayoutDashboard, label: "Dashboard" },
       { href: "/projects", icon: FolderKanban, label: "Projets" },
+      { href: "/settings", icon: Settings2, label: "Paramètres Projet" },
     ],
   },
   {

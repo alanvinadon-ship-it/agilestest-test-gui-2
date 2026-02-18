@@ -19,6 +19,10 @@ import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { uploadArtifacts } from './s3Uploader';
 import { collectArtifacts } from './artifactCollector';
+import { startTcpdump, stopTcpdump, getPcapArtifacts, resetSession as resetTcpdumpSession } from './tcpdumpCapture';
+import { ProbeSessionManager } from './probeSessionManager';
+import type { TcpdumpConfig } from './tcpdumpCapture';
+import type { ProbeSpanTapConfig } from './probeSessionManager';
 
 // ─── Configuration ───────────────────────────────────────────────────────
 
@@ -42,6 +46,13 @@ interface RunnerJob {
   dataset_bundle_id: string | null;
   target_env: string;
   artifact_upload_policy: string[];
+  /** Capture policy resolved by orchestration */
+  capture_mode?: 'NONE' | 'RUNNER_TCPDUMP' | 'PROBE_SPAN_TAP';
+  capture_config?: {
+    runner_tcpdump?: TcpdumpConfig;
+    probe_span_tap?: ProbeSpanTapConfig;
+    retention_days?: number;
+  };
 }
 
 interface ArtifactManifestEntry {
@@ -277,7 +288,43 @@ async function processJob(job: RunnerJob): Promise<void> {
   // Heartbeat interval
   const heartbeatInterval = setInterval(() => sendHeartbeat(job.job_id), 15000);
 
+  // Probe session manager (Mode B)
+  const probeManager = new ProbeSessionManager(CONFIG.orchestrationUrl, CONFIG.runnerId);
+
   try {
+    // 0. Start network capture if configured
+    const captureMode = job.capture_mode || 'NONE';
+    let tcpdumpSession = null;
+
+    if (captureMode === 'RUNNER_TCPDUMP' && job.capture_config?.runner_tcpdump) {
+      console.log('[CAPTURE] Mode A — Starting tcpdump on runner...');
+      const artifactDir = path.join(CONFIG.artifactsDir, job.job_id);
+      tcpdumpSession = startTcpdump(
+        job.capture_config.runner_tcpdump,
+        artifactDir,
+        job.job_id
+      );
+      if (tcpdumpSession.status === 'FAILED') {
+        console.error(`[CAPTURE] tcpdump failed to start: ${tcpdumpSession.errorMessage}`);
+      } else {
+        console.log(`[CAPTURE] tcpdump running (PID=${tcpdumpSession.pid})`);
+      }
+    }
+
+    if (captureMode === 'PROBE_SPAN_TAP' && job.capture_config?.probe_span_tap) {
+      console.log('[CAPTURE] Mode B — Starting probe capture session...');
+      try {
+        await probeManager.startCaptureSession(
+          job.capture_config.probe_span_tap,
+          job.execution_id,
+          job.project_id
+        );
+      } catch (err: any) {
+        console.error(`[CAPTURE] Probe session failed: ${err.message}`);
+        // Non-blocking: continue test execution even if probe capture fails
+      }
+    }
+
     // 1. Download script package
     const scriptDir = await downloadScriptPackage(job);
 
@@ -287,23 +334,53 @@ async function processJob(job: RunnerJob): Promise<void> {
     // 3. Run Playwright
     const metrics = await runPlaywright(scriptDir, datasetJson, job);
 
-    // 4. Collect artifacts
-    const artifactDir = path.join(CONFIG.artifactsDir, job.job_id);
-    const localArtifacts = collectArtifacts(artifactDir, job.artifact_upload_policy);
+    // 4. Stop network capture
+    if (captureMode === 'RUNNER_TCPDUMP' && tcpdumpSession?.status === 'RUNNING') {
+      console.log('[CAPTURE] Stopping tcpdump...');
+      tcpdumpSession = await stopTcpdump() || tcpdumpSession;
+    }
 
-    // 5. Upload to MinIO/S3
+    if (captureMode === 'PROBE_SPAN_TAP') {
+      console.log('[CAPTURE] Stopping probe capture...');
+      await probeManager.stopCaptureSession();
+    }
+
+    // 5. Collect artifacts (including PCAP)
+    const artifactDir = path.join(CONFIG.artifactsDir, job.job_id);
+    const localArtifacts = collectArtifacts(artifactDir, [...job.artifact_upload_policy, 'pcap']);
+
+    // Add PCAP artifacts from tcpdump session
+    if (tcpdumpSession && tcpdumpSession.pcapFiles.length > 0) {
+      const pcapArts = getPcapArtifacts(tcpdumpSession);
+      localArtifacts.push(...pcapArts);
+      console.log(`[CAPTURE] ${pcapArts.length} PCAP file(s) from tcpdump`);
+    }
+
+    // 6. Upload to MinIO/S3
     const manifest = await uploadArtifacts(
       localArtifacts,
       job.project_id,
       job.execution_id
     );
 
-    // 6. Complete job
+    // Add probe PCAP artifacts to manifest (already uploaded by probe)
+    if (captureMode === 'PROBE_SPAN_TAP') {
+      const probeManifest = probeManager.getArtifactManifest();
+      manifest.push(...probeManifest);
+      console.log(`[CAPTURE] ${probeManifest.length} PCAP file(s) from probe`);
+    }
+
+    // 7. Complete job
     const status = metrics.failed > 0 ? 'FAILED' : 'DONE';
     await completeJob(job.job_id, status, metrics, manifest);
 
   } catch (err: any) {
     console.error(`[ERROR] Job ${job.job_id} failed: ${err.message}`);
+
+    // Cleanup captures on error
+    try { await stopTcpdump(); } catch { /* ignore */ }
+    try { await probeManager.cancelSession(); } catch { /* ignore */ }
+
     await completeJob(
       job.job_id,
       'FAILED',
@@ -313,6 +390,8 @@ async function processJob(job: RunnerJob): Promise<void> {
     );
   } finally {
     clearInterval(heartbeatInterval);
+    resetTcpdumpSession();
+    probeManager.reset();
   }
 }
 

@@ -119,6 +119,59 @@ Pour les captures protocolaires :
 
 ---
 
+## Capture Policy — Configuration réseau
+
+Depuis la version DRIVE-CAPTURE-POLICY-1, la capture réseau est gérée par une **politique de capture unifiée** avec résolution en cascade.
+
+### Modes disponibles
+
+| Mode | Usage | Configuration |
+|------|-------|---------------|
+| `NONE` | Pas de capture | Défaut |
+| `RUNNER_TCPDUMP` (Mode A) | tcpdump sur le runner Docker | Interface, filtre BPF, snaplen, rotation |
+| `PROBE_SPAN_TAP` (Mode B) | Sonde réseau SPAN/TAP distante | probe_id, interface, VLAN, filtre BPF |
+
+### Résolution en cascade
+
+```
+Run Override (admin) → Scenario → Campaign → Project → NONE
+```
+
+### Configuration terrain
+
+**Mode A (Runner tcpdump)** — Pour les tests depuis le runner Docker :
+```yaml
+capture_mode: RUNNER_TCPDUMP
+runner_tcpdump:
+  iface: eth0
+  bpf_filter: "tcp port 443 or tcp port 80"
+  snaplen: 65535
+  rotate_mb: 100
+  max_files: 5
+```
+
+**Mode B (Probe SPAN/TAP)** — Pour les captures sur le réseau opérateur :
+```yaml
+capture_mode: PROBE_SPAN_TAP
+probe_span_tap:
+  probe_id: probe-abidjan-01
+  iface: ens192
+  bpf_filter: "host 10.0.0.0/8"
+  vlan_filter: 100
+  rotate_mb: 200
+```
+
+### Vérification avant campagne
+
+1. Vérifier que la politique de capture est configurée au niveau projet ou campagne
+2. Mode A : vérifier que `tcpdump` est installé et que les capabilities Docker sont présentes
+3. Mode B : vérifier que la probe est `ONLINE` via la page Probes
+4. Vérifier l'espace disque MinIO (prévoir 1 GB/heure de capture)
+
+Pour la documentation complète, voir [CAPTURE_POLICY.md](./docs/CAPTURE_POLICY.md).
+
+---
+
 ## Convention de nommage des artefacts
 
 ```

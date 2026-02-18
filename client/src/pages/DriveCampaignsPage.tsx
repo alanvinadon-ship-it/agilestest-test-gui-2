@@ -69,6 +69,9 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { CapturePolicyEditor, CaptureModeBadge } from '@/capture';
+import type { CapturePolicy } from '@/capture/types';
+import { localCapturePolicies } from '@/api/localStore';
 
 // ─── Constants ────────────────────────────────────────────────────────────
 
@@ -641,6 +644,25 @@ export default function DriveCampaignsPage() {
                               })}
                             </div>
                           )}
+                        </div>
+
+                        {/* Capture Policy Override */}
+                        <div className="border-t border-border pt-3">
+                          <CapturePolicyEditor
+                            value={localCapturePolicies.get('campaign', c.campaign_id)}
+                            onChange={(p: CapturePolicy) => {
+                              localCapturePolicies.upsert('campaign', c.campaign_id, p);
+                              toast.success('Capture policy mise à jour pour cette campagne');
+                            }}
+                            showRemoveOverride={!!localCapturePolicies.get('campaign', c.campaign_id)}
+                            onRemoveOverride={() => {
+                              localCapturePolicies.remove('campaign', c.campaign_id);
+                              toast.info('Override capture supprimé — retour au défaut projet');
+                            }}
+                            scopeLabel="Campagne"
+                            readOnly={!canUpdateCampaign}
+                            compact
+                          />
                         </div>
                       </div>
                     )}

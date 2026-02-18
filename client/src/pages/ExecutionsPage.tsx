@@ -21,8 +21,12 @@ import {
   Code2, Database, Globe, Server, ChevronDown, Sparkles,
   RotateCcw, FileCode, Package,
 } from 'lucide-react';
-import { localExecutions } from '../api/localStore';
+import { localExecutions, localCapturePolicies } from '../api/localStore';
 import { toast } from 'sonner';
+import { resolveCapturePolicy, CaptureModeBadge } from '../capture';
+import type { CapturePolicy, CaptureMode } from '../capture/types';
+import { DEFAULT_CAPTURE_POLICY, DEFAULT_RUNNER_TCPDUMP, DEFAULT_PROBE_SPAN_TAP } from '../capture/types';
+import { Shield } from 'lucide-react';
 
 const statusConfig: Record<ExecutionStatus, { icon: typeof CheckCircle2; label: string; cls: string; ledCls: string }> = {
   PENDING: { icon: Clock, label: 'En attente', cls: 'text-yellow-400', ledCls: 'status-led-warning' },
@@ -67,6 +71,8 @@ function RunCenterModal({ isOpen, onClose, projectId }: {
   const [runnerId, setRunnerId] = useState('local-runner-01');
   const [error, setError] = useState<string | null>(null);
   const [launching, setLaunching] = useState(false);
+  const [captureOverride, setCaptureOverride] = useState<CapturePolicy | null>(null);
+  const isAdmin = can(PermissionKey.ADMIN_USERS_MANAGE);
 
   // Active script auto-detection
   const [activeScript, setActiveScript] = useState<GeneratedScript | null>(null);
@@ -121,7 +127,18 @@ function RunCenterModal({ isOpen, onClose, projectId }: {
     ? allVersions.find(s => s.script_id === scriptOverride) || activeScript
     : activeScript;
 
-  const canLaunch = profileId && scenarioId && effectiveScript;
+  // Resolve effective capture policy
+  const effectiveCaptureResult = useMemo(() => {
+    const projectPolicy = localCapturePolicies.get('project', projectId);
+    const scenarioPolicy = scenarioId ? localCapturePolicies.get('scenario', scenarioId) : undefined;
+    return resolveCapturePolicy(projectPolicy, undefined, scenarioPolicy, captureOverride || undefined);
+  }, [projectId, scenarioId, captureOverride]);
+
+  const captureBlocked = effectiveCaptureResult.validation_errors.length > 0
+    ? effectiveCaptureResult.validation_errors[0]
+    : null;
+
+  const canLaunch = profileId && scenarioId && effectiveScript && !captureBlocked;
 
   const handleLaunch = () => {
     if (!canLaunch) {
@@ -246,6 +263,59 @@ function RunCenterModal({ isOpen, onClose, projectId }: {
                     </option>
                   ))}
                 </select>
+              )}
+            </div>
+          )}
+
+          {/* Capture Policy Effective */}
+          {scenarioId && (
+            <div className="bg-secondary/20 border border-border rounded-lg p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-amber-400" />
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Capture (mode effectif)</span>
+                </div>
+                <CaptureModeBadge mode={effectiveCaptureResult.mode} />
+              </div>
+              {effectiveCaptureResult.mode === 'RUNNER_TCPDUMP' && (
+                <div className="text-[10px] text-muted-foreground font-mono">
+                  iface={effectiveCaptureResult.policy.runner_tcpdump.iface || '?'} | bpf="{effectiveCaptureResult.policy.runner_tcpdump.bpf_filter || 'any'}" | snaplen={effectiveCaptureResult.policy.runner_tcpdump.snaplen}
+                </div>
+              )}
+              {effectiveCaptureResult.mode === 'PROBE_SPAN_TAP' && (
+                <div className="text-[10px] text-muted-foreground font-mono">
+                  probe={effectiveCaptureResult.policy.probe_span_tap.probe_id || '?'} | iface={effectiveCaptureResult.policy.probe_span_tap.iface || '?'} | vlan={effectiveCaptureResult.policy.probe_span_tap.vlan_filter || '*'}
+                </div>
+              )}
+              {captureBlocked && (
+                <div className="flex items-center gap-1.5 text-xs text-red-400 mt-1">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  {captureBlocked} — lancement bloqué
+                </div>
+              )}
+              {isAdmin && (
+                <div className="mt-2 pt-2 border-t border-border/50">
+                  <label className="text-[10px] text-muted-foreground">Override admin (ce run uniquement) :</label>
+                  <select
+                    value={captureOverride?.default_mode || ''}
+                    onChange={e => {
+                      const mode = e.target.value as 'NONE' | 'RUNNER_TCPDUMP' | 'PROBE_SPAN_TAP' | '';
+                      if (!mode) { setCaptureOverride(null); return; }
+                      setCaptureOverride({
+                        default_mode: mode as CaptureMode,
+                        runner_tcpdump: { ...DEFAULT_RUNNER_TCPDUMP },
+                        probe_span_tap: { ...DEFAULT_PROBE_SPAN_TAP },
+                        retention_days: 30,
+                      });
+                    }}
+                    className="w-full text-xs px-3 py-1.5 bg-secondary/30 border border-border rounded-md text-foreground mt-1"
+                  >
+                    <option value="">Pas d'override</option>
+                    <option value="NONE">NONE (désactiver)</option>
+                    <option value="RUNNER_TCPDUMP">A — Runner tcpdump</option>
+                    <option value="PROBE_SPAN_TAP">B — Probe SPAN/TAP</option>
+                  </select>
+                </div>
               )}
             </div>
           )}

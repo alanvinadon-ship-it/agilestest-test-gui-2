@@ -24,6 +24,8 @@ const EXT_TO_TYPE: Record<string, string> = {
   '.har': 'HAR',
   '.zip': 'TRACE',
   '.json': 'OTHER',
+  '.pcap': 'PCAP',
+  '.pcapng': 'PCAP',
 };
 
 const POLICY_TO_TYPES: Record<string, string[]> = {
@@ -32,6 +34,7 @@ const POLICY_TO_TYPES: Record<string, string[]> = {
   video: ['VIDEO'],
   log: ['LOG'],
   har: ['HAR'],
+  pcap: ['PCAP'],
 };
 
 // ─── Functions ───────────────────────────────────────────────────────────
