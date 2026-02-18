@@ -604,7 +604,14 @@ function EmailTab({ canUpdate, canTest, canDisable, actor, refresh, rk }: {
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <SecretField label="Username" value={username} hasValue={email._has_username} canEdit={canUpdate} onChange={setUsername} />
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Username</label>
+            <input type="text" value={username ?? (email._has_username ? email.username ?? '' : '')}
+              onChange={e => setUsername(e.target.value)}
+              disabled={!canUpdate}
+              placeholder="Entrer username"
+              className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50" />
+          </div>
           <SecretField label="Password" value={password} hasValue={email._has_password} canEdit={canUpdate} onChange={setPassword} />
         </div>
 
