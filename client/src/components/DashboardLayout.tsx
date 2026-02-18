@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import {
   LayoutDashboard,
   FolderKanban,
@@ -16,14 +16,31 @@ import {
   Package,
   Code2,
   BookOpen,
+  Users,
+  ShieldCheck,
+  ScrollText,
+  KeyRound,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "../auth/AuthContext";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { useProject } from "../state/projectStore";
+import type { LucideIcon } from "lucide-react";
 
-const navSections = [
+interface NavItem {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+}
+
+interface NavSection {
+  label: string;
+  items: NavItem[];
+  adminOnly?: boolean;
+}
+
+const baseNavSections: NavSection[] = [
   {
     label: "Général",
     items: [
@@ -51,6 +68,16 @@ const navSections = [
     ],
   },
   {
+    label: "Administration",
+    adminOnly: true,
+    items: [
+      { href: "/admin/users", icon: Users, label: "Utilisateurs" },
+      { href: "/admin/project-access", icon: KeyRound, label: "Accès Projets" },
+      { href: "/admin/rbac", icon: ShieldCheck, label: "Matrice RBAC" },
+      { href: "/admin/audit", icon: ScrollText, label: "Journal d'audit" },
+    ],
+  },
+  {
     label: "Aide",
     items: [
       { href: "/docs/user-guide", icon: BookOpen, label: "Documentation" },
@@ -61,13 +88,17 @@ const navSections = [
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
   const [collapsed, setCollapsed] = useState(false);
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
 
   const handleLogout = useCallback(() => {
     logout();
     navigate('/login');
   }, [logout, navigate]);
   const { currentProject } = useProject();
+
+  const navSections = useMemo(() => {
+    return baseNavSections.filter(s => !s.adminOnly || isAdmin);
+  }, [isAdmin]);
 
   return (
     <div className="min-h-screen flex blueprint-grid">
@@ -96,7 +127,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {navSections.map((section) => (
             <div key={section.label}>
               {!collapsed && (
-                <p className="px-3 mb-1.5 text-[10px] font-mono font-medium text-muted-foreground uppercase tracking-widest">
+                <p className={cn(
+                  "px-3 mb-1.5 text-[10px] font-mono font-medium uppercase tracking-widest",
+                  section.adminOnly ? "text-red-400/70" : "text-muted-foreground"
+                )}>
                   {section.label}
                 </p>
               )}
@@ -133,7 +167,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-foreground truncate">{user.full_name}</p>
-                <p className="text-[10px] text-muted-foreground font-mono">{user.role}</p>
+                <div className="flex items-center gap-1">
+                  <p className="text-[10px] text-muted-foreground font-mono">{user.role}</p>
+                  {isAdmin && (
+                    <ShieldCheck className="w-2.5 h-2.5 text-red-400" />
+                  )}
+                </div>
               </div>
               <button
                 onClick={handleLogout}
@@ -168,7 +207,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground">
               <span className="status-led status-led-success animate-pulse-glow" />
-              <span>v0.1.1</span>
+              <span>v0.1.2</span>
             </div>
           </div>
         </header>

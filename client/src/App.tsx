@@ -24,6 +24,10 @@ import DatasetTypesPage from "./pages/DatasetTypesPage";
 import BundlesPage from "./pages/BundlesPage";
 import GeneratedScriptsPage from "./pages/GeneratedScriptsPage";
 import DocsPage from "./pages/DocsPage";
+import AdminUsersPage from "./pages/AdminUsersPage";
+import AdminProjectAccessPage from "./pages/AdminProjectAccessPage";
+import AdminRbacPage from "./pages/AdminRbacPage";
+import AdminAuditPage from "./pages/AdminAuditPage";
 
 // ─── Query Client ───────────────────────────────────────────────────────────
 const queryClient = new QueryClient({
@@ -40,6 +44,19 @@ const queryClient = new QueryClient({
 function RequireAuth({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth();
   if (!isAuthenticated) return <Redirect to="/login" />;
+  return <>{children}</>;
+}
+
+function RequireAdmin({ children }: { children: ReactNode }) {
+  const { isAdmin } = useAuth();
+  if (!isAdmin) {
+    return (
+      <div className="text-center py-24">
+        <h2 className="text-2xl font-heading font-bold text-foreground mb-2">403</h2>
+        <p className="text-sm text-muted-foreground">Accès réservé aux administrateurs.</p>
+      </div>
+    );
+  }
   return <>{children}</>;
 }
 
@@ -91,6 +108,20 @@ function AppRouter() {
                 <RequireProject><CapturesPage /></RequireProject>
               </Route>
               <Route path="/probes" component={ProbesPage} />
+
+              {/* Admin pages */}
+              <Route path="/admin/users">
+                <RequireAdmin><AdminUsersPage /></RequireAdmin>
+              </Route>
+              <Route path="/admin/project-access">
+                <RequireAdmin><AdminProjectAccessPage /></RequireAdmin>
+              </Route>
+              <Route path="/admin/rbac">
+                <RequireAdmin><AdminRbacPage /></RequireAdmin>
+              </Route>
+              <Route path="/admin/audit">
+                <RequireAdmin><AdminAuditPage /></RequireAdmin>
+              </Route>
               <Route path="/docs/:slug" component={DocsPage} />
               <Route path="/docs">
                 <DocsPage />

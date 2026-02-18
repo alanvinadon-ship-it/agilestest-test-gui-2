@@ -2,23 +2,91 @@
 
 ## Contrôle d'accès (RBAC)
 
-AgilesTest implémente un contrôle d'accès basé sur les rôles (RBAC) avec trois niveaux : **Viewer**, **Manager** et **Admin**. Les permissions sont appliquées par module.
+AgilesTest implémente un contrôle d'accès basé sur les rôles (RBAC) à deux niveaux : **rôles globaux** (plateforme) et **rôles projet** (par projet). Les permissions sont appliquées par module.
 
-### Matrice des permissions
+### Rôles globaux
+
+| Rôle | Description | Accès admin |
+|------|-------------|-------------|
+| **Admin** | Accès complet à toute la plateforme, y compris l'administration | Oui |
+| **Manager** | Création, modification et exécution sur tous les projets | Non |
+| **Viewer** | Lecture seule sur tous les projets | Non |
+
+### Rôles projet
+
+| Rôle | Description |
+|------|-------------|
+| **Admin Projet** | Gestion complète du projet, y compris suppression de ressources |
+| **Éditeur** | Création, modification et exécution dans le projet |
+| **Lecteur Projet** | Lecture seule dans le projet |
+
+### Résolution des permissions
+
+La permission effective est l'**union** du rôle global et du rôle projet. Le rôle le plus permissif l'emporte. Par exemple, un Viewer global avec le rôle Éditeur sur un projet peut éditer les ressources de ce projet uniquement.
+
+### Matrice des permissions (rôles globaux)
 
 | Module | Viewer | Manager | Admin |
 |--------|--------|---------|-------|
-| **Projets** | Lecture | Création, modification | Suppression, transfert |
-| **Profils de test** | Lecture | Création, modification | Suppression |
-| **Scénarios** | Lecture | Création, modification, finalisation | Suppression, repasser en DRAFT |
-| **Dataset Instances** | Lecture | Création, modification, activation | Suppression, override |
-| **Dataset Bundles** | Lecture | Création, modification, activation | Suppression, override |
-| **Dataset Secrets** | Lecture (masqué) | Création, modification | Suppression |
-| **Scripts IA** | Lecture, copie prompt | Génération, activation | Suppression |
-| **Exécutions** | Lecture | Lancement, rerun | Annulation, suppression |
-| **Repair** | Lecture du diff | Lancement repair, save version | Activate & Rerun |
+| **Projets** | READ | READ, CREATE, UPDATE | READ, CREATE, UPDATE, DELETE |
+| **Profils de test** | READ | READ, CREATE, UPDATE | READ, CREATE, UPDATE, DELETE |
+| **Scénarios** | READ | READ, CREATE, UPDATE, ACTIVATE | READ, CREATE, UPDATE, DELETE, ACTIVATE |
+| **Datasets** | READ | READ, CREATE, UPDATE, ACTIVATE | READ, CREATE, UPDATE, DELETE, ACTIVATE |
+| **Bundles** | READ | READ, CREATE, UPDATE, ACTIVATE | READ, CREATE, UPDATE, DELETE, ACTIVATE |
+| **Scripts IA** | READ | READ, CREATE, ACTIVATE | READ, CREATE, DELETE, ACTIVATE |
+| **Exécutions** | READ | READ, RUN | READ, RUN, DELETE |
+| **Repair** | READ | READ, REPAIR | READ, REPAIR, ACTIVATE |
+| **Administration** | — | — | READ, CREATE, UPDATE, DELETE |
 
-### Comptes par défaut (démo)
+> La matrice complète est consultable dans l'interface via **Administration > Matrice RBAC**, avec un toggle entre rôles globaux et rôles projet.
+
+---
+
+## Pages d'administration
+
+Les pages d'administration sont accessibles uniquement aux utilisateurs avec le rôle **Admin** global. Elles apparaissent dans la sidebar sous la section "Administration" (en rouge).
+
+### Utilisateurs (/admin/users)
+
+Cette page permet de gérer les comptes utilisateurs de la plateforme :
+
+- **Créer** un utilisateur (nom, email, rôle global, mot de passe optionnel)
+- **Modifier** un utilisateur (nom, email, rôle)
+- **Désactiver** un utilisateur (l'empêche de se connecter, réversible)
+- **Réactiver** un utilisateur désactivé
+- **Réinitialiser le mot de passe** (envoie un lien de réinitialisation)
+- **Voir les projets** d'un utilisateur (drawer latéral avec ses memberships)
+
+Les filtres disponibles sont : recherche par nom/email, filtre par rôle, filtre par statut (Actif/Désactivé).
+
+### Accès Projets (/admin/project-access)
+
+Cette page permet de gérer les membres de chaque projet :
+
+- **Sélectionner** un projet dans la liste déroulante
+- **Ajouter** un membre avec recherche typeahead (par nom ou email)
+- **Modifier** le rôle projet d'un membre existant
+- **Retirer** un membre du projet (avec protection : impossible de retirer le dernier Admin Projet)
+
+Chaque membre affiche son rôle global et son rôle projet côte à côte pour une visibilité complète.
+
+### Matrice RBAC (/admin/rbac)
+
+Cette page est **informative** (lecture seule). Elle affiche la matrice complète des permissions par module, avec un toggle entre rôles globaux et rôles projet. Chaque permission est colorée par type (READ, CREATE, UPDATE, DELETE, RUN, ACTIVATE, REPAIR).
+
+### Journal d'audit (/admin/audit)
+
+Cette page affiche l'historique des actions d'administration :
+
+- Création, modification, désactivation, réactivation d'utilisateurs
+- Ajout, modification, retrait de memberships
+- Réinitialisation de mots de passe
+
+Chaque entrée contient : horodatage, action, cible, acteur, trace ID et metadata détaillée (expandable). Les filtres disponibles sont : type d'entité (utilisateur/membership), recherche par acteur, nombre d'entrées.
+
+---
+
+## Comptes par défaut (démo)
 
 | Email | Mot de passe | Rôle |
 |-------|-------------|------|
@@ -43,12 +111,6 @@ La variable d'environnement `VITE_DATASET_STORAGE_MODE` contrôle la source de p
 | **Perte de données** | Si le navigateur est réinitialisé | Non (persistance serveur) |
 | **Cas d'usage** | Démo, développement, tests offline | Production, équipes |
 | **Configuration** | Aucune | Nécessite Repository API opérationnel |
-
-### Quand utiliser chaque mode
-
-Le mode **local** (par défaut) est adapté aux démonstrations, au développement et aux situations où aucun backend n'est disponible. Les données sont stockées dans le `localStorage` du navigateur et ne sont pas partagées entre utilisateurs.
-
-Le mode **api** est recommandé pour la production. Il nécessite que le Repository API soit opérationnel et accessible. Les données sont persistées en base de données et partagées entre tous les utilisateurs du projet.
 
 ### Configuration
 
