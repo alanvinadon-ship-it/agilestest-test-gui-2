@@ -22,6 +22,7 @@ import CapturesPage from "./pages/CapturesPage";
 import ProbesPage from "./pages/ProbesPage";
 import DatasetTypesPage from "./pages/DatasetTypesPage";
 import BundlesPage from "./pages/BundlesPage";
+import GeneratedScriptsPage from "./pages/GeneratedScriptsPage";
 
 // ─── Query Client ───────────────────────────────────────────────────────────
 const queryClient = new QueryClient({
@@ -75,6 +76,9 @@ function AppRouter() {
               </Route>
               <Route path="/bundles">
                 <RequireProject><BundlesPage /></RequireProject>
+              </Route>
+              <Route path="/scripts">
+                <RequireProject><GeneratedScriptsPage /></RequireProject>
               </Route>
               <Route path="/executions">
                 <RequireProject><ExecutionsPage /></RequireProject>

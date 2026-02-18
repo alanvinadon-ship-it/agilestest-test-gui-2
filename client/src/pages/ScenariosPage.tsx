@@ -9,7 +9,10 @@ import {
   Plus, FileText, Loader2, Trash2, X, AlertCircle, Search,
   ChevronDown, GripVertical, ClipboardCheck, Shield, Gauge, Filter, Edit2,
   Sparkles, Database, CheckCircle2, Lock, Archive, AlertTriangle, GitBranch, Hash,
+  Code2, MessageSquare,
 } from 'lucide-react';
+import GeneratePromptModal from '../components/GeneratePromptModal';
+import GenerateScriptModal from '../components/GenerateScriptModal';
 import { localDatasetTypes } from '../api/localStore';
 import SuggestScenariosModal from '../components/SuggestScenariosModal';
 import ScenarioDatasetSection from '../components/ScenarioDatasetSection';
@@ -501,6 +504,8 @@ export default function ScenariosPage() {
   const [editingScenario, setEditingScenario] = useState<TestScenario | null>(null);
   const [finalizingScenario, setFinalizingScenario] = useState<TestScenario | null>(null);
   const [suggestProfile, setSuggestProfile] = useState<TestProfile | null>(null);
+  const [promptScenario, setPromptScenario] = useState<{ scenario: TestScenario; profile: TestProfile } | null>(null);
+  const [scriptScenario, setScriptScenario] = useState<{ scenario: TestScenario; profile: TestProfile } | null>(null);
   const [search, setSearch] = useState('');
   const [testTypeFilter, setTestTypeFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -720,6 +725,14 @@ export default function ScenariosPage() {
                                       <Archive className="w-4 h-4" />
                                     </button>
                                   )}
+                                  <button onClick={() => setPromptScenario({ scenario, profile })}
+                                    className="text-muted-foreground hover:text-violet-400 p-1.5 rounded hover:bg-violet-500/10 transition-colors" title="Générer Prompt IA">
+                                    <MessageSquare className="w-4 h-4" />
+                                  </button>
+                                  <button onClick={() => setScriptScenario({ scenario, profile })}
+                                    className="text-muted-foreground hover:text-cyan-400 p-1.5 rounded hover:bg-cyan-500/10 transition-colors" title="Générer Script">
+                                    <Code2 className="w-4 h-4" />
+                                  </button>
                                   <button onClick={() => setEditingScenario(scenario)}
                                     className="text-muted-foreground hover:text-primary p-1.5 rounded hover:bg-primary/10 transition-colors" title={isFinal ? 'Forker' : 'Éditer'}>
                                     {isFinal ? <GitBranch className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
@@ -756,6 +769,23 @@ export default function ScenariosPage() {
           scenario={finalizingScenario}
           onClose={() => setFinalizingScenario(null)}
           onFinalized={() => queryClient.invalidateQueries({ queryKey: ['scenarios'] })}
+        />
+      )}
+
+      {promptScenario && (
+        <GeneratePromptModal
+          scenario={promptScenario.scenario}
+          profile={promptScenario.profile}
+          onClose={() => setPromptScenario(null)}
+        />
+      )}
+
+      {scriptScenario && (
+        <GenerateScriptModal
+          scenario={scriptScenario.scenario}
+          profile={scriptScenario.profile}
+          onClose={() => setScriptScenario(null)}
+          onSaved={() => queryClient.invalidateQueries({ queryKey: ['scripts'] })}
         />
       )}
 
