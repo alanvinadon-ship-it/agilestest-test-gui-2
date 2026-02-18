@@ -18,6 +18,9 @@ import type {
   JobCompletePayload, ArtifactManifestEntry, BundleResolveResult,
   DriveCampaign, CampaignStatus, NetworkType,
   DriveRoute, TestDevice, DriveProbeConfig,
+  DriveJob, DriveJobStatus, DriveArtifactEntry,
+  KpiSample, DriveKpi, DriveRunSummary, ThresholdViolation,
+  DriveImportResult,
 } from '../types';
 import { DATASET_TYPE_CATALOG } from '../config/datasetTypeCatalog';
 
@@ -1549,5 +1552,363 @@ export const localDriveProbeConfigs = {
   delete(id: string): void {
     const items = getCollection<DriveProbeConfig>('drive_probe_configs').filter(p => p.probe_id !== id);
     setCollection('drive_probe_configs', items);
+  },
+};
+
+
+// ─── Drive Jobs ─────────────────────────────────────────────────────────────
+
+export const localDriveJobs = {
+  list(params?: { campaign_id?: string; status?: DriveJobStatus; page?: number; limit?: number }): PaginatedResponse<DriveJob> {
+    let items = getCollection<DriveJob>('drive_jobs');
+    if (params?.campaign_id) items = items.filter(j => j.campaign_id === params.campaign_id);
+    if (params?.status) items = items.filter(j => j.status === params.status);
+    items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return paginate(items, params?.page, params?.limit);
+  },
+
+  get(id: string): DriveJob {
+    const item = getCollection<DriveJob>('drive_jobs').find(j => j.drive_job_id === id);
+    if (!item) throw new Error('DriveJob introuvable');
+    return item;
+  },
+
+  create(data: { campaign_id: string; route_id: string; device_id: string; target_env: TargetEnv; runner_id?: string }): DriveJob {
+    const items = getCollection<DriveJob>('drive_jobs');
+    const job: DriveJob = {
+      drive_job_id: uid(),
+      campaign_id: data.campaign_id,
+      route_id: data.route_id,
+      device_id: data.device_id,
+      target_env: data.target_env,
+      runner_id: data.runner_id || 'runner-local-001',
+      status: 'PENDING',
+      progress_pct: 0,
+      artifacts_manifest: [],
+      created_at: now(),
+    };
+    items.push(job);
+    setCollection('drive_jobs', items);
+
+    // Mettre la campagne en RUNNING
+    const campaigns = getCollection<DriveCampaign>('drive_campaigns');
+    const cIdx = campaigns.findIndex(c => c.campaign_id === data.campaign_id);
+    if (cIdx !== -1) {
+      campaigns[cIdx] = { ...campaigns[cIdx], status: 'RUNNING' as CampaignStatus, updated_at: now() };
+      setCollection('drive_campaigns', campaigns);
+    }
+
+    return job;
+  },
+
+  updateStatus(id: string, status: DriveJobStatus, extra?: { progress_pct?: number; error_message?: string; artifacts_manifest?: DriveArtifactEntry[] }): DriveJob {
+    const items = getCollection<DriveJob>('drive_jobs');
+    const idx = items.findIndex(j => j.drive_job_id === id);
+    if (idx === -1) throw new Error('DriveJob introuvable');
+    items[idx] = {
+      ...items[idx],
+      status,
+      progress_pct: extra?.progress_pct ?? items[idx].progress_pct,
+      error_message: extra?.error_message,
+      artifacts_manifest: extra?.artifacts_manifest ?? items[idx].artifacts_manifest,
+      started_at: status === 'RUNNING' ? (items[idx].started_at || now()) : items[idx].started_at,
+      finished_at: (status === 'DONE' || status === 'FAILED') ? now() : items[idx].finished_at,
+    };
+    setCollection('drive_jobs', items);
+
+    // Si DONE ou FAILED, mettre à jour la campagne
+    if (status === 'DONE' || status === 'FAILED') {
+      const campaigns = getCollection<DriveCampaign>('drive_campaigns');
+      const cIdx = campaigns.findIndex(c => c.campaign_id === items[idx].campaign_id);
+      if (cIdx !== -1) {
+        // Vérifier si tous les jobs de la campagne sont terminés
+        const allJobs = items.filter(j => j.campaign_id === items[idx].campaign_id);
+        const allDone = allJobs.every(j => j.status === 'DONE' || j.status === 'FAILED');
+        if (allDone) {
+          campaigns[cIdx] = { ...campaigns[cIdx], status: 'DONE' as CampaignStatus, updated_at: now() };
+          setCollection('drive_campaigns', campaigns);
+        }
+      }
+    }
+
+    return items[idx];
+  },
+
+  /** Simuler l'exécution complète d'un job (pour le mode local) */
+  simulateExecution(id: string, route: DriveRoute, kpiThresholds: Record<string, number>): DriveJob {
+    // Marquer RUNNING
+    this.updateStatus(id, 'RUNNING', { progress_pct: 10 });
+
+    // Générer des KPI samples simulés
+    const job = this.get(id);
+    const numSamples = 50 + Math.floor(Math.random() * 100);
+    const kpiNames: DriveKpi[] = ['RSRP', 'RSRQ', 'SINR', 'THROUGHPUT_DL', 'THROUGHPUT_UL', 'LATENCY', 'JITTER', 'PACKET_LOSS'];
+    const kpiUnits: Record<string, string> = {
+      RSRP: 'dBm', RSRQ: 'dB', SINR: 'dB',
+      THROUGHPUT_DL: 'Mbps', THROUGHPUT_UL: 'Mbps',
+      LATENCY: 'ms', JITTER: 'ms', PACKET_LOSS: '%',
+    };
+    const kpiRanges: Record<string, [number, number]> = {
+      RSRP: [-120, -60], RSRQ: [-20, -3], SINR: [-5, 30],
+      THROUGHPUT_DL: [5, 300], THROUGHPUT_UL: [2, 100],
+      LATENCY: [5, 150], JITTER: [0.5, 50], PACKET_LOSS: [0, 5],
+    };
+
+    const baseLat = route.route_geojson?.coordinates?.[0]?.[1] ?? 5.35;
+    const baseLon = route.route_geojson?.coordinates?.[0]?.[0] ?? -4.0;
+    const samples: KpiSample[] = [];
+
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / numSamples;
+      const lat = baseLat + (Math.random() - 0.5) * 0.02 + t * 0.01;
+      const lon = baseLon + (Math.random() - 0.5) * 0.02 + t * 0.01;
+      const ts = new Date(Date.now() - (numSamples - i) * 2000).toISOString();
+
+      for (const kpi of kpiNames) {
+        const [min, max] = kpiRanges[kpi];
+        const value = parseFloat((min + Math.random() * (max - min)).toFixed(2));
+        samples.push({
+          sample_id: uid(),
+          drive_job_id: id,
+          campaign_id: job.campaign_id,
+          route_id: job.route_id,
+          timestamp: ts,
+          lat, lon,
+          kpi_name: kpi,
+          value,
+          unit: kpiUnits[kpi],
+          cell_id: `CELL-${Math.floor(Math.random() * 50).toString().padStart(3, '0')}`,
+          technology: '4G',
+        });
+      }
+    }
+
+    // Stocker les samples
+    localKpiSamples.bulkInsert(samples);
+
+    // Générer le summary
+    const summary = localDriveRunSummaries.computeAndStore(id, job.campaign_id, kpiThresholds);
+
+    // Générer des artefacts simulés
+    const artifacts: DriveArtifactEntry[] = [
+      { artifact_type: 'kpi_series', filename: 'kpi_series.json', minio_path: `/${job.campaign_id}/${id}/kpi_series.json`, size_bytes: samples.length * 120, sha256: uid(), content_type: 'application/json' },
+      { artifact_type: 'geo', filename: 'geo.geojson', minio_path: `/${job.campaign_id}/${id}/geo.geojson`, size_bytes: 4096, sha256: uid(), content_type: 'application/geo+json' },
+      { artifact_type: 'device_logs', filename: 'device_logs.zip', minio_path: `/${job.campaign_id}/${id}/device_logs.zip`, size_bytes: 102400, sha256: uid(), content_type: 'application/zip' },
+      { artifact_type: 'summary', filename: 'summary.json', minio_path: `/${job.campaign_id}/${id}/summary.json`, size_bytes: 2048, sha256: uid(), content_type: 'application/json' },
+    ];
+
+    // Marquer DONE
+    const finalStatus: DriveJobStatus = summary.overall_pass ? 'DONE' : 'FAILED';
+    return this.updateStatus(id, finalStatus, { progress_pct: 100, artifacts_manifest: artifacts, error_message: finalStatus === 'FAILED' ? `${summary.threshold_violations.length} violation(s) de seuil KPI` : undefined });
+  },
+
+  delete(id: string): void {
+    const items = getCollection<DriveJob>('drive_jobs').filter(j => j.drive_job_id !== id);
+    setCollection('drive_jobs', items);
+    // Nettoyer les samples associés
+    localKpiSamples.deleteByJob(id);
+  },
+};
+
+// ─── KPI Samples ────────────────────────────────────────────────────────────
+
+export const localKpiSamples = {
+  list(params: { drive_job_id?: string; campaign_id?: string; kpi_name?: DriveKpi; page?: number; limit?: number }): PaginatedResponse<KpiSample> {
+    let items = getCollection<KpiSample>('kpi_samples');
+    if (params.drive_job_id) items = items.filter(s => s.drive_job_id === params.drive_job_id);
+    if (params.campaign_id) items = items.filter(s => s.campaign_id === params.campaign_id);
+    if (params.kpi_name) items = items.filter(s => s.kpi_name === params.kpi_name);
+    items.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    return paginate(items, params.page, params.limit);
+  },
+
+  listAll(params: { drive_job_id?: string; campaign_id?: string }): KpiSample[] {
+    let items = getCollection<KpiSample>('kpi_samples');
+    if (params.drive_job_id) items = items.filter(s => s.drive_job_id === params.drive_job_id);
+    if (params.campaign_id) items = items.filter(s => s.campaign_id === params.campaign_id);
+    return items.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  },
+
+  bulkInsert(samples: KpiSample[]): number {
+    const items = getCollection<KpiSample>('kpi_samples');
+    items.push(...samples);
+    setCollection('kpi_samples', items);
+    return samples.length;
+  },
+
+  deleteByJob(jobId: string): void {
+    const items = getCollection<KpiSample>('kpi_samples').filter(s => s.drive_job_id !== jobId);
+    setCollection('kpi_samples', items);
+  },
+
+  deleteByCampaign(campaignId: string): void {
+    const items = getCollection<KpiSample>('kpi_samples').filter(s => s.campaign_id !== campaignId);
+    setCollection('kpi_samples', items);
+  },
+
+  /** Statistiques agrégées par KPI pour un job ou une campagne */
+  aggregate(params: { drive_job_id?: string; campaign_id?: string }): Record<string, { avg: number; min: number; max: number; count: number; unit: string }> {
+    const samples = this.listAll(params);
+    const agg: Record<string, { sum: number; min: number; max: number; count: number; unit: string }> = {};
+    for (const s of samples) {
+      if (!agg[s.kpi_name]) {
+        agg[s.kpi_name] = { sum: s.value, min: s.value, max: s.value, count: 1, unit: s.unit };
+      } else {
+        agg[s.kpi_name].sum += s.value;
+        agg[s.kpi_name].min = Math.min(agg[s.kpi_name].min, s.value);
+        agg[s.kpi_name].max = Math.max(agg[s.kpi_name].max, s.value);
+        agg[s.kpi_name].count++;
+      }
+    }
+    const result: Record<string, { avg: number; min: number; max: number; count: number; unit: string }> = {};
+    for (const [k, v] of Object.entries(agg)) {
+      result[k] = { avg: parseFloat((v.sum / v.count).toFixed(2)), min: v.min, max: v.max, count: v.count, unit: v.unit };
+    }
+    return result;
+  },
+};
+
+// ─── Drive Run Summaries ────────────────────────────────────────────────────
+
+export const localDriveRunSummaries = {
+  list(campaignId?: string): DriveRunSummary[] {
+    let items = getCollection<DriveRunSummary>('drive_run_summaries');
+    if (campaignId) items = items.filter(s => s.campaign_id === campaignId);
+    return items;
+  },
+
+  get(jobId: string): DriveRunSummary | null {
+    return getCollection<DriveRunSummary>('drive_run_summaries').find(s => s.drive_job_id === jobId) || null;
+  },
+
+  computeAndStore(jobId: string, campaignId: string, thresholds: Record<string, number>): DriveRunSummary {
+    const agg = localKpiSamples.aggregate({ drive_job_id: jobId });
+    const samples = localKpiSamples.listAll({ drive_job_id: jobId });
+
+    const kpi_averages: Record<string, number> = {};
+    const kpi_min: Record<string, number> = {};
+    const kpi_max: Record<string, number> = {};
+    const violations: ThresholdViolation[] = [];
+
+    for (const [kpi, stats] of Object.entries(agg)) {
+      kpi_averages[kpi] = stats.avg;
+      kpi_min[kpi] = stats.min;
+      kpi_max[kpi] = stats.max;
+
+      if (thresholds[kpi] !== undefined) {
+        const threshold = thresholds[kpi];
+        // Pour RSRP, RSRQ, SINR, THROUGHPUT : la valeur doit être >= seuil
+        // Pour LATENCY, JITTER, PACKET_LOSS : la valeur doit être <= seuil
+        const isLowerBetter = ['LATENCY', 'JITTER', 'PACKET_LOSS'].includes(kpi);
+        const violated = isLowerBetter ? stats.avg > threshold : stats.avg < threshold;
+        if (violated) {
+          const violationCount = samples.filter(s => s.kpi_name === kpi && (isLowerBetter ? s.value > threshold : s.value < threshold)).length;
+          violations.push({
+            kpi_name: kpi as DriveKpi,
+            threshold,
+            actual_avg: stats.avg,
+            direction: isLowerBetter ? 'above' : 'below',
+            violation_count: violationCount,
+            total_samples: stats.count,
+          });
+        }
+      }
+    }
+
+    // Calculer durée et distance approximatives
+    const timestamps = samples.map(s => new Date(s.timestamp).getTime());
+    const duration_sec = timestamps.length > 1 ? Math.round((Math.max(...timestamps) - Math.min(...timestamps)) / 1000) : 0;
+
+    const summary: DriveRunSummary = {
+      drive_job_id: jobId,
+      campaign_id: campaignId,
+      total_samples: samples.length,
+      duration_sec,
+      distance_km: parseFloat((duration_sec * 0.012).toFixed(1)), // ~43 km/h approximation
+      kpi_averages,
+      kpi_min,
+      kpi_max,
+      threshold_violations: violations,
+      overall_pass: violations.length === 0,
+    };
+
+    const items = getCollection<DriveRunSummary>('drive_run_summaries');
+    const existIdx = items.findIndex(s => s.drive_job_id === jobId);
+    if (existIdx !== -1) {
+      items[existIdx] = summary;
+    } else {
+      items.push(summary);
+    }
+    setCollection('drive_run_summaries', items);
+    return summary;
+  },
+
+  delete(jobId: string): void {
+    const items = getCollection<DriveRunSummary>('drive_run_summaries').filter(s => s.drive_job_id !== jobId);
+    setCollection('drive_run_summaries', items);
+  },
+};
+
+// ─── Drive Import Results ───────────────────────────────────────────────────
+
+export const localDriveImports = {
+  list(campaignId?: string): DriveImportResult[] {
+    let items = getCollection<DriveImportResult>('drive_imports');
+    if (campaignId) items = items.filter(i => i.campaign_id === campaignId);
+    return items.sort((a, b) => new Date(b.imported_at).getTime() - new Date(a.imported_at).getTime());
+  },
+
+  /** Importer des KPI samples depuis un fichier parsé */
+  importSamples(data: {
+    campaign_id: string;
+    source_filename: string;
+    source_format: DriveImportResult['source_format'];
+    samples: Omit<KpiSample, 'sample_id'>[];
+  }): DriveImportResult {
+    const validSamples: KpiSample[] = [];
+    const errors: string[] = [];
+    let skipped = 0;
+
+    for (let i = 0; i < data.samples.length; i++) {
+      const s = data.samples[i];
+      // Validation basique
+      if (!s.kpi_name || s.value === undefined || isNaN(s.value)) {
+        errors.push(`Ligne ${i + 1}: kpi_name ou value manquant/invalide`);
+        skipped++;
+        continue;
+      }
+      if (!s.timestamp) {
+        errors.push(`Ligne ${i + 1}: timestamp manquant`);
+        skipped++;
+        continue;
+      }
+      validSamples.push({ ...s, sample_id: uid() } as KpiSample);
+    }
+
+    // Insérer les samples valides
+    if (validSamples.length > 0) {
+      localKpiSamples.bulkInsert(validSamples);
+    }
+
+    const result: DriveImportResult = {
+      import_id: uid(),
+      campaign_id: data.campaign_id,
+      source_filename: data.source_filename,
+      source_format: data.source_format,
+      samples_imported: validSamples.length,
+      samples_skipped: skipped,
+      errors: errors.slice(0, 20), // Limiter à 20 erreurs
+      imported_at: now(),
+    };
+
+    const items = getCollection<DriveImportResult>('drive_imports');
+    items.push(result);
+    setCollection('drive_imports', items);
+    return result;
+  },
+
+  delete(id: string): void {
+    const items = getCollection<DriveImportResult>('drive_imports').filter(i => i.import_id !== id);
+    setCollection('drive_imports', items);
   },
 };

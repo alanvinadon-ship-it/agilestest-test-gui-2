@@ -732,3 +732,98 @@ export interface DriveScenarioTemplate {
   artifact_policy: ArtifactUploadPolicy[];
   kpi_thresholds: Record<string, number>;
 }
+
+// ─── Drive Job & KPI Ingestion ──────────────────────────────────────────────
+
+export type DriveJobStatus = 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED';
+
+/** Job d'exécution d'une campagne Drive Test */
+export interface DriveJob {
+  drive_job_id: string;
+  campaign_id: string;
+  route_id: string;
+  device_id: string;
+  target_env: TargetEnv;
+  runner_id: string;
+  status: DriveJobStatus;
+  progress_pct: number;
+  error_message?: string;
+  artifacts_manifest: DriveArtifactEntry[];
+  created_at: string;
+  started_at?: string;
+  finished_at?: string;
+}
+
+/** Entrée d'artefact Drive dans le manifest */
+export interface DriveArtifactEntry {
+  artifact_type: 'kpi_series' | 'geo' | 'device_logs' | 'pcap' | 'summary';
+  filename: string;
+  minio_path: string;
+  size_bytes: number;
+  sha256: string;
+  content_type: string;
+}
+
+/** Échantillon KPI ingéré depuis les résultats Drive */
+export interface KpiSample {
+  sample_id: string;
+  drive_job_id: string;
+  campaign_id: string;
+  route_id: string;
+  timestamp: string;
+  lat: number;
+  lon: number;
+  kpi_name: DriveKpi;
+  value: number;
+  unit: string;
+  cell_id?: string;
+  technology?: NetworkType;
+}
+
+/** Résumé d'exécution Drive */
+export interface DriveRunSummary {
+  drive_job_id: string;
+  campaign_id: string;
+  total_samples: number;
+  duration_sec: number;
+  distance_km: number;
+  kpi_averages: Record<string, number>;
+  kpi_min: Record<string, number>;
+  kpi_max: Record<string, number>;
+  threshold_violations: ThresholdViolation[];
+  overall_pass: boolean;
+}
+
+/** Violation de seuil KPI */
+export interface ThresholdViolation {
+  kpi_name: DriveKpi;
+  threshold: number;
+  actual_avg: number;
+  direction: 'above' | 'below';
+  violation_count: number;
+  total_samples: number;
+}
+
+/** Configuration d'un run Drive (envoyée au runner) */
+export interface DriveRunConfig {
+  campaign: DriveCampaign;
+  route: DriveRoute;
+  device: TestDevice;
+  probes: DriveProbeConfig[];
+  kpi_thresholds: Record<string, number>;
+  capture_pcap: boolean;
+  capture_video: boolean;
+  commands_pack_url?: string;
+}
+
+/** Résultat d'import manuel de résultats Drive */
+export interface DriveImportResult {
+  import_id: string;
+  campaign_id: string;
+  source_filename: string;
+  source_format: 'CSV' | 'JSON' | 'GPX' | 'GEOJSON' | 'IPERF3';
+  samples_imported: number;
+  samples_skipped: number;
+  errors: string[];
+  imported_at: string;
+}

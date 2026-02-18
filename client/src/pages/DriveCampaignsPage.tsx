@@ -24,12 +24,16 @@ import {
   localTestDevices,
   localDriveProbeConfigs,
   localProjects,
+  localDriveJobs,
+  localDriveRunSummaries,
 } from '@/api/localStore';
 import type {
   DriveCampaign,
   DriveRoute,
   TestDevice,
   DriveProbeConfig,
+  DriveJob,
+  DriveRunSummary,
   CampaignStatus,
   NetworkType,
   TargetEnv,
@@ -56,6 +60,12 @@ import {
   Signal,
   Navigation,
   Copy,
+  Activity,
+  BarChart3,
+  Loader2,
+  AlertTriangle,
+  Download,
+  ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -133,6 +143,19 @@ export default function DriveCampaignsPage() {
   // Active tab
   const [activeTab, setActiveTab] = useState<'campaigns' | 'devices' | 'probes' | 'templates'>('campaigns');
 
+  // Run Campaign
+  const [showRunModal, setShowRunModal] = useState(false);
+  const [runCampaign, setRunCampaign] = useState<DriveCampaign | null>(null);
+  const [runRouteId, setRunRouteId] = useState('');
+  const [runDeviceId, setRunDeviceId] = useState('');
+  const [runCapturePcap, setRunCapturePcap] = useState(false);
+  const [runningJobId, setRunningJobId] = useState<string | null>(null);
+  const [isRunning, setIsRunning] = useState(false);
+
+  // Drive Jobs
+  const [driveJobs, setDriveJobs] = useState<Record<string, DriveJob[]>>({});
+  const [jobSummaries, setJobSummaries] = useState<Record<string, DriveRunSummary | null>>({});
+
   // ─── Load data ────────────────────────────────────────────────────────
 
   const loadCampaigns = () => {
@@ -156,6 +179,68 @@ export default function DriveCampaignsPage() {
     if (!projectId) return;
     const p = localDriveProbeConfigs.list(projectId);
     setProbeConfigs(p);
+  };
+
+  const loadDriveJobs = (campaignId: string) => {
+    const result = localDriveJobs.list({ campaign_id: campaignId, limit: 200 });
+    setDriveJobs(prev => ({ ...prev, [campaignId]: result.data }));
+    // Load summaries for each job
+    for (const j of result.data) {
+      const s = localDriveRunSummaries.get(j.drive_job_id);
+      setJobSummaries(prev => ({ ...prev, [j.drive_job_id]: s }));
+    }
+  };
+
+  const openRunCampaign = (c: DriveCampaign) => {
+    setRunCampaign(c);
+    const cRoutes = routes[c.campaign_id] || localDriveRoutes.list(c.campaign_id);
+    if (Array.isArray(cRoutes) && cRoutes.length > 0) setRunRouteId(cRoutes[0].route_id);
+    if (devices.length > 0) setRunDeviceId(devices[0].device_id);
+    setRunCapturePcap(false);
+    setShowRunModal(true);
+  };
+
+  const executeRun = () => {
+    if (!runCampaign || !runRouteId || !runDeviceId) {
+      toast.error('Sélectionnez une route et un équipement');
+      return;
+    }
+    try {
+      setIsRunning(true);
+      // Créer le job
+      const job = localDriveJobs.create({
+        campaign_id: runCampaign.campaign_id,
+        route_id: runRouteId,
+        device_id: runDeviceId,
+        target_env: runCampaign.target_env,
+      });
+      setRunningJobId(job.drive_job_id);
+      toast.info(`Job ${job.drive_job_id.slice(0, 8)} créé (PENDING)`);
+
+      // Simuler l'exécution
+      const route = localDriveRoutes.list(runCampaign.campaign_id).find(r => r.route_id === runRouteId);
+      if (!route) throw new Error('Route introuvable');
+
+      // Seuils par défaut
+      const thresholds: Record<string, number> = {
+        RSRP: -100, RSRQ: -12, SINR: 5,
+        THROUGHPUT_DL: 20, THROUGHPUT_UL: 5,
+        LATENCY: 50, JITTER: 20, PACKET_LOSS: 1,
+      };
+
+      const result = localDriveJobs.simulateExecution(job.drive_job_id, route, thresholds);
+      toast.success(`Exécution terminée : ${result.status}`);
+
+      // Refresh
+      loadCampaigns();
+      loadDriveJobs(runCampaign.campaign_id);
+      setShowRunModal(false);
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setIsRunning(false);
+      setRunningJobId(null);
+    }
   };
 
   useEffect(() => {
@@ -440,10 +525,13 @@ export default function DriveCampaignsPage() {
                             <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Ready
                           </Button>
                         )}
-                        {canWrite && c.status === 'READY' && (
-                          <Button size="sm" variant="ghost" onClick={() => updateCampaignStatus(c.campaign_id, 'RUNNING')}>
-                            <Play className="w-3.5 h-3.5 mr-1" /> Lancer
+                        {canWrite && (c.status === 'READY' || c.status === 'DONE') && (
+                          <Button size="sm" variant="ghost" className="text-emerald-400" onClick={() => openRunCampaign(c)}>
+                            <Play className="w-3.5 h-3.5 mr-1" /> {c.status === 'DONE' ? 'Relancer' : 'Run'}
                           </Button>
+                        )}
+                        {c.status === 'RUNNING' && (
+                          <Badge className="bg-amber-500/20 text-amber-300 animate-pulse"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> En cours</Badge>
                         )}
                         {canWrite && (
                           <>
@@ -501,6 +589,53 @@ export default function DriveCampaignsPage() {
                             <p className="text-xs text-muted-foreground">{c.description}</p>
                           </div>
                         )}
+
+                        {/* Drive Jobs */}
+                        <div className="mt-3 pt-3 border-t border-border/50">
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-sm font-medium flex items-center gap-1.5">
+                              <Activity className="w-4 h-4 text-blue-400" />
+                              Exécutions ({(driveJobs[c.campaign_id] || []).length})
+                            </h3>
+                            <Button size="sm" variant="ghost" onClick={() => loadDriveJobs(c.campaign_id)}>
+                              Rafraîchir
+                            </Button>
+                          </div>
+                          {(driveJobs[c.campaign_id] || []).length === 0 ? (
+                            <p className="text-xs text-muted-foreground">Aucune exécution. Cliquez sur Run pour lancer.</p>
+                          ) : (
+                            <div className="space-y-1">
+                              {(driveJobs[c.campaign_id] || []).map(j => {
+                                const summary = jobSummaries[j.drive_job_id];
+                                const jobStatusColor = j.status === 'DONE' ? 'text-emerald-400' : j.status === 'FAILED' ? 'text-red-400' : j.status === 'RUNNING' ? 'text-amber-400' : 'text-gray-400';
+                                return (
+                                  <div key={j.drive_job_id} className="flex items-center justify-between px-3 py-2 rounded bg-background/50">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`text-xs font-mono ${jobStatusColor}`}>{j.status}</span>
+                                      <span className="text-xs text-muted-foreground">{j.drive_job_id.slice(0, 8)}</span>
+                                      <span className="text-xs text-muted-foreground">{new Date(j.created_at).toLocaleString('fr-FR')}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {summary && (
+                                        <span className={`text-xs ${summary.overall_pass ? 'text-emerald-400' : 'text-red-400'}`}>
+                                          {summary.overall_pass ? 'PASS' : `${summary.threshold_violations.length} violation(s)`}
+                                        </span>
+                                      )}
+                                      {j.artifacts_manifest.length > 0 && (
+                                        <Badge variant="outline" className="text-xs">{j.artifacts_manifest.length} artefacts</Badge>
+                                      )}
+                                      {summary && (
+                                        <Button size="sm" variant="ghost" onClick={() => window.location.href = `/drive-reporting?campaign=${c.campaign_id}&job=${j.drive_job_id}`}>
+                                          <BarChart3 className="w-3.5 h-3.5" />
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -766,6 +901,70 @@ export default function DriveCampaignsPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDeviceModal(false)}>Annuler</Button>
             <Button onClick={saveDevice}>Ajouter</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Run Campaign Modal */}
+      <Dialog open={showRunModal} onOpenChange={setShowRunModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Play className="w-5 h-5 text-emerald-400" />
+              Lancer une exécution Drive
+            </DialogTitle>
+          </DialogHeader>
+          {runCampaign && (
+            <div className="space-y-4">
+              <div className="p-3 rounded bg-muted/30 text-sm">
+                <div className="font-medium">{runCampaign.name}</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {runCampaign.network_type} · {runCampaign.target_env} · {runCampaign.area}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Route</label>
+                <Select value={runRouteId} onValueChange={setRunRouteId}>
+                  <SelectTrigger><SelectValue placeholder="Sélectionner une route" /></SelectTrigger>
+                  <SelectContent>
+                    {(routes[runCampaign.campaign_id] || localDriveRoutes.list(runCampaign.campaign_id)).map(r => (
+                      <SelectItem key={r.route_id} value={r.route_id}>{r.name} (~{r.expected_duration_min} min)</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Équipement</label>
+                <Select value={runDeviceId} onValueChange={setRunDeviceId}>
+                  <SelectTrigger><SelectValue placeholder="Sélectionner un équipement" /></SelectTrigger>
+                  <SelectContent>
+                    {devices.map(d => (
+                      <SelectItem key={d.device_id} value={d.device_id}>{d.model} ({d.type})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={runCapturePcap} onChange={e => setRunCapturePcap(e.target.checked)} />
+                Capturer PCAP (tcpdump)
+              </label>
+
+              {isRunning && (
+                <div className="flex items-center gap-2 text-sm text-amber-400">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Exécution en cours...
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRunModal(false)} disabled={isRunning}>Annuler</Button>
+            <Button onClick={executeRun} disabled={isRunning || !runRouteId || !runDeviceId} className="bg-emerald-600 hover:bg-emerald-700">
+              {isRunning ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Exécution...</> : <><Play className="w-4 h-4 mr-1" /> Lancer</>}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
