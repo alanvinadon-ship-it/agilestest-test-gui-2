@@ -3,6 +3,8 @@
  * CRUD utilisateurs, filtres, disable/enable, reset password, view memberships
  */
 import { useState, useMemo, useCallback, Fragment } from 'react';
+import { trpc } from '@/lib/trpc';
+import { localNotifSettings } from '../notifications';
 import {
   Users, Plus, Search, Filter, Edit2, UserX, UserCheck,
   KeyRound, Eye, MoreHorizontal, Shield, X, ChevronLeft, ChevronRight,
@@ -627,20 +629,76 @@ function InviteModal({ onClose, onSent }: { onClose: () => void; onSent: () => v
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRole>('VIEWER');
   const [sending, setSending] = useState(false);
+  const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle');
 
-  const handleSend = useCallback(() => {
+  const sendInviteEmailMutation = trpc.notifications.sendInviteEmail.useMutation();
+
+  const ROLE_LABELS: Record<string, string> = {
+    ADMIN: 'Administrateur',
+    MANAGER: 'Manager',
+    VIEWER: 'Lecteur',
+  };
+
+  const handleSend = useCallback(async () => {
     if (!email.trim()) { toast.error('Email requis'); return; }
     setSending(true);
+    setEmailStatus('idle');
     try {
-      adminInvites.create({ email, role }, actor);
-      toast.success(`Invitation envoyée à ${email} (simulé)`);
+      // 1. Créer l'invitation en local
+      const invite = adminInvites.create({ email, role }, actor);
+
+      // 2. Tenter l'envoi d'email réel via SMTP si le mode Live est actif
+      const rawEmail = localNotifSettings.getRawEmailSettings();
+      const isSmtpLive = rawEmail.enabled && rawEmail.provider === 'SMTP' && rawEmail.host && rawEmail.username && rawEmail.password;
+
+      if (isSmtpLive) {
+        setEmailStatus('sending');
+        try {
+          const baseUrl = window.location.origin;
+          const inviteLink = `${baseUrl}/invite/accept?token=${invite.token}`;
+
+          const result = await sendInviteEmailMutation.mutateAsync({
+            smtp: {
+              host: rawEmail.host,
+              port: rawEmail.port,
+              secure: rawEmail.secure,
+              username: rawEmail.username!,
+              password: rawEmail.password!,
+              from_email: rawEmail.from_email || 'noreply@agilestest.io',
+              from_name: rawEmail.from_name || 'AgilesTest',
+              reply_to: rawEmail.reply_to || undefined,
+              timeout_ms: rawEmail.timeout_ms,
+            },
+            invitee_email: email,
+            inviter_name: actor.name || 'Administrateur',
+            role: ROLE_LABELS[role] || role,
+            invite_link: inviteLink,
+            expires_at: invite.expires_at,
+            app_name: 'AgilesTest',
+          });
+
+          if (result.success) {
+            setEmailStatus('sent');
+            toast.success(`Invitation envoyée à ${email} — email délivré via SMTP`);
+          } else {
+            setEmailStatus('failed');
+            toast.warning(`Invitation créée mais l'email n'a pas pu être envoyé : ${result.error}`);
+          }
+        } catch (smtpErr: any) {
+          setEmailStatus('failed');
+          toast.warning(`Invitation créée mais erreur SMTP : ${smtpErr.message}`);
+        }
+      } else {
+        toast.success(`Invitation créée pour ${email} (email non envoyé — activez le mode Live dans Admin > Notifications > Email)`);
+      }
+
       onSent();
     } catch (e: any) {
       toast.error(e.message);
     } finally {
       setSending(false);
     }
-  }, [email, role, actor, onSent]);
+  }, [email, role, actor, onSent, sendInviteEmailMutation]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -675,10 +733,38 @@ function InviteModal({ onClose, onSent }: { onClose: () => void; onSent: () => v
               <option value="ADMIN">Administrateur</option>
             </select>
           </div>
-          <p className="text-xs text-muted-foreground">
-            L'utilisateur recevra un email d'invitation (simulé) avec un lien d'activation valide 7 jours.
-            Son statut sera "Invité" jusqu'à l'acceptation.
-          </p>
+          {(() => {
+            const rawEmail = localNotifSettings.getRawEmailSettings();
+            const isLive = rawEmail.enabled && rawEmail.provider === 'SMTP' && rawEmail.host && rawEmail.username && rawEmail.password;
+            return (
+              <div className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs ${
+                isLive
+                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                  : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+              }`}>
+                <Mail className="w-3.5 h-3.5" />
+                {isLive
+                  ? `L'invitation sera envoyée par email via ${rawEmail.host}`
+                  : 'Email non configuré — l\'invitation sera créée sans envoi d\'email (configurer dans Admin > Notifications > Email)'
+                }
+              </div>
+            );
+          })()}
+          {emailStatus === 'sending' && (
+            <div className="flex items-center gap-2 text-xs text-blue-400">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Envoi de l'email en cours...
+            </div>
+          )}
+          {emailStatus === 'sent' && (
+            <div className="flex items-center gap-2 text-xs text-emerald-400">
+              <MailCheck className="w-3.5 h-3.5" /> Email d'invitation envoyé avec succès
+            </div>
+          )}
+          {emailStatus === 'failed' && (
+            <div className="flex items-center gap-2 text-xs text-red-400">
+              <MailX className="w-3.5 h-3.5" /> L'email n'a pas pu être envoyé (invitation créée quand même)
+            </div>
+          )}
         </div>
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border">
           <button onClick={onClose} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground">
@@ -689,8 +775,8 @@ function InviteModal({ onClose, onSent }: { onClose: () => void; onSent: () => v
             disabled={sending}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
           >
-            <Send className="w-4 h-4" />
-            Envoyer l'invitation
+            {sending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            {sending ? 'Envoi en cours...' : 'Envoyer l\'invitation'}
           </button>
         </div>
       </div>
@@ -726,15 +812,63 @@ function InvitesListDrawer({ onClose, onRefresh }: { onClose: () => void; onRefr
     return adminInvites.list();
   }, [refreshKey]);
 
-  const handleResend = useCallback((inv: Invite) => {
+  const sendInviteEmailMutation = trpc.notifications.sendInviteEmail.useMutation();
+
+  const ROLE_LABELS: Record<string, string> = {
+    ADMIN: 'Administrateur',
+    MANAGER: 'Manager',
+    VIEWER: 'Lecteur',
+  };
+
+  const handleResend = useCallback(async (inv: Invite) => {
     try {
-      adminInvites.resend(inv.id, actor);
-      toast.success(`Invitation renvoyée à ${inv.email}`);
+      const updatedInvite = adminInvites.resend(inv.id, actor);
       setRefreshKey(k => k + 1);
+
+      // Tenter l'envoi d'email réel via SMTP si le mode Live est actif
+      const rawEmail = localNotifSettings.getRawEmailSettings();
+      const isSmtpLive = rawEmail.enabled && rawEmail.provider === 'SMTP' && rawEmail.host && rawEmail.username && rawEmail.password;
+
+      if (isSmtpLive) {
+        try {
+          const baseUrl = window.location.origin;
+          const inviteLink = `${baseUrl}/invite/accept?token=${updatedInvite.token}`;
+
+          const result = await sendInviteEmailMutation.mutateAsync({
+            smtp: {
+              host: rawEmail.host,
+              port: rawEmail.port,
+              secure: rawEmail.secure,
+              username: rawEmail.username!,
+              password: rawEmail.password!,
+              from_email: rawEmail.from_email || 'noreply@agilestest.io',
+              from_name: rawEmail.from_name || 'AgilesTest',
+              reply_to: rawEmail.reply_to || undefined,
+              timeout_ms: rawEmail.timeout_ms,
+            },
+            invitee_email: inv.email,
+            inviter_name: actor.name || 'Administrateur',
+            role: ROLE_LABELS[inv.role] || inv.role,
+            invite_link: inviteLink,
+            expires_at: updatedInvite.expires_at,
+            app_name: 'AgilesTest',
+          });
+
+          if (result.success) {
+            toast.success(`Invitation renvoyée à ${inv.email} — email délivré via SMTP`);
+          } else {
+            toast.warning(`Invitation renvoyée mais l'email a échoué : ${result.error}`);
+          }
+        } catch (smtpErr: any) {
+          toast.warning(`Invitation renvoyée mais erreur SMTP : ${smtpErr.message}`);
+        }
+      } else {
+        toast.success(`Invitation renvoyée à ${inv.email} (sans email — mode Stub)`);
+      }
     } catch (e: any) {
       toast.error(e.message);
     }
-  }, [actor]);
+  }, [actor, sendInviteEmailMutation]);
 
   const handleRevoke = useCallback((inv: Invite) => {
     try {

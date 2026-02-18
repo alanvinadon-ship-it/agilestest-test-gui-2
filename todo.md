@@ -19,3 +19,10 @@
 - [x] Add getRawEmailSettings to localNotificationsStore for credential access
 - [x] Port/security validation (465+STARTTLS, 587+TLS rejection)
 - [x] Vitest tests for email service (8 tests passing)
+- [x] Bug: Les invitations utilisateur n'envoient pas de mail réel (seulement simulé)
+- [x] Connecter le flux d'invitation au backend SMTP Nodemailer
+- [x] Endpoint tRPC sendInviteEmail avec template HTML d'invitation
+- [x] InviteModal envoie email réel via SMTP quand mode Live actif
+- [x] handleResend envoie aussi l'email réel via SMTP
+- [x] Indicateur visuel mode Live/Stub dans le modal d'invitation
+- [x] 11 tests Vitest passent (3 nouveaux pour sendInviteEmail)

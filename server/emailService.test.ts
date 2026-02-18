@@ -141,3 +141,58 @@ describe("notifications.sendEmail", () => {
     expect(result.message_id).toBeDefined();
   });
 });
+
+describe("notifications.sendInviteEmail", () => {
+  it("envoie un email d'invitation utilisateur via SMTP", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.notifications.sendInviteEmail({
+      smtp: validSmtpConfig,
+      invitee_email: 'newuser@example.com',
+      inviter_name: 'Admin Test',
+      role: 'Administrateur',
+      invite_link: 'https://agilestest.io/invite/accept?token=tok_abc123',
+      expires_at: '2026-03-01T23:59:59Z',
+      app_name: 'AgilesTest',
+    });
+
+    expect(result).toBeDefined();
+    expect(result.success).toBe(true);
+    expect(result.message_id).toBeDefined();
+    expect(result.duration_ms).toBeGreaterThanOrEqual(0);
+  });
+
+  it("rejette un email invité invalide", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.notifications.sendInviteEmail({
+        smtp: validSmtpConfig,
+        invitee_email: 'not-valid',
+        inviter_name: 'Admin',
+        role: 'Lecteur',
+        invite_link: 'https://agilestest.io/invite/accept?token=tok_abc',
+        expires_at: '2026-03-01T23:59:59Z',
+        app_name: 'AgilesTest',
+      })
+    ).rejects.toThrow();
+  });
+
+  it("utilise le nom d'app par défaut si non fourni", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.notifications.sendInviteEmail({
+      smtp: validSmtpConfig,
+      invitee_email: 'user@example.com',
+      inviter_name: 'Admin',
+      role: 'Manager',
+      invite_link: 'https://agilestest.io/invite/accept?token=tok_xyz',
+      expires_at: '2026-03-01T23:59:59Z',
+    });
+
+    expect(result.success).toBe(true);
+  });
+});
