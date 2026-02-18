@@ -1,0 +1,63 @@
+# ─── ArgoCD Application — AgilesTest Pilot Orange ────────────────────────
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: agilestest-pilot-orange
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: agilestest
+    environment: pilot-orange
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: agilestest
+  source:
+    repoURL: https://github.com/agilestest/agilestest-deploy.git
+    targetRevision: main
+    path: deploy/k8s-gitops/charts/agilestest
+    helm:
+      valueFiles:
+        - ../../../gitops/overlays/pilot_orange/values-pilot-orange.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: agilestest-pilot-orange
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+---
+# ─── ArgoCD Project ─────────────────────────────────────────────────────
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: agilestest
+  namespace: argocd
+spec:
+  description: AgilesTest Platform Project
+  sourceRepos:
+    - https://github.com/agilestest/agilestest-deploy.git
+  destinations:
+    - namespace: agilestest-*
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

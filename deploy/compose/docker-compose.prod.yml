@@ -1,0 +1,203 @@
+# ─── AgilesTest — Docker Compose Production ─────────────────────────────
+# Version : 1.0.0 — Mission PACKAGING-DUAL-1
+# Usage  : docker compose -f docker-compose.prod.yml --env-file .env up -d
+# ─────────────────────────────────────────────────────────────────────────
+
+networks:
+  public:
+    driver: bridge
+  private:
+    driver: bridge
+    internal: true
+
+volumes:
+  minio-data:
+    driver: local
+  frontend-build:
+    driver: local
+
+services:
+  # ─── Reverse Proxy (Nginx + TLS) ──────────────────────────────────────
+  reverse-proxy:
+    image: nginx:1.25-alpine
+    container_name: agilestest-proxy
+    ports:
+      - "${PROXY_HTTP_PORT:-80}:80"
+      - "${PROXY_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - public
+      - private
+    depends_on:
+      frontend:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  # ─── Frontend (SPA + Express static server) ───────────────────────────
+  frontend:
+    build:
+      context: ../../
+      dockerfile: deploy/compose/Dockerfile.frontend
+      args:
+        VITE_API_BASE_URL: "${VITE_API_BASE_URL:-}"
+        VITE_APP_TITLE: "${VITE_APP_TITLE:-AgilesTest}"
+        VITE_DATASET_STORAGE_MODE: "${VITE_DATASET_STORAGE_MODE:-local}"
+    image: "${REGISTRY:-}agilestest-frontend:${TAG:-latest}"
+    container_name: agilestest-frontend
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    networks:
+      - private
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  # ─── Orchestration API ────────────────────────────────────────────────
+  orchestration:
+    build:
+      context: ../../
+      dockerfile: deploy/compose/Dockerfile.orchestration
+    image: "${REGISTRY:-}agilestest-orchestration:${TAG:-latest}"
+    container_name: agilestest-orchestration
+    environment:
+      PORT: 4000
+      NODE_ENV: production
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: "${MINIO_ROOT_USER:-minioadmin}"
+      MINIO_SECRET_KEY: "${MINIO_ROOT_PASSWORD:-minioadmin}"
+      MINIO_BUCKET: "${MINIO_BUCKET:-agilestest-artifacts}"
+      JWT_SECRET: "${JWT_SECRET:-change-me-in-production}"
+    networks:
+      - private
+    depends_on:
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  # ─── Runner Agent (Playwright + tcpdump) ──────────────────────────────
+  runner:
+    build:
+      context: ../../runner-agent
+      dockerfile: Dockerfile
+    image: "${REGISTRY:-}agilestest-runner:${TAG:-latest}"
+    container_name: agilestest-runner
+    environment:
+      RUNNER_ID: "${RUNNER_ID:-runner-prod-01}"
+      ORCHESTRATION_URL: http://orchestration:4000
+      POLL_INTERVAL_MS: "${POLL_INTERVAL_MS:-5000}"
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: "${MINIO_ROOT_USER:-minioadmin}"
+      MINIO_SECRET_KEY: "${MINIO_ROOT_PASSWORD:-minioadmin}"
+      MINIO_BUCKET: "${MINIO_BUCKET:-agilestest-artifacts}"
+      MINIO_USE_SSL: "false"
+      BASE_URL: http://frontend:3000
+      PROBE_TOKEN: "${PROBE_TOKEN:-}"
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    networks:
+      - private
+    depends_on:
+      orchestration:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "process.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+
+  # ─── MinIO (S3 Object Storage) ────────────────────────────────────────
+  minio:
+    image: minio/minio:RELEASE.2024-06-13T22-53-53Z
+    container_name: agilestest-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:-minioadmin}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-minioadmin}"
+    volumes:
+      - minio-data:/data
+    networks:
+      - private
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  # ─── MinIO Init (create bucket) ───────────────────────────────────────
+  minio-init:
+    image: minio/mc:latest
+    container_name: agilestest-minio-init
+    entrypoint: /bin/sh
+    command: >
+      -c "
+      mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD};
+      mc mb local/$${MINIO_BUCKET} --ignore-existing;
+      mc anonymous set download local/$${MINIO_BUCKET};
+      echo 'Bucket $${MINIO_BUCKET} ready';
+      "
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:-minioadmin}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-minioadmin}"
+      MINIO_BUCKET: "${MINIO_BUCKET:-agilestest-artifacts}"
+    networks:
+      - private
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"

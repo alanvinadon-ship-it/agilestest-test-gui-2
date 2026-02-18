@@ -14,6 +14,7 @@ import {
   BookOpen, Search, ChevronRight, Copy, Check,
   User, Shield, Server, HelpCircle, FileText,
   Hash, ExternalLink, Radio, ClipboardList, Target, BarChart3, Zap, Bell,
+  Package, Container, AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -39,6 +40,11 @@ const GUIDES: GuideEntry[] = [
   { slug: 'pilot-runbook', title: 'Runbook Pilote Orange', icon: BookOpen, file: '/docs/PILOT_ORANGE_RUNBOOK.md', description: 'Procédure complète du pilote V1 — 4 parcours' },
   { slug: 'pilot-checklist', title: 'Checklist Pilote', icon: ClipboardList, file: '/docs/PILOT_ORANGE_CHECKLIST.md', description: 'Checklists J-7/J-2/Jour J et par parcours' },  { slug: 'pilot-gonogo', title: 'Grille GO/NOGO', icon: Target, file: '/docs/PILOT_ORANGE_GO_NOGO_TEMPLATE.md', description: 'Critères d\'évaluation et décision GO/NOGO' },
   { slug: 'admin-notifications', title: 'Notifications Admin', icon: Bell, file: '/docs/ADMIN_NOTIFICATIONS.md', description: 'SMS Orange, Email SMTP, templates, règles, delivery logs' },
+  { slug: 'install-compose', title: 'Install Docker Compose', icon: Container, file: '/docs/INSTALL_COMPOSE.md', description: 'Installation rapide sur VM Linux — Docker Compose' },
+  { slug: 'install-k8s', title: 'Install Kubernetes', icon: Package, file: '/docs/INSTALL_K8S_GITOPS.md', description: 'Installation industrielle — Helm + GitOps + ArgoCD' },
+  { slug: 'dr-runbook', title: 'DR Runbook K8s', icon: AlertTriangle, file: '/docs/DR_RUNBOOK.md', description: 'Disaster Recovery — backup, restore, rotation secrets' },
+  { slug: 'parity-checklist', title: 'Parité Compose ↔ K8s', icon: ClipboardList, file: '/docs/PARITY_CHECKLIST.md', description: 'Checklist de parité fonctionnelle entre les deux modes' },
+  { slug: 'smoke-tests', title: 'Smoke Tests', icon: Target, file: '/docs/SMOKE_TESTS.md', description: 'Étapes et résultats attendus des smoke tests' },
 ];
 
 // ─── TOC extraction ─────────────────────────────────────────────────────

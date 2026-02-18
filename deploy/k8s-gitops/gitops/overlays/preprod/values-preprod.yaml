@@ -1,0 +1,27 @@
+# ─── AgilesTest — Values PREPROD ─────────────────────────────────────────
+global:
+  tag: "preprod-latest"
+  domain: preprod.agilestest.orange.ci
+  tls:
+    enabled: true
+    secretName: agilestest-preprod-tls
+
+frontend:
+  replicaCount: 2
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-staging
+
+orchestration:
+  replicaCount: 2
+
+runner-agent:
+  replicaCount: 1
+
+minio:
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClass: ssd

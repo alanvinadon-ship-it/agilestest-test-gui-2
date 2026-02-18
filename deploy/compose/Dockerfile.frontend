@@ -1,0 +1,53 @@
+# ─── AgilesTest Frontend — Multi-stage build ────────────────────────────
+# Stage 1 : Build Vite SPA + Express server
+# Stage 2 : Runtime minimal Node.js
+# ─────────────────────────────────────────────────────────────────────────
+
+# ── Build stage ──────────────────────────────────────────────────────────
+FROM node:20-slim AS builder
+WORKDIR /app
+
+# Copier les fichiers de dépendances
+COPY package.json pnpm-lock.yaml* ./
+RUN corepack enable && pnpm install --frozen-lockfile 2>/dev/null || npm install
+
+# Copier le code source
+COPY client/ ./client/
+COPY server/ ./server/
+COPY shared/ ./shared/
+COPY vite.config.ts tsconfig.json ./
+
+# Build args pour les variables VITE_*
+ARG VITE_API_BASE_URL=""
+ARG VITE_APP_TITLE="AgilesTest"
+ARG VITE_DATASET_STORAGE_MODE="local"
+
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+ENV VITE_APP_TITLE=${VITE_APP_TITLE}
+ENV VITE_DATASET_STORAGE_MODE=${VITE_DATASET_STORAGE_MODE}
+
+# Build production
+RUN npm run build
+
+# ── Runtime stage ────────────────────────────────────────────────────────
+FROM node:20-slim AS runtime
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends wget && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copier les artefacts de build
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package.json ./
+
+# Installer uniquement les dépendances de production
+RUN npm install --omit=dev 2>/dev/null || true
+
+ENV NODE_ENV=production
+ENV PORT=3000
+
+EXPOSE 3000
+
+USER node
+
+CMD ["node", "dist/index.js"]

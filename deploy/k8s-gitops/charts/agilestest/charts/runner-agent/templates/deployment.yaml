@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "runner-agent.fullname" . }}
+  labels:
+    app.kubernetes.io/name: runner-agent
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: runner
+spec:
+  replicas: {{ .Values.replicaCount | default 1 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: runner-agent
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: runner-agent
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: runner
+    spec:
+      containers:
+        - name: runner
+          image: "{{ .Values.global.registry }}{{ .Values.image.repository }}:{{ .Values.global.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: RUNNER_ID
+              value: {{ .Values.env.RUNNER_ID | default "runner-k8s-01" | quote }}
+            - name: POLL_INTERVAL_MS
+              value: {{ .Values.env.POLL_INTERVAL_MS | default "5000" | quote }}
+            - name: ORCHESTRATION_URL
+              value: "http://{{ .Release.Name }}-orchestration:4000"
+            - name: MINIO_ENDPOINT
+              value: "{{ .Values.global.minio.endpoint }}:{{ .Values.global.minio.port }}"
+            - name: MINIO_BUCKET
+              value: {{ .Values.global.minio.bucket }}
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-secrets
+                  key: minio-access-key
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-secrets
+                  key: minio-secret-key
+          {{- with .Values.securityContext }}
+          securityContext:
+            capabilities:
+              add:
+                {{- toYaml .capabilities.add | nindent 16 }}
+          {{- end }}
+          livenessProbe:
+            exec:
+              command:
+                - node
+                - -e
+                - "process.exit(0)"
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 5Gi
