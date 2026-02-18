@@ -192,3 +192,51 @@ Pour la documentation complète, voir [CAPTURE_POLICY.md](./docs/CAPTURE_POLICY.
   └── report/
       └── campaign_report.json
 ```
+
+---
+
+## Corrélation KPI ↔ Route ↔ Artefacts (DRIVE-CORRELATION-1)
+
+> Ajouté par la mission DRIVE-CORRELATION-1 — 2026-02-18
+
+### Segmentation de route
+
+Les routes de campagne sont automatiquement découpées en **segments de 50m** (configurable). Chaque segment est classifié en **OK / WARN / CRIT** selon les seuils KPI configurés (voir `DEFAULT_KPI_THRESHOLDS` dans `driveCorrelation/types.ts`).
+
+### Visualisation
+
+La page **Drive Test — Corrélation & Reporting** (`/drive/reporting`) offre :
+
+1. **Barre de segments colorés** : vue d'ensemble de la qualité réseau le long de la route
+2. **Timeline KPI** : courbe temporelle avec marqueurs de breach et lignes de seuil
+3. **Drill-down segment** : click sur un segment pour voir stats, violations, artefacts et incidents
+4. **Filtres** : sélection du KPI, fenêtre temporelle (5s/10s/30s), projet, campagne, job
+
+### Index temporel des artefacts
+
+Les artefacts (PCAP, logs) sont indexés par fenêtre temporelle et source (RUNNER ou PROBE). Le drill-down affiche automatiquement les artefacts dont la fenêtre chevauche celle du segment sélectionné (±30s de marge).
+
+### Incidents automatiques
+
+Lorsque `auto_incidents` est activé (défaut : ON), des incidents Drive sont générés automatiquement :
+
+| Condition | Sévérité |
+|---|---|
+| Segment CRIT + breach_pct ≥ 30% | **P0** (Critique) |
+| Segment CRIT + breach_pct < 30% | **P1** (Majeur) |
+| Segment WARN + breach_pct ≥ 50% | **P1** (Majeur) |
+| Segment WARN + breach_pct < 50% | **P2** (Mineur) |
+
+Les incidents sont dédupliqués (même KPI + même segment + fenêtre qui se chevauche) et les segments contigus sont fusionnés pour réduire le bruit.
+
+### Intégration IA REPAIR
+
+Chaque incident Drive dispose d'un bouton **"Analyze & Repair (Drive)"** qui :
+
+1. Construit le contexte d'analyse (KPI, seuils, artefacts, géolocalisation)
+2. Appelle le template `PROMPT_DRIVE_REPAIR_v1` (ou simulation locale)
+3. Retourne des patches ciblés avec cause racine et confiance
+
+### Documentation complète
+
+Voir `docs/DRIVE_CORRELATION.md` pour l'architecture détaillée, les algorithmes et les tests recommandés.
