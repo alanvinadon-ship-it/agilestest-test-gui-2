@@ -124,8 +124,8 @@ export default function AdminRolesPage() {
             </tr>
           </thead>
           <tbody>
-            {roles.map(role => (
-              <>
+            {roles.map((role, roleIdx) => (
+              <tbody key={`role-tbody-${role.role_id}-${roleIdx}`}>
                 <tr key={role.role_id} className="border-b border-border/50 hover:bg-secondary/20 transition-colors">
                   <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{role.role_id}</td>
                   <td className="px-4 py-3 font-medium text-foreground flex items-center gap-2">
@@ -183,7 +183,7 @@ export default function AdminRolesPage() {
                     </td>
                   </tr>
                 )}
-              </>
+              </tbody>
             ))}
             {roles.length === 0 && (
               <tr>
@@ -215,18 +215,18 @@ function PermissionPreview({ permissions }: { permissions: PermissionKey[] }) {
   const permSet = new Set(permissions);
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-      {PERMISSION_GROUPS.map(group => {
+      {PERMISSION_GROUPS.map((group, groupIdx) => {
         const granted = group.permissions.filter(p => permSet.has(p.key));
         if (granted.length === 0) return null;
         return (
-          <div key={group.id} className="space-y-1">
+          <div key={`perm-group-${group.id}-${groupIdx}`} className="space-y-1">
             <p className="text-[10px] font-mono font-medium uppercase tracking-wider text-muted-foreground">
               {group.label}
             </p>
             <div className="flex flex-wrap gap-1">
-              {group.permissions.map(p => (
+              {group.permissions.map((p, pIdx) => (
                 <span
-                  key={p.key}
+                  key={`perm-${p.key}-${pIdx}`}
                   className={cn(
                     'px-1.5 py-0.5 rounded text-[10px] font-mono',
                     permSet.has(p.key)

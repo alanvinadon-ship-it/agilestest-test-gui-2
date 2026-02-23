@@ -35,3 +35,5 @@
 - [x] États visuels : loading, invalid, expired, already accepted, success
 - [x] 11 tests Vitest passent (existants non cassés)
 - [x] Bug: Menu Administration absent pour l'Admin Principal après connexion (normalisé rôle case-insensitive)
+- [x] Fix: Missing key prop in AdminRbacPage list rendering (ajouté clés uniques pour roles, groups, permissions)
+- [x] Fix: Missing key prop in AdminRolesPage tbody rendering (ajouté clés uniques pour roles et permissions)

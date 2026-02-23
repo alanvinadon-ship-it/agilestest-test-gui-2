@@ -122,8 +122,8 @@ export default function AdminRbacPage() {
                 <th className="text-left px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider min-w-[200px] sticky left-0 bg-secondary/30 z-10">
                   Permission
                 </th>
-                {roles.map(role => (
-                  <th key={role.role_id} className="text-center px-3 py-3 min-w-[110px]">
+                {roles.map((role, roleIdx) => (
+                  <th key={`role-header-${role.role_id}-${roleIdx}`} className="text-center px-3 py-3 min-w-[110px]">
                     <div className="flex flex-col items-center gap-1">
                       <span className={`text-xs font-mono font-medium ${
                         role.role_id === 'ADMIN' ? 'text-red-400' :
@@ -145,8 +145,8 @@ export default function AdminRbacPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredGroups.map(group => (
-                <>
+              {filteredGroups.map((group, groupIdx) => (
+                <tbody key={`group-${groupIdx}`}>
                   {/* Group header */}
                   <tr key={`grp-${group.id}`} className="bg-secondary/10">
                     <td
@@ -165,11 +165,11 @@ export default function AdminRbacPage() {
                           <span className="block text-[10px] font-mono text-muted-foreground/60">{perm.key}</span>
                         </div>
                       </td>
-                      {roles.map(role => {
+                      {roles.map((role, roleIdx) => {
                         const has = role.role_id === 'ADMIN' || role.permissions.includes(perm.key);
                         const isAdminOverride = role.role_id === 'ADMIN';
                         return (
-                          <td key={role.role_id} className="px-3 py-2 text-center">
+                          <td key={`cell-${perm.key}-${role.role_id}-${roleIdx}`} className="px-3 py-2 text-center">
                             {has ? (
                               <div className="flex justify-center">
                                 <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full ${
@@ -188,7 +188,7 @@ export default function AdminRbacPage() {
                       })}
                     </tr>
                   ))}
-                </>
+                </tbody>
               ))}
             </tbody>
           </table>
@@ -197,7 +197,7 @@ export default function AdminRbacPage() {
 
       {/* Summary per role */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {roles.map(role => {
+        {roles.map((role, roleIdx) => {
           const permCount = role.role_id === 'ADMIN'
             ? Object.values(PermissionKey).length
             : role.permissions.length;
@@ -205,7 +205,7 @@ export default function AdminRbacPage() {
           const pct = Math.round((permCount / totalPerms) * 100);
 
           return (
-            <div key={role.role_id} className="p-4 bg-card border border-border rounded-lg space-y-3">
+            <div key={`role-summary-${role.role_id}-${roleIdx}`} className="p-4 bg-card border border-border rounded-lg space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {role.is_system ? (
