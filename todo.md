@@ -34,4 +34,4 @@
 - [x] LoginPage supporte les comptes créés via invitation (fallback localStorage)
 - [x] États visuels : loading, invalid, expired, already accepted, success
 - [x] 11 tests Vitest passent (existants non cassés)
-- [ ] Bug: Menu Administration absent pour l'Admin Principal après connexion
+- [x] Bug: Menu Administration absent pour l'Admin Principal après connexion (normalisé rôle case-insensitive)

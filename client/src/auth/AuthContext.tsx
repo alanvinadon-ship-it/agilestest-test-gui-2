@@ -49,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const hasRole = useCallback((...roles: UserRole[]) => {
-    return !!state.user && roles.includes(state.user.role);
+    return !!state.user && roles.some(r => r.toUpperCase() === state.user?.role?.toUpperCase());
   }, [state.user]);
 
   useEffect(() => {
@@ -62,13 +62,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', handler);
   }, []);
 
+  const isAdminUser = !!state.user && state.user.role?.toUpperCase() === 'ADMIN';
+  const canWriteUser = !!state.user && (state.user.role?.toUpperCase() === 'ADMIN' || state.user.role?.toUpperCase() === 'MANAGER');
+
   const value: AuthContextValue = {
     ...state,
     login,
     logout,
     hasRole,
-    canWrite: !!state.user && (state.user.role === 'ADMIN' || state.user.role === 'MANAGER'),
-    isAdmin: !!state.user && state.user.role === 'ADMIN',
+    canWrite: canWriteUser,
+    isAdmin: isAdminUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
