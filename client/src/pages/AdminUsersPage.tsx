@@ -631,6 +631,7 @@ function InviteModal({ onClose, onSent }: { onClose: () => void; onSent: () => v
   const [sending, setSending] = useState(false);
   const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle');
 
+  const createInviteMutation = trpc.admin.createInvite.useMutation();
   const sendInviteEmailMutation = trpc.notifications.sendInviteEmail.useMutation();
 
   const ROLE_LABELS: Record<string, string> = {
@@ -644,8 +645,27 @@ function InviteModal({ onClose, onSent }: { onClose: () => void; onSent: () => v
     setSending(true);
     setEmailStatus('idle');
     try {
-      // 1. Créer l'invitation en local
-      const invite = adminInvites.create({ email, role }, actor);
+      // 1. Créer l'invitation en base de données via tRPC
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7);
+
+      const invite = await createInviteMutation.mutateAsync({
+        email: email.trim(),
+        role,
+        invitedBy: actor.id || undefined,
+        invitedByName: actor.name || undefined,
+        expiresAt,
+      });
+
+      if (!invite) {
+        toast.error("Erreur lors de la création de l'invitation");
+        return;
+      }
+
+      // Also create in localStorage for local UI display
+      try {
+        adminInvites.create({ email, role }, actor);
+      } catch { /* ignore localStorage duplicate errors */ }
 
       // 2. Tenter l'envoi d'email réel via SMTP si le mode Live est actif
       const rawEmail = localNotifSettings.getRawEmailSettings();
@@ -673,7 +693,7 @@ function InviteModal({ onClose, onSent }: { onClose: () => void; onSent: () => v
             inviter_name: actor.name || 'Administrateur',
             role: ROLE_LABELS[role] || role,
             invite_link: inviteLink,
-            expires_at: invite.expires_at,
+            expires_at: invite.expiresAt?.toISOString?.() || expiresAt.toISOString(),
             app_name: 'AgilesTest',
           });
 
@@ -698,7 +718,7 @@ function InviteModal({ onClose, onSent }: { onClose: () => void; onSent: () => v
     } finally {
       setSending(false);
     }
-  }, [email, role, actor, onSent, sendInviteEmailMutation]);
+  }, [email, role, actor, onSent, createInviteMutation, sendInviteEmailMutation]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">

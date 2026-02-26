@@ -2,10 +2,11 @@ import { eq, desc, and } from "drizzle-orm";
 import { getDb } from "../db";
 import {
   invites, projectMemberships, roles, permissions,
-  rolePermissions, userRoles, auditLogs
+  rolePermissions, userRoles, auditLogs, users
 } from "../../drizzle/schema";
 import { v4 as uuid } from "uuid";
 import crypto from "crypto";
+import bcrypt from "bcryptjs";
 
 // ══════════════════════════════════════════════════════════════════════════
 // INVITES
@@ -59,6 +60,80 @@ export async function updateInviteStatus(uid: string, status: "PENDING" | "ACCEP
 
 export async function revokeInvite(uid: string) {
   return updateInviteStatus(uid, "REVOKED");
+}
+
+/**
+ * Accept an invitation by token:
+ * 1. Validate the token exists and is PENDING + not expired
+ * 2. Mark invite as ACCEPTED
+ * 3. Create or activate the user in the users table
+ * 4. Return the updated invite + user info
+ */
+export async function acceptInvite(token: string, fullName: string, password: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // 1. Find the invite
+  const rows = await db.select().from(invites).where(eq(invites.token, token)).limit(1);
+  const invite = rows[0];
+  if (!invite) throw new Error("Invitation non trouvée ou lien invalide.");
+
+  if (invite.status === "ACCEPTED") throw new Error("Cette invitation a déjà été acceptée.");
+  if (invite.status === "REVOKED") throw new Error("Cette invitation a été révoquée.");
+  if (invite.status === "EXPIRED" || (invite.expiresAt && new Date(invite.expiresAt).getTime() < Date.now())) {
+    // Auto-expire if not already
+    if (invite.status !== "EXPIRED") {
+      await db.update(invites).set({ status: "EXPIRED" }).where(eq(invites.uid, invite.uid));
+    }
+    throw new Error("Cette invitation a expiré.");
+  }
+
+  // 2. Mark invite as accepted
+  const now = new Date();
+  await db.update(invites).set({ status: "ACCEPTED", acceptedAt: now }).where(eq(invites.uid, invite.uid));
+
+  // 3. Hash password
+  const passwordHash = await bcrypt.hash(password, 10);
+
+  // 4. Create or activate user
+  const openId = `invite_${invite.uid}`;
+  const mapRole = invite.role === "ADMIN" ? "admin" as const : "user" as const;
+
+  // Check if user already exists by email
+  const existingUsers = await db.select().from(users).where(eq(users.email, invite.email)).limit(1);
+  let userId: number;
+
+  if (existingUsers.length > 0) {
+    // Activate existing user
+    userId = existingUsers[0].id;
+    await db.update(users).set({
+      fullName,
+      passwordHash,
+      status: "ACTIVE",
+      role: mapRole,
+    }).where(eq(users.id, userId));
+  } else {
+    // Create new user
+    const result = await db.insert(users).values({
+      openId,
+      name: fullName,
+      email: invite.email,
+      fullName,
+      loginMethod: "invite",
+      role: mapRole,
+      status: "ACTIVE",
+      passwordHash,
+      lastSignedIn: now,
+    });
+    userId = result[0].insertId;
+  }
+
+  // 5. Return updated invite
+  const updatedInvite = await getInviteByUid(invite.uid);
+  return {
+    invite: updatedInvite,
+    user: { id: userId, email: invite.email, fullName, role: mapRole },
+  };
 }
 
 // ══════════════════════════════════════════════════════════════════════════

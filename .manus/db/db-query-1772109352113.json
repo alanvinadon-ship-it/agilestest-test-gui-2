@@ -1,0 +1,16 @@
+{
+  "query": "SELECT CONCAT(LEFT(token, 30), '...') as token_start, email, invite_status, expires_at FROM invites WHERE invite_status = 'PENDING' ORDER BY created_at DESC LIMIT 1;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute SELECT CONCAT(LEFT(token, 30), '...') as token_start, email, invite_status, expires_at FROM invites WHERE invite_status = 'PENDING' ORDER BY created_at DESC LIMIT 1;",
+  "rows": [
+    {
+      "token_start": "ab3af103466440a3bbc9f9bde5d196...",
+      "email": "admin-test-1772109313443@agilestest.io",
+      "invite_status": "PENDING",
+      "expires_at": "2026-02-27 12:35:13"
+    }
+  ],
+  "messages": [],
+  "stdout": "token_start\temail\tinvite_status\texpires_at\nab3af103466440a3bbc9f9bde5d196...\tadmin-test-1772109313443@agilestest.io\tPENDING\t2026-02-27 12:35:13\n",
+  "stderr": "",
+  "execution_time_ms": 143
+}

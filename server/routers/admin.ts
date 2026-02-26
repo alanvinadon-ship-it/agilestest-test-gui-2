@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { eq } from "drizzle-orm";
-import { router } from "../_core/trpc";
+import { publicProcedure, router } from "../_core/trpc";
 import {
   viewerProcedure, qaManagerProcedure, orgAdminProcedure,
   auditMutation,
@@ -44,6 +44,32 @@ export const adminRouter = router({
   getInviteByToken: viewerProcedure
     .input(z.object({ token: z.string() }))
     .query(({ input }) => adminDb.getInviteByToken(input.token)),
+
+  // ── Public endpoints for invitation acceptance (no auth required) ──
+  validateInviteToken: publicProcedure
+    .input(z.object({ token: z.string().min(1) }))
+    .query(async ({ input }) => {
+      const invite = await adminDb.getInviteByToken(input.token);
+      if (!invite) return { valid: false, reason: "invalid" as const, invite: null };
+      if (invite.status === "ACCEPTED") return { valid: false, reason: "already" as const, invite: { email: invite.email, role: invite.role, invitedByName: invite.invitedByName } };
+      if (invite.status === "REVOKED") return { valid: false, reason: "revoked" as const, invite: null };
+      if (invite.status === "EXPIRED" || (invite.expiresAt && new Date(invite.expiresAt).getTime() < Date.now())) {
+        return { valid: false, reason: "expired" as const, invite: { email: invite.email, invitedByName: invite.invitedByName, expiresAt: invite.expiresAt } };
+      }
+      return {
+        valid: true,
+        reason: "ok" as const,
+        invite: { email: invite.email, role: invite.role, invitedByName: invite.invitedByName, expiresAt: invite.expiresAt },
+      };
+    }),
+
+  acceptInvite: publicProcedure
+    .input(z.object({
+      token: z.string().min(1),
+      fullName: z.string().min(2, "Le nom doit contenir au moins 2 caractères"),
+      password: z.string().min(8, "Le mot de passe doit contenir au moins 8 caractères"),
+    }))
+    .mutation(({ input }) => adminDb.acceptInvite(input.token, input.fullName, input.password)),
 
   createInvite: orgAdminProcedure
     .use(auditMutation("CREATE", "invite"))

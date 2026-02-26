@@ -124,3 +124,4 @@
 - [x] Tests vitest: 28 tests pagination (schema, paginateInMemory, intégration routeurs)
 - [x] Documentation docs/PAGINATION.md v2 (standard, contrat, helpers, endpoints, UI, index, tests)
 - [x] 0 erreur TypeScript, 105 tests passent (6 fichiers)
+- [x] Bug: Liens d'invitation invalides — migré vers tRPC backend (validateInviteToken + acceptInvite publics, DB au lieu de localStorage)
