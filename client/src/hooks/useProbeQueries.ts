@@ -8,6 +8,14 @@ export const probeKeys = {
   detail: (probeId: string) => [...probeKeys.all, 'detail', probeId] as const,
 };
 
+/** Extract items array from paginated result { items, total } */
+function extractItems(data: any): any[] {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  if (data.items && Array.isArray(data.items)) return data.items;
+  return [];
+}
+
 /**
  * Adapter: converts DB row (Drizzle) to frontend Probe type.
  */
@@ -46,10 +54,13 @@ export function useProbes(params?: { status?: string; type?: string; site?: stri
     { staleTime: 30_000 },
   );
 
+  const items = extractItems(query.data);
+  const total = (query.data as any)?.total ?? items.length;
+
   const adapted: PaginatedResponse<Probe> | undefined = query.data
     ? {
-        data: (query.data as any[]).map(dbToProbe),
-        pagination: { page: 1, limit: 50, total: (query.data as any[]).length, total_pages: 1 },
+        data: items.map(dbToProbe),
+        pagination: { page: 1, limit: 50, total, total_pages: Math.max(1, Math.ceil(total / 50)) },
       }
     : undefined;
 
@@ -169,10 +180,11 @@ export function useSitesAndZones(_projectId?: string) {
   // Derive sites/zones from probe list
   const query = trpc.probes.list.useQuery({}, { staleTime: 60_000 });
 
-  const sitesAndZones = query.data
+  const items = extractItems(query.data);
+  const sitesAndZones = items.length > 0
     ? {
-        sites: [...new Set((query.data as any[]).map((p: any) => p.site).filter(Boolean))],
-        zones: [...new Set((query.data as any[]).map((p: any) => p.zone).filter(Boolean))],
+        sites: [...new Set(items.map((p: any) => p.site).filter(Boolean))],
+        zones: [...new Set(items.map((p: any) => p.zone).filter(Boolean))],
       }
     : { sites: [], zones: [] };
 

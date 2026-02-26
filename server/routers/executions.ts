@@ -5,14 +5,21 @@ import {
   auditMutation, requireProjectAccess,
 } from "../rbac/middleware";
 import * as execDb from "../db/executions";
+import { paginationInput, paginateInMemory } from "../pagination";
 
 export const executionsRouter = router({
-  // ── READ — any authenticated user ──
+  // ── READ — paginated list ──
   list: viewerProcedure
     .use(requireProjectAccess("PROJECT_VIEWER"))
-    .input(z.object({ projectId: z.string() }))
+    .input(z.object({ projectId: z.string() }).merge(paginationInput))
     .query(async ({ input }) => {
-      return execDb.listExecutions(input.projectId);
+      const all = await execDb.listExecutions(input.projectId);
+      return paginateInMemory(all, input, (a: any, b: any) => {
+        const field = input.sortBy || "createdAt";
+        const aVal = a[field], bVal = b[field];
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return input.sortDir === "asc" ? cmp : -cmp;
+      });
     }),
 
   getByUid: viewerProcedure
@@ -67,11 +74,12 @@ export const executionsRouter = router({
       return execDb.deleteExecution(input.uid);
     }),
 
-  // ── Runner Jobs — TEST_ENGINEER+ ──
+  // ── Runner Jobs — paginated ──
   listJobs: viewerProcedure
-    .input(z.object({ executionId: z.string() }))
+    .input(z.object({ executionId: z.string() }).merge(paginationInput))
     .query(async ({ input }) => {
-      return execDb.listRunnerJobs(input.executionId);
+      const all = await execDb.listRunnerJobs(input.executionId);
+      return paginateInMemory(all, input);
     }),
 
   createJob: testEngineerProcedure
@@ -107,11 +115,12 @@ export const executionsRouter = router({
       return execDb.updateRunnerJob(uid, data);
     }),
 
-  // ── Artifacts — TEST_ENGINEER+ can add, VIEWER can read ──
+  // ── Artifacts — paginated ──
   listArtifacts: viewerProcedure
-    .input(z.object({ executionId: z.string() }))
+    .input(z.object({ executionId: z.string() }).merge(paginationInput))
     .query(async ({ input }) => {
-      return execDb.listArtifacts(input.executionId);
+      const all = await execDb.listArtifacts(input.executionId);
+      return paginateInMemory(all, input);
     }),
 
   createArtifact: testEngineerProcedure
@@ -135,18 +144,25 @@ export const executionsRouter = router({
       return execDb.createArtifact(input);
     }),
 
-  // ── Incidents — TEST_ENGINEER+ can create, VIEWER can read ──
+  // ── Incidents — paginated ──
   listIncidents: viewerProcedure
     .use(requireProjectAccess("PROJECT_VIEWER"))
-    .input(z.object({ projectId: z.string() }))
+    .input(z.object({ projectId: z.string() }).merge(paginationInput))
     .query(async ({ input }) => {
-      return execDb.listIncidents(input.projectId);
+      const all = await execDb.listIncidents(input.projectId);
+      return paginateInMemory(all, input, (a: any, b: any) => {
+        const field = input.sortBy || "detectedAt";
+        const aVal = a[field], bVal = b[field];
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return input.sortDir === "asc" ? cmp : -cmp;
+      });
     }),
 
   listIncidentsByExecution: viewerProcedure
-    .input(z.object({ executionId: z.string() }))
+    .input(z.object({ executionId: z.string() }).merge(paginationInput))
     .query(async ({ input }) => {
-      return execDb.listIncidentsByExecution(input.executionId);
+      const all = await execDb.listIncidentsByExecution(input.executionId);
+      return paginateInMemory(all, input);
     }),
 
   getIncidentByUid: viewerProcedure
@@ -172,7 +188,7 @@ export const executionsRouter = router({
       return execDb.createIncident(input);
     }),
 
-  // ── Analyses — SECURITY_ANALYST+ or QA_MANAGER+ ──
+  // ── Analyses ──
   getAnalysisByIncident: viewerProcedure
     .input(z.object({ incidentId: z.string() }))
     .query(async ({ input }) => {

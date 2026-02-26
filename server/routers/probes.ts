@@ -5,13 +5,20 @@ import {
   auditMutation, requireProjectAccess,
 } from "../rbac/middleware";
 import * as probesDb from "../db/probes";
+import { paginationInput, paginateInMemory } from "../pagination";
 
 export const probesRouter = router({
-  // ── Probes — READ: VIEWER, WRITE: QA_MANAGER+ ──
+  // ── Probes — paginated list ──
   list: viewerProcedure
-    .input(z.object({ site: z.string().optional() }))
+    .input(z.object({ site: z.string().optional() }).merge(paginationInput))
     .query(async ({ input }) => {
-      return probesDb.listProbes(input.site);
+      const all = await probesDb.listProbes(input.site);
+      return paginateInMemory(all, input, (a: any, b: any) => {
+        const field = input.sortBy || "createdAt";
+        const aVal = a[field], bVal = b[field];
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return input.sortDir === "asc" ? cmp : -cmp;
+      });
     }),
 
   getByUid: viewerProcedure
@@ -70,11 +77,12 @@ export const probesRouter = router({
       return probesDb.deleteProbe(input.uid);
     }),
 
-  // ── Probe Policies — READ: VIEWER, WRITE: QA_MANAGER+ ──
+  // ── Probe Policies — paginated ──
   listPolicies: viewerProcedure
-    .input(z.object({ probeId: z.string() }))
+    .input(z.object({ probeId: z.string() }).merge(paginationInput))
     .query(async ({ input }) => {
-      return probesDb.listProbePolicies(input.probeId);
+      const all = await probesDb.listProbePolicies(input.probeId);
+      return paginateInMemory(all, input);
     }),
 
   createPolicy: qaManagerProcedure
@@ -103,12 +111,18 @@ export const probesRouter = router({
       return probesDb.deleteProbePolicy(input.uid);
     }),
 
-  // ── Capture Policies — READ: VIEWER, WRITE: QA_MANAGER+ ──
+  // ── Capture Policies — paginated ──
   listCapturePolicies: viewerProcedure
     .use(requireProjectAccess("PROJECT_VIEWER"))
-    .input(z.object({ projectId: z.string() }))
+    .input(z.object({ projectId: z.string() }).merge(paginationInput))
     .query(async ({ input }) => {
-      return probesDb.listCapturePolicies(input.projectId);
+      const all = await probesDb.listCapturePolicies(input.projectId);
+      return paginateInMemory(all, input, (a: any, b: any) => {
+        const field = input.sortBy || "createdAt";
+        const aVal = a[field], bVal = b[field];
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return input.sortDir === "asc" ? cmp : -cmp;
+      });
     }),
 
   createCapturePolicy: qaManagerProcedure

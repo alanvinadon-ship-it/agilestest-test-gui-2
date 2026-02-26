@@ -6,6 +6,21 @@
  */
 import { trpcVanilla } from '@/lib/trpc';
 
+/** Extract items array from paginated result { items, total } */
+function extractItems(data: any): any[] {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  if (data.items && Array.isArray(data.items)) return data.items;
+  return [];
+}
+
+function getTotal(data: any): number {
+  if (!data) return 0;
+  if (Array.isArray(data)) return data.length;
+  if (typeof data.total === 'number') return data.total;
+  return extractItems(data).length;
+}
+
 // ─── Profiles ───────────────────────────────────────────────────────────
 
 function dbToProfile(row: any): any {
@@ -73,10 +88,12 @@ function dbToExecution(row: any): any {
 export const repositoryApi = {
   // ─── Profiles ─────────────────────────────────────────────────────────
   async listProfiles(projectId: string) {
-    const rows = await trpcVanilla.profiles.list.query({ projectId });
+    const result = await trpcVanilla.profiles.list.query({ projectId });
+    const items = extractItems(result);
+    const total = getTotal(result);
     return {
-      data: (rows as any[]).map(dbToProfile),
-      pagination: { page: 1, limit: 50, total: (rows as any[]).length, total_pages: 1 },
+      data: items.map(dbToProfile),
+      pagination: { page: 1, limit: 50, total, total_pages: Math.max(1, Math.ceil(total / 50)) },
     };
   },
 
@@ -120,18 +137,22 @@ export const repositoryApi = {
 
   // ─── Scenarios ────────────────────────────────────────────────────────
   async listScenarios(profileId: string) {
-    const rows = await trpcVanilla.scenarios.list.query({ projectId: profileId });
+    const result = await trpcVanilla.scenarios.list.query({ projectId: profileId });
+    const items = extractItems(result);
+    const total = getTotal(result);
     return {
-      data: (rows as any[]).map(dbToScenario),
-      pagination: { page: 1, limit: 50, total: (rows as any[]).length, total_pages: 1 },
+      data: items.map(dbToScenario),
+      pagination: { page: 1, limit: 50, total, total_pages: Math.max(1, Math.ceil(total / 50)) },
     };
   },
 
   async listScenariosByProject(projectId: string) {
-    const rows = await trpcVanilla.scenarios.list.query({ projectId });
+    const result = await trpcVanilla.scenarios.list.query({ projectId });
+    const items = extractItems(result);
+    const total = getTotal(result);
     return {
-      data: (rows as any[]).map(dbToScenario),
-      pagination: { page: 1, limit: 50, total: (rows as any[]).length, total_pages: 1 },
+      data: items.map(dbToScenario),
+      pagination: { page: 1, limit: 50, total, total_pages: Math.max(1, Math.ceil(total / 50)) },
     };
   },
 
@@ -174,10 +195,12 @@ export const repositoryApi = {
 
   // ─── Executions ───────────────────────────────────────────────────────
   async listExecutions(projectId: string, _params?: Record<string, any>) {
-    const rows = await trpcVanilla.executions.list.query({ projectId });
+    const result = await trpcVanilla.executions.list.query({ projectId });
+    const items = extractItems(result);
+    const total = getTotal(result);
     return {
-      data: (rows as any[]).map(dbToExecution),
-      pagination: { page: 1, limit: 50, total: (rows as any[]).length, total_pages: 1 },
+      data: items.map(dbToExecution),
+      pagination: { page: 1, limit: 50, total, total_pages: Math.max(1, Math.ceil(total / 50)) },
     };
   },
 
@@ -189,8 +212,9 @@ export const repositoryApi = {
   async getJobByExecution(executionId: string) {
     // Map to capture jobs by execution
     try {
-      const jobs = await trpcVanilla.captures.listJobs.query({ projectId: executionId });
-      return (jobs as any[])[0] ?? null;
+      const result = await trpcVanilla.captures.listJobs.query({ projectId: executionId });
+      const items = extractItems(result);
+      return items[0] ?? null;
     } catch {
       return null;
     }

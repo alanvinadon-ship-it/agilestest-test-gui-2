@@ -1,6 +1,14 @@
 import { trpc } from '@/lib/trpc';
 import type { TestScenario, PaginatedResponse } from '../types';
 
+/** Extract items array from paginated result { items, total } */
+function extractItems(data: any): any[] {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  if (data.items && Array.isArray(data.items)) return data.items;
+  return [];
+}
+
 /**
  * Adapter: converts DB row (Drizzle) to frontend TestScenario type.
  */
@@ -29,7 +37,7 @@ export function useScenarios(profileId: string) {
   );
 
   return {
-    data: query.data ? (query.data as any[]).map(dbToScenario) : undefined,
+    data: query.data ? extractItems(query.data).map(dbToScenario) : undefined,
     isLoading: query.isLoading,
     error: query.error,
     refetch: query.refetch,

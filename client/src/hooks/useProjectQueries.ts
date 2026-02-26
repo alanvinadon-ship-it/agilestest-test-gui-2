@@ -27,20 +27,28 @@ function dbToProject(row: any): Project {
   };
 }
 
+/** Extract items array from paginated result { items, total } */
+function extractItems(data: any): any[] {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  if (data.items && Array.isArray(data.items)) return data.items;
+  return [];
+}
+
 export function useProjects(params?: { page?: number; limit?: number; status?: string; domain?: string }) {
-  const query = trpc.projects.list.useQuery(undefined, {
+  const query = trpc.projects.list.useQuery({}, {
     staleTime: 30_000,
   });
 
-  // Adapt the tRPC response to match the PaginatedResponse<Project> shape
+  // Adapt the tRPC paginated response { items, total } to PaginatedResponse<Project>
   const adapted: PaginatedResponse<Project> | undefined = query.data
     ? {
-        data: (query.data as any[]).map(dbToProject),
+        data: extractItems(query.data).map(dbToProject),
         pagination: {
           page: params?.page ?? 1,
           limit: params?.limit ?? 50,
-          total: (query.data as any[]).length,
-          total_pages: 1,
+          total: (query.data as any).total ?? extractItems(query.data).length,
+          total_pages: Math.max(1, Math.ceil(((query.data as any).total ?? extractItems(query.data).length) / (params?.limit ?? 50))),
         },
       }
     : undefined;

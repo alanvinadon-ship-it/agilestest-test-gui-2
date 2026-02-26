@@ -5,13 +5,20 @@ import {
   auditMutation, requireProjectAccess,
 } from "../rbac/middleware";
 import * as datasetsDb from "../db/datasets";
+import { paginationInput, paginateInMemory } from "../pagination";
 
 export const datasetsRouter = router({
-  // ── Dataset Types — READ: VIEWER, WRITE: QA_MANAGER+ ──
+  // ── Dataset Types — paginated ──
   listTypes: viewerProcedure
-    .input(z.object({ domain: z.string().optional() }))
+    .input(z.object({ domain: z.string().optional() }).merge(paginationInput))
     .query(async ({ input }) => {
-      return datasetsDb.listDatasetTypes(input.domain);
+      const all = await datasetsDb.listDatasetTypes(input.domain);
+      return paginateInMemory(all, input, (a: any, b: any) => {
+        const field = input.sortBy || "createdAt";
+        const aVal = a[field], bVal = b[field];
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return input.sortDir === "asc" ? cmp : -cmp;
+      });
     }),
 
   getTypeByUid: viewerProcedure
@@ -36,12 +43,18 @@ export const datasetsRouter = router({
       return datasetsDb.createDatasetType(input);
     }),
 
-  // ── Datasets — READ: VIEWER, WRITE: QA_MANAGER+ ──
+  // ── Datasets — paginated ──
   listDatasets: viewerProcedure
     .use(requireProjectAccess("PROJECT_VIEWER"))
-    .input(z.object({ projectId: z.string() }))
+    .input(z.object({ projectId: z.string() }).merge(paginationInput))
     .query(async ({ input }) => {
-      return datasetsDb.listDatasets(input.projectId);
+      const all = await datasetsDb.listDatasets(input.projectId);
+      return paginateInMemory(all, input, (a: any, b: any) => {
+        const field = input.sortBy || "createdAt";
+        const aVal = a[field], bVal = b[field];
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return input.sortDir === "asc" ? cmp : -cmp;
+      });
     }),
 
   getDatasetByUid: viewerProcedure
@@ -73,12 +86,18 @@ export const datasetsRouter = router({
       return datasetsDb.deleteDataset(input.uid);
     }),
 
-  // ── Dataset Instances — READ: VIEWER, WRITE: QA_MANAGER+ ──
+  // ── Dataset Instances — paginated ──
   listInstances: viewerProcedure
     .use(requireProjectAccess("PROJECT_VIEWER"))
-    .input(z.object({ projectId: z.string() }))
+    .input(z.object({ projectId: z.string() }).merge(paginationInput))
     .query(async ({ input }) => {
-      return datasetsDb.listDatasetInstances(input.projectId);
+      const all = await datasetsDb.listDatasetInstances(input.projectId);
+      return paginateInMemory(all, input, (a: any, b: any) => {
+        const field = input.sortBy || "createdAt";
+        const aVal = a[field], bVal = b[field];
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return input.sortDir === "asc" ? cmp : -cmp;
+      });
     }),
 
   getInstanceByUid: viewerProcedure
@@ -124,12 +143,18 @@ export const datasetsRouter = router({
       return datasetsDb.deleteDatasetInstance(input.uid);
     }),
 
-  // ── Bundles — READ: VIEWER, WRITE: QA_MANAGER+ ──
+  // ── Bundles — paginated ──
   listBundles: viewerProcedure
     .use(requireProjectAccess("PROJECT_VIEWER"))
-    .input(z.object({ projectId: z.string() }))
+    .input(z.object({ projectId: z.string() }).merge(paginationInput))
     .query(async ({ input }) => {
-      return datasetsDb.listBundles(input.projectId);
+      const all = await datasetsDb.listBundles(input.projectId);
+      return paginateInMemory(all, input, (a: any, b: any) => {
+        const field = input.sortBy || "createdAt";
+        const aVal = a[field], bVal = b[field];
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return input.sortDir === "asc" ? cmp : -cmp;
+      });
     }),
 
   getBundleByUid: viewerProcedure
@@ -159,11 +184,12 @@ export const datasetsRouter = router({
       return datasetsDb.deleteBundle(input.uid);
     }),
 
-  // ── Bundle Items — READ: VIEWER, WRITE: QA_MANAGER+ ──
+  // ── Bundle Items — paginated ──
   listBundleItems: viewerProcedure
-    .input(z.object({ bundleId: z.string() }))
+    .input(z.object({ bundleId: z.string() }).merge(paginationInput))
     .query(async ({ input }) => {
-      return datasetsDb.listBundleItems(input.bundleId);
+      const all = await datasetsDb.listBundleItems(input.bundleId);
+      return paginateInMemory(all, input);
     }),
 
   addBundleItem: qaManagerProcedure

@@ -5,14 +5,21 @@ import {
   auditMutation, requireProjectAccess,
 } from "../rbac/middleware";
 import * as profilesDb from "../db/profiles";
+import { paginationInput, paginateInMemory } from "../pagination";
 
 export const profilesRouter = router({
-  // ── READ — any authenticated user with project access ──
+  // ── READ — paginated list ──
   list: viewerProcedure
     .use(requireProjectAccess("PROJECT_VIEWER"))
-    .input(z.object({ projectId: z.string() }))
+    .input(z.object({ projectId: z.string() }).merge(paginationInput))
     .query(async ({ input }) => {
-      return profilesDb.listProfiles(input.projectId);
+      const all = await profilesDb.listProfiles(input.projectId);
+      return paginateInMemory(all, input, (a: any, b: any) => {
+        const field = input.sortBy || "createdAt";
+        const aVal = a[field], bVal = b[field];
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return input.sortDir === "asc" ? cmp : -cmp;
+      });
     }),
 
   getByUid: viewerProcedure

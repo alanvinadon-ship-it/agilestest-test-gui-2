@@ -1,6 +1,14 @@
 import { trpc } from '@/lib/trpc';
 import type { Execution, PaginatedResponse } from '../types';
 
+/** Extract items array from paginated result { items, total } */
+function extractItems(data: any): any[] {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  if (data.items && Array.isArray(data.items)) return data.items;
+  return [];
+}
+
 /**
  * Adapter: converts DB row (Drizzle) to frontend Execution type.
  */
@@ -34,10 +42,13 @@ export function useExecutions(projectId: string) {
     { enabled: !!projectId, staleTime: 30_000 },
   );
 
+  const items = extractItems(query.data);
+  const total = (query.data as any)?.total ?? items.length;
+
   const adapted: PaginatedResponse<Execution> | undefined = query.data
     ? {
-        data: (query.data as any[]).map(dbToExecution),
-        pagination: { page: 1, limit: 50, total: (query.data as any[]).length, total_pages: 1 },
+        data: items.map(dbToExecution),
+        pagination: { page: 1, limit: 50, total, total_pages: Math.max(1, Math.ceil(total / 50)) },
       }
     : undefined;
 
@@ -143,7 +154,7 @@ export function useArtifacts(executionId: string) {
   );
 
   return {
-    data: query.data as any[] | undefined,
+    data: extractItems(query.data) as any[] | undefined,
     isLoading: query.isLoading,
     error: query.error,
     refetch: query.refetch,
@@ -159,7 +170,7 @@ export function useIncidents(projectId: string) {
   );
 
   return {
-    data: query.data as any[] | undefined,
+    data: extractItems(query.data) as any[] | undefined,
     isLoading: query.isLoading,
     error: query.error,
     refetch: query.refetch,
@@ -173,7 +184,7 @@ export function useIncidentsByExecution(executionId: string) {
   );
 
   return {
-    data: query.data as any[] | undefined,
+    data: extractItems(query.data) as any[] | undefined,
     isLoading: query.isLoading,
     error: query.error,
     refetch: query.refetch,

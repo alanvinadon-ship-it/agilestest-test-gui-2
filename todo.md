@@ -93,3 +93,17 @@
 - [x] Tests: logout invalide session (clearCookie + maxAge: -1)
 - [x] Documentation docs/AUTH.md (flux OAuth, stockage session, variables ENV)
 - [x] Aucune régression: 77 tests passent (5 fichiers, 0 échec)
+- [x] PAGINATION-STANDARD: Pagination standardisée sur les endpoints list
+- [x] Helper commun: paginationInput + paginate() + paginateInMemory() (server/pagination.ts)
+- [x] Pagination sur executions.list + listJobs + listArtifacts + listIncidents
+- [x] Pagination sur captures.listPolicies + listJobs + listSessions + listSources + listArtifacts
+- [x] Pagination sur drivetest.listCampaigns + listJobs + listKpiSamples + listRoutes + listImports + listRunSummaries
+- [x] Pagination sur admin.listAuditLogs + listInvites + listMemberships
+- [x] Pagination sur probes.list + probes.listPolicies
+- [x] Pagination sur scenarios.list + profiles.list + datasets.listTypes + listInstances + listBundles
+- [x] Pagination sur projects.list
+- [x] Index DB ajoutés: createdAt sur 9 tables volumineuses (migration 0002)
+- [x] Hooks frontend migrés: 8 hooks + 3 adapters (extractItems pattern)
+- [x] Tests Vitest: 24 tests pagination (schema, paginateInMemory, intégration routeurs)
+- [x] Tous les 101 tests passent (6 fichiers, 0 échec)
+- [x] Documentation docs/PAGINATION.md (standard, contrat, helpers, endpoints, index, tests)

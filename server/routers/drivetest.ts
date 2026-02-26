@@ -5,13 +5,22 @@ import {
   auditMutation, requireProjectAccess,
 } from "../rbac/middleware";
 import * as driveDb from "../db/drivetest";
+import { paginationInput, paginateInMemory } from "../pagination";
 
 export const drivetestRouter = router({
-  // ── Campaigns — READ: VIEWER, CREATE: QA_MANAGER+, DELETE: ORG_ADMIN ──
+  // ── Campaigns — paginated ──
   listCampaigns: viewerProcedure
     .use(requireProjectAccess("PROJECT_VIEWER"))
-    .input(z.object({ projectId: z.string() }))
-    .query(({ input }) => driveDb.listCampaigns(input.projectId)),
+    .input(z.object({ projectId: z.string() }).merge(paginationInput))
+    .query(async ({ input }) => {
+      const all = await driveDb.listCampaigns(input.projectId);
+      return paginateInMemory(all, input, (a: any, b: any) => {
+        const field = input.sortBy || "createdAt";
+        const aVal = a[field], bVal = b[field];
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return input.sortDir === "asc" ? cmp : -cmp;
+      });
+    }),
 
   getCampaign: viewerProcedure
     .input(z.object({ uid: z.string() }))
@@ -44,10 +53,13 @@ export const drivetestRouter = router({
     .input(z.object({ uid: z.string() }))
     .mutation(({ input }) => driveDb.deleteCampaign(input.uid)),
 
-  // ── Routes — READ: VIEWER, WRITE: QA_MANAGER+, DELETE: ORG_ADMIN ──
+  // ── Routes — paginated ──
   listRoutes: viewerProcedure
-    .input(z.object({ campaignId: z.string() }))
-    .query(({ input }) => driveDb.listRoutes(input.campaignId)),
+    .input(z.object({ campaignId: z.string() }).merge(paginationInput))
+    .query(async ({ input }) => {
+      const all = await driveDb.listRoutes(input.campaignId);
+      return paginateInMemory(all, input);
+    }),
 
   createRoute: qaManagerProcedure
     .use(auditMutation("CREATE", "drive_route"))
@@ -63,11 +75,14 @@ export const drivetestRouter = router({
     .input(z.object({ uid: z.string() }))
     .mutation(({ input }) => driveDb.deleteRoute(input.uid)),
 
-  // ── Devices — READ: VIEWER, WRITE: QA_MANAGER+, DELETE: ORG_ADMIN ──
+  // ── Devices — paginated ──
   listDevices: viewerProcedure
     .use(requireProjectAccess("PROJECT_VIEWER"))
-    .input(z.object({ projectId: z.string() }))
-    .query(({ input }) => driveDb.listDevices(input.projectId)),
+    .input(z.object({ projectId: z.string() }).merge(paginationInput))
+    .query(async ({ input }) => {
+      const all = await driveDb.listDevices(input.projectId);
+      return paginateInMemory(all, input);
+    }),
 
   createDevice: qaManagerProcedure
     .use(requireProjectAccess("PROJECT_EDITOR"))
@@ -84,11 +99,14 @@ export const drivetestRouter = router({
     .input(z.object({ uid: z.string() }))
     .mutation(({ input }) => driveDb.deleteDevice(input.uid)),
 
-  // ── Probe Configs — READ: VIEWER, WRITE: QA_MANAGER+, DELETE: ORG_ADMIN ──
+  // ── Probe Configs — paginated ──
   listProbeConfigs: viewerProcedure
     .use(requireProjectAccess("PROJECT_VIEWER"))
-    .input(z.object({ projectId: z.string() }))
-    .query(({ input }) => driveDb.listProbeConfigs(input.projectId)),
+    .input(z.object({ projectId: z.string() }).merge(paginationInput))
+    .query(async ({ input }) => {
+      const all = await driveDb.listProbeConfigs(input.projectId);
+      return paginateInMemory(all, input);
+    }),
 
   createProbeConfig: qaManagerProcedure
     .use(requireProjectAccess("PROJECT_EDITOR"))
@@ -107,10 +125,18 @@ export const drivetestRouter = router({
     .input(z.object({ uid: z.string() }))
     .mutation(({ input }) => driveDb.deleteProbeConfig(input.uid)),
 
-  // ── Drive Jobs — READ: VIEWER, CREATE: TEST_ENGINEER+, UPDATE: TEST_ENGINEER+ ──
+  // ── Drive Jobs — paginated ──
   listJobs: viewerProcedure
-    .input(z.object({ campaignId: z.string() }))
-    .query(({ input }) => driveDb.listDriveJobs(input.campaignId)),
+    .input(z.object({ campaignId: z.string() }).merge(paginationInput))
+    .query(async ({ input }) => {
+      const all = await driveDb.listDriveJobs(input.campaignId);
+      return paginateInMemory(all, input, (a: any, b: any) => {
+        const field = input.sortBy || "createdAt";
+        const aVal = a[field], bVal = b[field];
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return input.sortDir === "asc" ? cmp : -cmp;
+      });
+    }),
 
   getJob: viewerProcedure
     .input(z.object({ uid: z.string() }))
@@ -139,10 +165,18 @@ export const drivetestRouter = router({
     }))
     .mutation(({ input }) => { const { uid, ...d } = input; return driveDb.updateDriveJob(uid, d); }),
 
-  // ── KPI Samples — READ: VIEWER, WRITE: TEST_ENGINEER+ ──
+  // ── KPI Samples — paginated (high volume) ──
   listKpiSamples: viewerProcedure
-    .input(z.object({ driveJobId: z.string() }))
-    .query(({ input }) => driveDb.listKpiSamples(input.driveJobId)),
+    .input(z.object({ driveJobId: z.string() }).merge(paginationInput))
+    .query(async ({ input }) => {
+      const all = await driveDb.listKpiSamples(input.driveJobId);
+      return paginateInMemory(all, input, (a: any, b: any) => {
+        const field = input.sortBy || "timestamp";
+        const aVal = a[field], bVal = b[field];
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return input.sortDir === "asc" ? cmp : -cmp;
+      });
+    }),
 
   insertKpiSamples: testEngineerProcedure
     .use(auditMutation("INSERT_BATCH", "kpi_sample"))
@@ -156,7 +190,7 @@ export const drivetestRouter = router({
     }))
     .mutation(({ input }) => driveDb.insertKpiSamples(input.samples)),
 
-  // ── Run Summaries — READ: VIEWER, WRITE: TEST_ENGINEER+ ──
+  // ── Run Summaries ──
   getRunSummary: viewerProcedure
     .input(z.object({ driveJobId: z.string() }))
     .query(({ input }) => driveDb.getRunSummary(input.driveJobId)),
@@ -178,10 +212,18 @@ export const drivetestRouter = router({
     }))
     .mutation(({ input }) => driveDb.upsertRunSummary(input)),
 
-  // ── Imports — READ: VIEWER, WRITE: TEST_ENGINEER+ ──
+  // ── Imports — paginated ──
   listImports: viewerProcedure
-    .input(z.object({ campaignId: z.string() }))
-    .query(({ input }) => driveDb.listImports(input.campaignId)),
+    .input(z.object({ campaignId: z.string() }).merge(paginationInput))
+    .query(async ({ input }) => {
+      const all = await driveDb.listImports(input.campaignId);
+      return paginateInMemory(all, input, (a: any, b: any) => {
+        const field = input.sortBy || "createdAt";
+        const aVal = a[field], bVal = b[field];
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return input.sortDir === "asc" ? cmp : -cmp;
+      });
+    }),
 
   createImport: testEngineerProcedure
     .use(auditMutation("CREATE", "drive_import"))

@@ -27,8 +27,15 @@ export function useDatasetTypes(params?: { domain?: string; test_type?: string }
     { staleTime: 60_000 },
   );
 
+  const extractItems = (d: any): any[] => {
+    if (!d) return [];
+    if (Array.isArray(d)) return d;
+    if (d.items && Array.isArray(d.items)) return d.items;
+    return [];
+  };
+
   return {
-    data: query.data ? (query.data as any[]).map(dbToDatasetType) : undefined,
+    data: query.data ? extractItems(query.data).map(dbToDatasetType) : undefined,
     isLoading: query.isLoading,
     error: query.error,
     refetch: query.refetch,

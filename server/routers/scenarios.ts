@@ -5,14 +5,21 @@ import {
   auditMutation, requireProjectAccess,
 } from "../rbac/middleware";
 import * as scenariosDb from "../db/scenarios";
+import { paginationInput, paginateInMemory } from "../pagination";
 
 export const scenariosRouter = router({
-  // ── READ — any authenticated user ──
+  // ── READ — paginated list ──
   list: viewerProcedure
     .use(requireProjectAccess("PROJECT_VIEWER"))
-    .input(z.object({ projectId: z.string() }))
+    .input(z.object({ projectId: z.string() }).merge(paginationInput))
     .query(async ({ input }) => {
-      return scenariosDb.listScenarios(input.projectId);
+      const all = await scenariosDb.listScenarios(input.projectId);
+      return paginateInMemory(all, input, (a: any, b: any) => {
+        const field = input.sortBy || "createdAt";
+        const aVal = a[field], bVal = b[field];
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return input.sortDir === "asc" ? cmp : -cmp;
+      });
     }),
 
   getByUid: viewerProcedure

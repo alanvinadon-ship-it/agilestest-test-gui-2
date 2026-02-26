@@ -26,6 +26,21 @@ import type {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
+/** Extract items array from paginated result { items, total } */
+function extractItems(data: any): any[] {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  if (data.items && Array.isArray(data.items)) return data.items;
+  return [];
+}
+
+function getTotal(data: any): number {
+  if (!data) return 0;
+  if (Array.isArray(data)) return data.length;
+  if (typeof data.total === 'number') return data.total;
+  return extractItems(data).length;
+}
+
 function dbToInstance(row: any): DatasetInstance {
   if (!row) return row;
   return {
@@ -80,11 +95,13 @@ function dbToSecret(row: any): DatasetSecretKey {
 
 const trpcInstancesAdapter: DatasetInstancesAdapter = {
   list: async (projectId, _params) => {
-    const rows = await trpcVanilla.datasets.listInstances.query({ projectId });
-    const data = (rows as any[]).map(dbToInstance);
+    const result = await trpcVanilla.datasets.listInstances.query({ projectId });
+    const items = extractItems(result);
+    const total = getTotal(result);
+    const data = items.map(dbToInstance);
     return {
       data,
-      pagination: { page: 1, limit: 50, total: data.length, total_pages: 1 },
+      pagination: { page: 1, limit: 50, total, total_pages: Math.max(1, Math.ceil(total / 50)) },
     };
   },
 
@@ -159,11 +176,13 @@ const trpcSecretsAdapter: DatasetSecretsAdapter = {
 
 const trpcBundlesAdapter: BundlesAdapter = {
   list: async (projectId, _params) => {
-    const rows = await trpcVanilla.datasets.listBundles.query({ projectId });
-    const data = (rows as any[]).map(dbToBundle);
+    const result = await trpcVanilla.datasets.listBundles.query({ projectId });
+    const items = extractItems(result);
+    const total = getTotal(result);
+    const data = items.map(dbToBundle);
     return {
       data,
-      pagination: { page: 1, limit: 50, total: data.length, total_pages: 1 },
+      pagination: { page: 1, limit: 50, total, total_pages: Math.max(1, Math.ceil(total / 50)) },
     };
   },
 
@@ -209,8 +228,8 @@ const trpcBundlesAdapter: BundlesAdapter = {
 
 const trpcBundleItemsAdapter: BundleItemsAdapter = {
   list: async (bundleId) => {
-    const rows = await trpcVanilla.datasets.listBundleItems.query({ bundleId });
-    return (rows as any[]).map(dbToBundleItem);
+    const result = await trpcVanilla.datasets.listBundleItems.query({ bundleId });
+    return extractItems(result).map(dbToBundleItem);
   },
 
   add: async (bundleId, datasetId) => {

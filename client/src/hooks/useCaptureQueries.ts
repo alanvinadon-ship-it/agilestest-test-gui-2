@@ -7,6 +7,14 @@ export const captureKeys = {
   detail: (captureId: string) => [...captureKeys.all, 'detail', captureId] as const,
 };
 
+/** Extract items array from paginated result { items, total } */
+function extractItems(data: any): any[] {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  if (data.items && Array.isArray(data.items)) return data.items;
+  return [];
+}
+
 /**
  * Adapter: converts DB row (Drizzle) to frontend CaptureJob type.
  */
@@ -33,17 +41,18 @@ function dbToCapture(row: any): CaptureJob {
 }
 
 export function useCaptures(executionId: string) {
-  // Note: the tRPC captures router uses projectId, not executionId for listing.
-  // We use listSessionsByExecution for execution-scoped captures.
   const query = trpc.captures.listSessionsByExecution.useQuery(
     { executionId },
     { enabled: !!executionId, staleTime: 30_000 },
   );
 
+  const items = extractItems(query.data);
+  const total = (query.data as any)?.total ?? items.length;
+
   const adapted: PaginatedResponse<CaptureJob> | undefined = query.data
     ? {
-        data: (query.data as any[]).map(dbToCapture),
-        pagination: { page: 1, limit: 50, total: (query.data as any[]).length, total_pages: 1 },
+        data: items.map(dbToCapture),
+        pagination: { page: 1, limit: 50, total, total_pages: Math.max(1, Math.ceil(total / 50)) },
       }
     : undefined;
 

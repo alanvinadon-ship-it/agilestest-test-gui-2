@@ -95,7 +95,7 @@ async function seedUserWithRole(roleName: string, userId: string): Promise<void>
 describe("RBAC: Unauthenticated access", () => {
   it("rejects unauthenticated user from projects.list", async () => {
     const caller = createCaller(unauthCtx());
-    await expect(caller.projects.list()).rejects.toThrow(/10001|Authentication required/);
+    await expect(caller.projects.list({})).rejects.toThrow(/10001|Authentication required/);
   });
 
   it("rejects unauthenticated user from admin.listRoles", async () => {
@@ -129,8 +129,10 @@ describe("RBAC: VIEWER role restrictions", () => {
   it("VIEWER can list projects", async () => {
     const ctx = createCtx({ openId: viewerId });
     const caller = createCaller(ctx);
-    const result = await caller.projects.list();
-    expect(Array.isArray(result)).toBe(true);
+    const result = await caller.projects.list({});
+    expect(result).toHaveProperty("items");
+    expect(result).toHaveProperty("total");
+    expect(Array.isArray(result.items)).toBe(true);
   });
 
   it("VIEWER cannot delete a project", async () => {
@@ -311,8 +313,10 @@ describe("RBAC: SECURITY_ANALYST role restrictions", () => {
   it("SECURITY_ANALYST can list projects (read-only)", async () => {
     const ctx = createCtx({ openId: analystId });
     const caller = createCaller(ctx);
-    const result = await caller.projects.list();
-    expect(Array.isArray(result)).toBe(true);
+    const result = await caller.projects.list({});
+    expect(result).toHaveProperty("items");
+    expect(result).toHaveProperty("total");
+    expect(Array.isArray(result.items)).toBe(true);
   });
 });
 
@@ -401,7 +405,9 @@ describe("RBAC: QA_MANAGER role permissions", () => {
     const ctx = createCtx({ openId: managerId });
     const caller = createCaller(ctx);
     const logs = await caller.admin.listAuditLogs({});
-    expect(Array.isArray(logs)).toBe(true);
+    expect(logs).toHaveProperty("items");
+    expect(logs).toHaveProperty("total");
+    expect(Array.isArray(logs.items)).toBe(true);
   });
 });
 
@@ -448,7 +454,9 @@ describe("RBAC: ORG_ADMIN full access", () => {
     const adminCtx = createCtx({ role: "admin" });
     const caller = createCaller(adminCtx);
     const logs = await caller.admin.listAuditLogs({ limit: 10 });
-    expect(Array.isArray(logs)).toBe(true);
+    expect(logs).toHaveProperty("items");
+    expect(logs).toHaveProperty("total");
+    expect(Array.isArray(logs.items)).toBe(true);
   });
 });
 
@@ -505,14 +513,16 @@ describe("RBAC: Audit logging", () => {
     expect(project.uid).toBeTruthy();
 
     // Check audit logs for this action
-    const logs = await caller.admin.listAuditLogs({
+    const result = await caller.admin.listAuditLogs({
       actorId: "audit-admin",
       entityType: "project",
       limit: 5,
     });
-    expect(logs.length).toBeGreaterThanOrEqual(1);
-    const createLog = logs.find(
-      l => l.action === "CREATE" && l.entityType === "project"
+    expect(result).toHaveProperty("items");
+    expect(result).toHaveProperty("total");
+    expect(result.items.length).toBeGreaterThanOrEqual(1);
+    const createLog = result.items.find(
+      (l: any) => l.action === "CREATE" && l.entityType === "project"
     );
     expect(createLog).toBeDefined();
     expect(createLog?.actorId).toBe("audit-admin");

@@ -5,14 +5,23 @@ import {
   auditMutation,
 } from "../rbac/middleware";
 import * as adminDb from "../db/admin";
+import { paginationInput, paginateInMemory } from "../pagination";
 
 export const adminRouter = router({
   // ══════════════════════════════════════════════════
-  //  Invites — ORG_ADMIN only (manage users)
+  //  Invites — paginated, ORG_ADMIN only
   // ══════════════════════════════════════════════════
   listInvites: orgAdminProcedure
-    .input(z.object({ status: z.enum(["PENDING", "ACCEPTED", "REVOKED", "EXPIRED"]).optional() }))
-    .query(({ input }) => adminDb.listInvites(input.status)),
+    .input(z.object({ status: z.enum(["PENDING", "ACCEPTED", "REVOKED", "EXPIRED"]).optional() }).merge(paginationInput))
+    .query(async ({ input }) => {
+      const all = await adminDb.listInvites(input.status);
+      return paginateInMemory(all, input, (a: any, b: any) => {
+        const field = input.sortBy || "createdAt";
+        const aVal = a[field], bVal = b[field];
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return input.sortDir === "asc" ? cmp : -cmp;
+      });
+    }),
 
   getInviteByToken: viewerProcedure
     .input(z.object({ token: z.string() }))
@@ -44,15 +53,21 @@ export const adminRouter = router({
     .mutation(({ input }) => adminDb.revokeInvite(input.uid)),
 
   // ══════════════════════════════════════════════════
-  //  Project Memberships — ORG_ADMIN only
+  //  Project Memberships — paginated
   // ══════════════════════════════════════════════════
   listProjectMemberships: qaManagerProcedure
-    .input(z.object({ projectId: z.string() }))
-    .query(({ input }) => adminDb.listProjectMemberships(input.projectId)),
+    .input(z.object({ projectId: z.string() }).merge(paginationInput))
+    .query(async ({ input }) => {
+      const all = await adminDb.listProjectMemberships(input.projectId);
+      return paginateInMemory(all, input);
+    }),
 
   listUserMemberships: qaManagerProcedure
-    .input(z.object({ userId: z.string() }))
-    .query(({ input }) => adminDb.listUserMemberships(input.userId)),
+    .input(z.object({ userId: z.string() }).merge(paginationInput))
+    .query(async ({ input }) => {
+      const all = await adminDb.listUserMemberships(input.userId);
+      return paginateInMemory(all, input);
+    }),
 
   createMembership: orgAdminProcedure
     .use(auditMutation("CREATE", "project_membership"))
@@ -157,14 +172,29 @@ export const adminRouter = router({
     .mutation(({ input }) => adminDb.removeRoleFromUser(input.userId, input.roleId)),
 
   // ══════════════════════════════════════════════════
-  //  Audit Logs — QA_MANAGER+ can read, only system can write
+  //  Audit Logs — paginated (high volume), QA_MANAGER+ can read
   // ══════════════════════════════════════════════════
   listAuditLogs: qaManagerProcedure
     .input(z.object({
-      actorId: z.string().optional(), entityType: z.string().optional(),
-      action: z.string().optional(), limit: z.number().optional(),
-    }))
-    .query(({ input }) => adminDb.listAuditLogs(input)),
+      actorId: z.string().optional(),
+      entityType: z.string().optional(),
+      action: z.string().optional(),
+    }).merge(paginationInput))
+    .query(async ({ input }) => {
+      // Pass limit from pagination to DB helper for efficiency
+      const all = await adminDb.listAuditLogs({
+        actorId: input.actorId,
+        entityType: input.entityType,
+        action: input.action,
+        limit: 1000, // fetch up to 1000 for in-memory pagination
+      });
+      return paginateInMemory(all, input, (a: any, b: any) => {
+        const field = input.sortBy || "createdAt";
+        const aVal = a[field], bVal = b[field];
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return input.sortDir === "asc" ? cmp : -cmp;
+      });
+    }),
 
   createAuditLog: orgAdminProcedure
     .input(z.object({

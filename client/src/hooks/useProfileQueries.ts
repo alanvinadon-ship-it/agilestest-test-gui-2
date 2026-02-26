@@ -1,6 +1,14 @@
 import { trpc } from '@/lib/trpc';
 import type { TestProfile, PaginatedResponse } from '../types';
 
+/** Extract items array from paginated result { items, total } */
+function extractItems(data: any): any[] {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  if (data.items && Array.isArray(data.items)) return data.items;
+  return [];
+}
+
 /**
  * Adapter: converts DB row (Drizzle) to frontend TestProfile type.
  */
@@ -30,10 +38,13 @@ export function useProfiles(projectId: string) {
     { enabled: !!projectId, staleTime: 30_000 },
   );
 
+  const items = extractItems(query.data);
+  const total = (query.data as any)?.total ?? items.length;
+
   const adapted: PaginatedResponse<TestProfile> | undefined = query.data
     ? {
-        data: (query.data as any[]).map(dbToProfile),
-        pagination: { page: 1, limit: 50, total: (query.data as any[]).length, total_pages: 1 },
+        data: items.map(dbToProfile),
+        pagination: { page: 1, limit: 50, total, total_pages: Math.max(1, Math.ceil(total / 50)) },
       }
     : undefined;
 

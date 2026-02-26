@@ -5,14 +5,21 @@ import {
   auditMutation, requireProjectAccess,
 } from "../rbac/middleware";
 import * as capturesDb from "../db/captures";
+import { paginationInput, paginateInMemory } from "../pagination";
 
 export const capturesRouter = router({
-  // ── Capture Jobs — READ: VIEWER, WRITE: TEST_ENGINEER+ ──
+  // ── Capture Jobs — paginated ──
   listJobs: viewerProcedure
     .use(requireProjectAccess("PROJECT_VIEWER"))
-    .input(z.object({ projectId: z.string() }))
+    .input(z.object({ projectId: z.string() }).merge(paginationInput))
     .query(async ({ input }) => {
-      return capturesDb.listCaptureJobs(input.projectId);
+      const all = await capturesDb.listCaptureJobs(input.projectId);
+      return paginateInMemory(all, input, (a: any, b: any) => {
+        const field = input.sortBy || "createdAt";
+        const aVal = a[field], bVal = b[field];
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return input.sortDir === "asc" ? cmp : -cmp;
+      });
     }),
 
   getJobByUid: viewerProcedure
@@ -54,11 +61,12 @@ export const capturesRouter = router({
       return capturesDb.updateCaptureJob(uid, data);
     }),
 
-  // ── Capture Sources — READ: VIEWER, WRITE: TEST_ENGINEER+ ──
+  // ── Capture Sources — paginated ──
   listSources: viewerProcedure
-    .input(z.object({ captureId: z.string() }))
+    .input(z.object({ captureId: z.string() }).merge(paginationInput))
     .query(async ({ input }) => {
-      return capturesDb.listCaptureSources(input.captureId);
+      const all = await capturesDb.listCaptureSources(input.captureId);
+      return paginateInMemory(all, input);
     }),
 
   createSource: testEngineerProcedure
@@ -84,11 +92,12 @@ export const capturesRouter = router({
       return capturesDb.deleteCaptureSource(input.uid);
     }),
 
-  // ── Capture Artifacts — READ: VIEWER, WRITE: TEST_ENGINEER+ ──
+  // ── Capture Artifacts — paginated ──
   listArtifacts: viewerProcedure
-    .input(z.object({ captureJobId: z.string() }))
+    .input(z.object({ captureJobId: z.string() }).merge(paginationInput))
     .query(async ({ input }) => {
-      return capturesDb.listCaptureArtifacts(input.captureJobId);
+      const all = await capturesDb.listCaptureArtifacts(input.captureJobId);
+      return paginateInMemory(all, input);
     }),
 
   createArtifact: testEngineerProcedure
@@ -109,17 +118,24 @@ export const capturesRouter = router({
       return capturesDb.createCaptureArtifact(input);
     }),
 
-  // ── Capture Sessions — READ: VIEWER, WRITE: TEST_ENGINEER+ ──
+  // ── Capture Sessions — paginated ──
   listSessions: viewerProcedure
-    .input(z.object({ policyId: z.string() }))
+    .input(z.object({ policyId: z.string() }).merge(paginationInput))
     .query(async ({ input }) => {
-      return capturesDb.listCaptureSessions(input.policyId);
+      const all = await capturesDb.listCaptureSessions(input.policyId);
+      return paginateInMemory(all, input, (a: any, b: any) => {
+        const field = input.sortBy || "startedAt";
+        const aVal = a[field], bVal = b[field];
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return input.sortDir === "asc" ? cmp : -cmp;
+      });
     }),
 
   listSessionsByExecution: viewerProcedure
-    .input(z.object({ executionId: z.string() }))
+    .input(z.object({ executionId: z.string() }).merge(paginationInput))
     .query(async ({ input }) => {
-      return capturesDb.listCaptureSessionsByExecution(input.executionId);
+      const all = await capturesDb.listCaptureSessionsByExecution(input.executionId);
+      return paginateInMemory(all, input);
     }),
 
   createSession: testEngineerProcedure

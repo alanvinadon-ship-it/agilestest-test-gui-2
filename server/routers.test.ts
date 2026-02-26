@@ -59,8 +59,10 @@ describe("projects", () => {
   });
 
   it("lists projects", async () => {
-    const results = await caller.projects.list();
-    expect(Array.isArray(results)).toBe(true);
+    const results = await caller.projects.list({});
+    expect(results).toHaveProperty("items");
+    expect(results).toHaveProperty("total");
+    expect(Array.isArray(results.items)).toBe(true);
   });
 
   it("creates and retrieves a project by uid", async () => {
@@ -135,8 +137,10 @@ describe("profiles", () => {
       domain: "API",
     });
     const results = await caller.profiles.list({ projectId: projectUid });
-    expect(Array.isArray(results)).toBe(true);
-    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results).toHaveProperty("items");
+    expect(results).toHaveProperty("total");
+    expect(Array.isArray(results.items)).toBe(true);
+    expect(results.items.length).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -188,8 +192,10 @@ describe("scenarios", () => {
       testType: "VABF",
     });
     const results = await caller.scenarios.list({ projectId: projectUid });
-    expect(Array.isArray(results)).toBe(true);
-    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results).toHaveProperty("items");
+    expect(results).toHaveProperty("total");
+    expect(Array.isArray(results.items)).toBe(true);
+    expect(results.items.length).toBeGreaterThanOrEqual(1);
   });
 
   it("updates a scenario status", async () => {
@@ -259,8 +265,10 @@ describe("executions", () => {
       scenarioId: scenarioUid,
     });
     const results = await caller.executions.list({ projectId: projectUid });
-    expect(Array.isArray(results)).toBe(true);
-    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results).toHaveProperty("items");
+    expect(results).toHaveProperty("total");
+    expect(Array.isArray(results.items)).toBe(true);
+    expect(results.items.length).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -292,7 +300,9 @@ describe("captures", () => {
       namespace: "default",
     });
     const results = await caller.captures.listSources({ captureId: created.captureId ?? `cap-list-${Date.now()}` });
-    expect(Array.isArray(results)).toBe(true);
+    expect(results).toHaveProperty("items");
+    expect(results).toHaveProperty("total");
+    expect(Array.isArray(results.items)).toBe(true);
   });
 });
 
@@ -319,7 +329,9 @@ describe("probes", () => {
 
   it("lists probes", async () => {
     const results = await caller.probes.list({});
-    expect(Array.isArray(results)).toBe(true);
+    expect(results).toHaveProperty("items");
+    expect(results).toHaveProperty("total");
+    expect(Array.isArray(results.items)).toBe(true);
   });
 });
 
@@ -357,7 +369,9 @@ describe("datasets", () => {
 
   it("lists dataset types", async () => {
     const results = await caller.datasets.listTypes({});
-    expect(Array.isArray(results)).toBe(true);
+    expect(results).toHaveProperty("items");
+    expect(results).toHaveProperty("total");
+    expect(Array.isArray(results.items)).toBe(true);
   });
 
   it("creates a dataset instance", async () => {

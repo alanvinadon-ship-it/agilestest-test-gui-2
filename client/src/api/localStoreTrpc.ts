@@ -9,6 +9,16 @@
 import { trpcVanilla } from '@/lib/trpc';
 import { capturePoliciesSync } from '@/hooks/useCapturePolicyQueries';
 
+/** Extract items array from paginated result { items, total } or plain array */
+function extractItems(data: unknown): any[] {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  if (typeof data === 'object' && data !== null && 'items' in data && Array.isArray((data as any).items)) {
+    return (data as any).items;
+  }
+  return [];
+}
+
 // ─── localProjects ──────────────────────────────────────────────────────
 
 function dbToProject(row: any): any {
@@ -26,8 +36,8 @@ function dbToProject(row: any): any {
 
 export const localProjects = {
   async list(params?: any) {
-    const rows = await trpcVanilla.projects.list.query();
-    const data = (rows as any[]).map(dbToProject);
+    const result = await trpcVanilla.projects.list.query({});
+    const data = extractItems(result).map(dbToProject);
     return { data };
   },
 };
@@ -103,8 +113,8 @@ export const localScenarios = {
   },
 
   async listByProject(projectId: string) {
-    const rows = await trpcVanilla.scenarios.list.query({ projectId });
-    return (rows as any[]).map(dbToScenario);
+    const result = await trpcVanilla.scenarios.list.query({ projectId });
+    return extractItems(result).map(dbToScenario);
   },
 
   codeExists(_projectId: string, _code: string) {
@@ -206,8 +216,8 @@ function dbToDatasetType(row: any): any {
 
 export const localDatasetTypes = {
   async list(params?: { domain?: string; test_type?: string }) {
-    const rows = await trpcVanilla.datasets.listTypes.query({ domain: params?.domain });
-    return (rows as any[]).map(dbToDatasetType);
+    const result = await trpcVanilla.datasets.listTypes.query({ domain: params?.domain });
+    return extractItems(result).map(dbToDatasetType);
   },
 
   async get(typeId: string) {
@@ -260,17 +270,17 @@ export const localConfig = {
 export const localCaptureSessions = {
   async list(params: { project_id?: string; execution_id?: string }) {
     if (params.execution_id) {
-      const rows = await trpcVanilla.captures.listSessionsByExecution.query({
+      const result = await trpcVanilla.captures.listSessionsByExecution.query({
         executionId: params.execution_id,
       });
-      return { data: rows as any[] };
+      return { data: extractItems(result) };
     }
     if (params.project_id) {
       // listSessions uses policyId, not projectId - use project_id as policyId fallback
-      const rows = await trpcVanilla.captures.listSessions.query({
+      const result = await trpcVanilla.captures.listSessions.query({
         policyId: params.project_id,
       });
-      return { data: rows as any[] };
+      return { data: extractItems(result) };
     }
     return { data: [] };
   },
@@ -280,8 +290,8 @@ export const localCaptureSessions = {
 
 export const localDriveCampaigns = {
   async list(projectId: string, _params?: any) {
-    const rows = await trpcVanilla.drivetest.listCampaigns.query({ projectId });
-    return { data: rows as any[] };
+    const result = await trpcVanilla.drivetest.listCampaigns.query({ projectId });
+    return { data: extractItems(result) };
   },
 
   async get(campaignId: string) {
@@ -329,8 +339,8 @@ export const localDriveCampaigns = {
 
 export const localDriveJobs = {
   async list(params: { campaign_id: string; limit?: number }) {
-    const rows = await trpcVanilla.drivetest.listJobs.query({ campaignId: params.campaign_id });
-    return { data: rows as any[] };
+    const result = await trpcVanilla.drivetest.listJobs.query({ campaignId: params.campaign_id });
+    return { data: extractItems(result) };
   },
 
   async create(data: Record<string, any>) {
@@ -353,8 +363,8 @@ export const localDriveJobs = {
 
 export const localDriveRoutes = {
   async list(campaignId: string) {
-    const rows = await trpcVanilla.drivetest.listRoutes.query({ campaignId });
-    return rows as any[];
+    const result = await trpcVanilla.drivetest.listRoutes.query({ campaignId });
+    return extractItems(result);
   },
 
   async create(campaignId: string, data: Record<string, any>) {
@@ -376,8 +386,8 @@ export const localDriveRoutes = {
 
 export const localDriveProbeConfigs = {
   async list(projectId: string) {
-    const rows = await trpcVanilla.drivetest.listProbeConfigs.query({ projectId });
-    return rows as any[];
+    const result = await trpcVanilla.drivetest.listProbeConfigs.query({ projectId });
+    return extractItems(result);
   },
 
   async create(projectId: string, data: Record<string, any>) {
@@ -403,8 +413,8 @@ export const localDriveProbeConfigs = {
 
 export const localTestDevices = {
   async list(projectId: string, _params?: any) {
-    const rows = await trpcVanilla.drivetest.listDevices.query({ projectId });
-    return { data: rows as any[] };
+    const result = await trpcVanilla.drivetest.listDevices.query({ projectId });
+    return { data: extractItems(result) };
   },
 
   async create(projectId: string, data: Record<string, any>) {
@@ -427,10 +437,10 @@ export const localTestDevices = {
 
 export const localKpiSamples = {
   async list(params: { drive_job_id: string }) {
-    const rows = await trpcVanilla.drivetest.listKpiSamples.query({
+    const result = await trpcVanilla.drivetest.listKpiSamples.query({
       driveJobId: params.drive_job_id,
     });
-    return rows as any[];
+    return extractItems(result);
   },
 
   async bulkInsert(samples: Record<string, any>[]) {
@@ -461,8 +471,8 @@ export const localDriveRunSummaries = {
 
   async computeAndStore(driveJobId: string, campaignId: string, _thresholds: any) {
     // Compute summary from KPI samples and store
-    const samples = await trpcVanilla.drivetest.listKpiSamples.query({ driveJobId });
-    const sampleList = samples as any[];
+    const result = await trpcVanilla.drivetest.listKpiSamples.query({ driveJobId });
+    const sampleList = extractItems(result);
     if (sampleList.length === 0) return null;
 
     // Basic summary computation
@@ -497,8 +507,8 @@ export const localDriveRunSummaries = {
 
 export const localBundleItems = {
   async list(bundleId: string) {
-    const rows = await trpcVanilla.datasets.listBundleItems.query({ bundleId });
-    return rows as any[];
+    const result = await trpcVanilla.datasets.listBundleItems.query({ bundleId });
+    return extractItems(result);
   },
 };
 

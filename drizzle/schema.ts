@@ -73,6 +73,7 @@ export const testProfiles = mysqlTable("test_profiles", {
 }, (t) => [
   index("idx_profiles_project").on(t.projectId),
   index("idx_profiles_test_type").on(t.testType),
+  index("idx_profiles_created").on(t.createdAt),
 ]);
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -106,6 +107,7 @@ export const testScenarios = mysqlTable("test_scenarios", {
   index("idx_scenarios_project").on(t.projectId),
   index("idx_scenarios_profile").on(t.profileId),
   index("idx_scenarios_status").on(t.status),
+  index("idx_scenarios_created").on(t.createdAt),
 ]);
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -153,6 +155,7 @@ export const datasets = mysqlTable("datasets", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, (t) => [
   index("idx_datasets_project").on(t.projectId),
+  index("idx_datasets_created").on(t.createdAt),
 ]);
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -247,6 +250,7 @@ export const executions = mysqlTable("executions", {
   index("idx_exec_project").on(t.projectId),
   index("idx_exec_status").on(t.status),
   index("idx_exec_scenario").on(t.scenarioId),
+  index("idx_exec_created").on(t.createdAt),
 ]);
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -386,6 +390,7 @@ export const captureJobs = mysqlTable("capture_jobs", {
   index("idx_cj_execution").on(t.executionId),
   index("idx_cj_project").on(t.projectId),
   index("idx_cj_status").on(t.status),
+  index("idx_cj_created").on(t.createdAt),
 ]);
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -459,6 +464,7 @@ export const probes = mysqlTable("probes", {
 }, (t) => [
   index("idx_probes_status").on(t.status),
   index("idx_probes_site").on(t.site),
+  index("idx_probes_created").on(t.createdAt),
 ]);
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -527,6 +533,8 @@ export const captureSessions = mysqlTable("capture_sessions", {
 }, (t) => [
   index("idx_csess_policy").on(t.policyId),
   index("idx_csess_execution").on(t.executionId),
+  index("idx_csess_created").on(t.createdAt),
+  index("idx_csess_status").on(t.status),
 ]);
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -550,6 +558,7 @@ export const driveCampaigns = mysqlTable("drive_campaigns", {
 }, (t) => [
   index("idx_dc_project").on(t.projectId),
   index("idx_dc_status").on(t.status),
+  index("idx_dc_created").on(t.createdAt),
 ]);
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -637,6 +646,7 @@ export const driveJobs = mysqlTable("drive_jobs", {
 }, (t) => [
   index("idx_dj_campaign").on(t.campaignId),
   index("idx_dj_status").on(t.status),
+  index("idx_dj_created").on(t.createdAt),
 ]);
 
 // ═══════════════════════════════════════════════════════════════════════════

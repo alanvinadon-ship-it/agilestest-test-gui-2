@@ -220,7 +220,9 @@ describe("protected procedures reject unauthenticated", () => {
 
     // Should not throw
     const result = await caller.profiles.list({ projectId: "test-project" });
-    expect(Array.isArray(result)).toBe(true);
+    expect(result).toHaveProperty("items");
+    expect(result).toHaveProperty("total");
+    expect(Array.isArray(result.items)).toBe(true);
   });
 });
 
