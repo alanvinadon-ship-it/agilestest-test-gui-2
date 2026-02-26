@@ -75,3 +75,36 @@
 - [x] Feature: Accessibilité clavier (Enter/Space pour ouvrir, Escape pour fermer)
 - [x] Feature: Tests unitaires mini-sidebar (uiStorage + toggle + popover)
 - [x] Feature: Mise à jour docs/FRONTEND_SIDEBAR.md (modes + persistance)
+- [x] Docker: Dockerfile multi-stage (backend + frontend)
+- [x] Docker: docker-compose.prod.yml (mysql, minio, backend, nginx)
+- [x] Docker: scripts/prod-up.sh + scripts/prod-down.sh
+- [x] Docker: scripts/db-migrate.sh (drizzle migrate)
+- [x] Docker: scripts/backup.sh + scripts/restore.sh (mysqldump/mysql)
+- [x] Docker: .env.example.prod + docs variables
+- [x] Docker: nginx reverse proxy config
+- [x] Artefacts: Provider S3 MinIO + signed URLs (createUploadUrl, confirmUpload, getDownloadUrl)
+- [x] Artefacts: Limites (size max 100MB, mime whitelist, checksum sha256)
+- [x] Artefacts: Rétention configurable (RETENTION_DAYS_ARTIFACTS, RETENTION_DAYS_RUNS, RETENTION_DAYS_SESSIONS)
+- [x] Jobs: MySQL-based job queue avec polling (remplace pg-boss)
+- [x] Jobs: job.parseJmeterJtl handler
+- [x] Jobs: job.aiAnalyzeRun handler
+- [x] Jobs: job.retentionPurge handler
+- [x] Jobs: tRPC jobs router (status, listByRun, enqueue endpoints)
+- [x] Observabilité: Logs JSON pino + redaction PII/tokens
+- [x] Observabilité: Request ID (x-request-id)
+- [x] Observabilité: Prometheus metrics (http, trpc, db, jobs)
+- [x] Observabilité: /healthz + /readyz endpoints
+- [x] Sécurité: Security headers (X-Content-Type-Options, X-Frame-Options, HSTS, etc.)
+- [x] Sécurité: Rate limit login (10/15min) + tRPC (200/min)
+- [x] Sécurité: Headers helmet (implémenté inline sans dep helmet)
+- [x] Sécurité: CORS strict par ENV (CORS_ORIGIN)
+- [x] Sécurité: Désactiver stacktraces en prod (pino redaction)
+- [x] Sécurité: Protéger /metrics (basic auth)
+- [x] Docs: RELEASE_GATE.md
+- [x] Docs: RUNBOOK.md
+- [x] Docs: OPERATIONS.md
+- [x] Tests: signed URL RBAC scope (MIME, size, key builder)
+- [x] Tests: readyz + healthz + metrics structure
+- [x] Tests: job queue exports + handler registration
+- [x] Tests: ENV config (retention, security, S3) + schema tables
+- [x] Tests: smoke test script (scripts/smoke-test.sh)

@@ -240,3 +240,39 @@ export const generatedScripts = mysqlTable("generated_scripts", {
 
 export type GeneratedScript = typeof generatedScripts.$inferSelect;
 export type InsertGeneratedScript = typeof generatedScripts.$inferInsert;
+
+// ─── Jobs Queue (MySQL-based async jobs) ────────────────────────────────────
+export const jobs = mysqlTable("jobs", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 128 }).notNull(),
+  status: mysqlEnum("status", ["QUEUED", "RUNNING", "DONE", "FAILED", "CANCELLED"]).default("QUEUED").notNull(),
+  payload: json("payload"),
+  result: json("result"),
+  error: text("error"),
+  attempts: int("attempts").default(0).notNull(),
+  maxAttempts: int("maxAttempts").default(3).notNull(),
+  runAfter: timestamp("runAfter").defaultNow().notNull(),
+  startedAt: timestamp("startedAt"),
+  completedAt: timestamp("completedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Job = typeof jobs.$inferSelect;
+export type InsertJob = typeof jobs.$inferInsert;
+
+// ─── AI Analyses ────────────────────────────────────────────────────────────
+export const aiAnalyses = mysqlTable("ai_analyses", {
+  id: int("id").autoincrement().primaryKey(),
+  executionId: int("executionId").notNull(),
+  jobId: int("jobId"),
+  summary: text("summary"),
+  recommendations: json("recommendations"),
+  kpis: json("kpis"),
+  status: mysqlEnum("status", ["PENDING", "DONE", "FAILED"]).default("PENDING").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type AiAnalysis = typeof aiAnalyses.$inferSelect;
+export type InsertAiAnalysis = typeof aiAnalyses.$inferInsert;

@@ -15,6 +15,8 @@ import {
   scriptsRouter,
 } from "./routers/testing";
 import { uiRouter } from "./routers/ui";
+import { artifactsRouter } from "./routers/artifacts";
+import { jobsRouter } from "./routers/jobs";
 
 export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -40,6 +42,12 @@ export const appRouter = router({
 
   // UI widgets (sidebar counts, etc.)
   ui: uiRouter,
+
+  // Artifacts (S3/MinIO signed URLs)
+  artifacts: artifactsRouter,
+
+  // Jobs queue (async processing)
+  jobs: jobsRouter,
 
   // Testing domain
   profiles: profilesRouter,
