@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useEffect } from "react";
 import {
   LayoutDashboard,
   FolderKanban,
@@ -25,6 +25,8 @@ import {
   BarChart3,
   Navigation,
   Bell,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -33,6 +35,17 @@ import { ProjectSwitcher } from "./ProjectSwitcher";
 import { useProject } from "../state/projectStore";
 import { useSidebarAccordionState } from "../hooks/useSidebarAccordionState";
 import { useSidebarCounts } from "../hooks/useSidebarCounts";
+import { uiGet, uiSet } from "../lib/uiStorage";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
 import type { LucideIcon } from "lucide-react";
 
 interface NavItem {
@@ -113,18 +126,158 @@ const baseNavSections: NavSection[] = [
   },
 ];
 
-// ─── Collapsible Nav Section ────────────────────────────────────────────
+// ─── Mini-sidebar: Popover with sub-items ──────────────────────────────
+
+function MiniNavItem({
+  item,
+  location,
+}: {
+  item: NavItem;
+  location: string;
+}) {
+  const isActive =
+    location === item.href || (item.href !== "/" && location.startsWith(item.href));
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Link href={item.href}>
+          <div
+            className={cn(
+              "w-10 h-10 rounded-md flex items-center justify-center transition-colors",
+              isActive
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+            )}
+          >
+            <item.icon className="w-4 h-4" />
+          </div>
+        </Link>
+      </TooltipTrigger>
+      <TooltipContent side="right" sideOffset={8}>
+        {item.label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function MiniNavSectionPopover({
+  section,
+  location,
+  badge,
+  navigate,
+}: {
+  section: NavSection;
+  location: string;
+  badge?: string | null;
+  navigate: (path: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const hasActiveItem = section.items.some(
+    (item) => location === item.href || (item.href !== "/" && location.startsWith(item.href))
+  );
+
+  // For flat sections with single items, render as simple tooltip icons
+  if (section.flat) {
+    return (
+      <div className="space-y-0.5 flex flex-col items-center">
+        {section.items.map((item) => (
+          <MiniNavItem key={item.href} item={item} location={location} />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <button
+              className={cn(
+                "relative w-10 h-10 rounded-md flex items-center justify-center transition-colors",
+                hasActiveItem
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+              )}
+              aria-label={section.label}
+              aria-haspopup="true"
+              aria-expanded={open}
+            >
+              <section.icon className="w-4 h-4" />
+              {badge && (
+                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full text-[8px] font-bold leading-none bg-primary text-primary-foreground">
+                  {badge}
+                </span>
+              )}
+            </button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        {!open && (
+          <TooltipContent side="right" sideOffset={8}>
+            {section.label}
+          </TooltipContent>
+        )}
+      </Tooltip>
+      <PopoverContent
+        side="right"
+        align="start"
+        sideOffset={8}
+        className="w-52 p-1.5"
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            setOpen(false);
+          }
+        }}
+      >
+        <p
+          className={cn(
+            "px-2 py-1 text-[10px] font-mono font-medium uppercase tracking-widest",
+            section.adminOnly ? "text-red-400/70" : "text-muted-foreground"
+          )}
+        >
+          {section.label}
+        </p>
+        <div className="space-y-0.5 mt-0.5">
+          {section.items.map((item) => {
+            const isActive =
+              location === item.href || (item.href !== "/" && location.startsWith(item.href));
+            return (
+              <button
+                key={item.href}
+                onClick={() => {
+                  navigate(item.href);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors text-left",
+                  isActive
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                )}
+              >
+                <item.icon className="w-3.5 h-3.5 shrink-0" />
+                <span className="font-medium truncate text-[13px]">{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// ─── Collapsible Nav Section (normal mode) ─────────────────────────────
 
 function NavSectionAccordion({
   section,
-  collapsed,
   location,
   expanded,
   onToggle,
   badge,
 }: {
   section: NavSection;
-  collapsed: boolean;
   location: string;
   expanded: boolean;
   onToggle: () => void;
@@ -138,16 +291,14 @@ function NavSectionAccordion({
   if (section.flat) {
     return (
       <div>
-        {!collapsed && (
-          <p
-            className={cn(
-              "px-3 mb-1.5 text-[10px] font-mono font-medium uppercase tracking-widest",
-              section.adminOnly ? "text-red-400/70" : "text-muted-foreground"
-            )}
-          >
-            {section.label}
-          </p>
-        )}
+        <p
+          className={cn(
+            "px-3 mb-1.5 text-[10px] font-mono font-medium uppercase tracking-widest",
+            section.adminOnly ? "text-red-400/70" : "text-muted-foreground"
+          )}
+        >
+          {section.label}
+        </p>
         <div className="space-y-0.5">
           {section.items.map((item) => {
             const isActive =
@@ -163,7 +314,7 @@ function NavSectionAccordion({
                   )}
                 >
                   <item.icon className="w-4 h-4 shrink-0" />
-                  {!collapsed && <span className="font-medium truncate">{item.label}</span>}
+                  <span className="font-medium truncate">{item.label}</span>
                 </div>
               </Link>
             );
@@ -176,98 +327,73 @@ function NavSectionAccordion({
   // Accordion sections: collapsible with chevron
   return (
     <div>
-      {/* Accordion header */}
-      {collapsed ? (
-        // When sidebar is collapsed, show section icon as a tooltip trigger
-        <div className="flex items-center justify-center py-2">
-          <div
-            className={cn(
-              "relative w-8 h-8 rounded-md flex items-center justify-center transition-colors",
-              hasActiveItem
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-            )}
-            title={section.label}
-          >
-            <section.icon className="w-4 h-4" />
-            {badge && (
-              <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full text-[8px] font-bold leading-none bg-primary text-primary-foreground">
-                {badge}
-              </span>
-            )}
-          </div>
-        </div>
-      ) : (
-        <button
-          onClick={onToggle}
+      <button
+        onClick={onToggle}
+        className={cn(
+          "w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors group",
+          hasActiveItem && !expanded
+            ? "text-primary"
+            : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+        )}
+      >
+        <section.icon className="w-4 h-4 shrink-0" />
+        <span
           className={cn(
-            "w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors group",
-            hasActiveItem && !expanded
-              ? "text-primary"
-              : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+            "flex-1 text-left font-semibold text-[11px] uppercase tracking-wider truncate",
+            section.adminOnly && "text-red-400/70"
           )}
         >
-          <section.icon className="w-4 h-4 shrink-0" />
+          {section.label}
+        </span>
+        {badge && (
           <span
-            className={cn(
-              "flex-1 text-left font-semibold text-[11px] uppercase tracking-wider truncate",
-              section.adminOnly && "text-red-400/70"
-            )}
+            className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold leading-none bg-primary text-primary-foreground shrink-0"
+            aria-label={`${badge} éléments actifs`}
           >
-            {section.label}
+            {badge}
           </span>
-          {badge && (
-            <span
-              className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold leading-none bg-primary text-primary-foreground shrink-0"
-              aria-label={`${badge} éléments actifs`}
-            >
-              {badge}
-            </span>
+        )}
+        <ChevronDown
+          className={cn(
+            "w-3.5 h-3.5 shrink-0 transition-transform duration-200",
+            expanded ? "rotate-0" : "-rotate-90"
           )}
-          <ChevronDown
-            className={cn(
-              "w-3.5 h-3.5 shrink-0 transition-transform duration-200",
-              expanded ? "rotate-0" : "-rotate-90"
-            )}
-          />
-          {/* Active indicator dot when collapsed */}
-          {hasActiveItem && !expanded && !badge && (
-            <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
-          )}
-        </button>
-      )}
+        />
+        {/* Active indicator dot when collapsed */}
+        {hasActiveItem && !expanded && !badge && (
+          <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+        )}
+      </button>
 
       {/* Accordion content */}
-      {!collapsed && (
-        <div
-          className={cn(
-            "overflow-hidden transition-all duration-200 ease-in-out",
-            expanded ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
-          )}
-        >
-          <div className="space-y-0.5 pt-0.5 pl-2">
-            {section.items.map((item) => {
-              const isActive =
-                location === item.href || (item.href !== "/" && location.startsWith(item.href));
-              return (
-                <Link key={item.href} href={item.href}>
-                  <div
-                    className={cn(
-                      "flex items-center gap-3 px-3 py-1.5 rounded-md text-sm transition-colors",
-                      isActive
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-                    )}
-                  >
-                    <item.icon className="w-3.5 h-3.5 shrink-0" />
-                    <span className="font-medium truncate text-[13px]">{item.label}</span>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
+      <div
+        className={cn(
+          "overflow-hidden transition-all duration-200 ease-in-out",
+          expanded ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
+        )}
+      >
+        <div className="space-y-0.5 pt-0.5 pl-2">
+          {section.items.map((item) => {
+            const isActive =
+              location === item.href || (item.href !== "/" && location.startsWith(item.href));
+            return (
+              <Link key={item.href} href={item.href}>
+                <div
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-1.5 rounded-md text-sm transition-colors",
+                    isActive
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                  )}
+                >
+                  <item.icon className="w-3.5 h-3.5 shrink-0" />
+                  <span className="font-medium truncate text-[13px]">{item.label}</span>
+                </div>
+              </Link>
+            );
+          })}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -276,8 +402,18 @@ function NavSectionAccordion({
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
-  const [collapsed, setCollapsed] = useState(false);
   const { user, logout, isAdmin } = useAuth();
+
+  // Persisted mini-sidebar state via uiStorage
+  const [mini, setMini] = useState(() => uiGet("sidebarMini"));
+
+  const toggleMini = useCallback(() => {
+    setMini((prev) => {
+      const next = !prev;
+      uiSet("sidebarMini", next);
+      return next;
+    });
+  }, []);
 
   const handleLogout = useCallback(() => {
     logout();
@@ -289,7 +425,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return baseNavSections.filter((s) => !s.adminOnly || isAdmin);
   }, [isAdmin]);
 
-  // Persisted accordion state via uiStorage
+  // Persisted accordion state via uiStorage (only used in normal mode)
   const { isExpanded, toggle: toggleSection } = useSidebarAccordionState(location, navSections);
 
   // Badge counts from backend
@@ -301,79 +437,144 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <aside
         className={cn(
           "fixed left-0 top-0 h-screen z-40 flex flex-col border-r border-border bg-sidebar transition-all duration-200",
-          collapsed ? "w-16" : "w-56"
+          mini ? "w-[60px]" : "w-56"
         )}
       >
-        {/* Logo */}
-        <div className="h-14 flex items-center gap-2 px-4 border-b border-border shrink-0">
-          <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center shrink-0">
-            <span className="text-primary-foreground font-heading font-bold text-sm">AT</span>
-          </div>
-          {!collapsed && (
-            <div className="overflow-hidden">
-              <p className="font-heading font-semibold text-sm text-foreground truncate">
-                AgilesTest
-              </p>
-              <p className="text-[10px] text-muted-foreground font-mono tracking-wider">
-                CLOUD TESTING
-              </p>
-            </div>
+        {/* Logo + Toggle */}
+        <div className="h-14 flex items-center gap-2 px-3 border-b border-border shrink-0">
+          {mini ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={toggleMini}
+                  className="w-8 h-8 rounded-md bg-primary flex items-center justify-center shrink-0 hover:opacity-80 transition-opacity"
+                  aria-label="Étendre la barre latérale"
+                >
+                  <span className="text-primary-foreground font-heading font-bold text-sm">AT</span>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right" sideOffset={8}>
+                Étendre la barre latérale
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <>
+              <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center shrink-0">
+                <span className="text-primary-foreground font-heading font-bold text-sm">AT</span>
+              </div>
+              <div className="overflow-hidden flex-1">
+                <p className="font-heading font-semibold text-sm text-foreground truncate">
+                  AgilesTest
+                </p>
+                <p className="text-[10px] text-muted-foreground font-mono tracking-wider">
+                  CLOUD TESTING
+                </p>
+              </div>
+              <button
+                onClick={toggleMini}
+                className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                title="Réduire la barre latérale"
+                aria-label="Réduire la barre latérale"
+              >
+                <PanelLeftClose className="w-4 h-4" />
+              </button>
+            </>
           )}
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 py-3 px-2 space-y-1 overflow-y-auto">
-          {navSections.map((section) => (
-            <NavSectionAccordion
-              key={section.label}
-              section={section}
-              collapsed={collapsed}
-              location={location}
-              expanded={isExpanded(section.label)}
-              onToggle={() => toggleSection(section.label)}
-              badge={formatCount(section.label)}
-            />
-          ))}
+        <nav className={cn(
+          "flex-1 py-3 overflow-y-auto",
+          mini ? "px-1 space-y-1 flex flex-col items-center" : "px-2 space-y-1"
+        )}>
+          {mini
+            ? navSections.map((section) => (
+                <MiniNavSectionPopover
+                  key={section.label}
+                  section={section}
+                  location={location}
+                  badge={formatCount(section.label)}
+                  navigate={navigate}
+                />
+              ))
+            : navSections.map((section) => (
+                <NavSectionAccordion
+                  key={section.label}
+                  section={section}
+                  location={location}
+                  expanded={isExpanded(section.label)}
+                  onToggle={() => toggleSection(section.label)}
+                  badge={formatCount(section.label)}
+                />
+              ))}
         </nav>
 
         {/* User + Collapse */}
         <div className="border-t border-border">
-          {!collapsed && user && (
-            <div className="px-3 py-2 flex items-center gap-2">
-              <div className="w-7 h-7 rounded-md bg-primary/20 flex items-center justify-center shrink-0">
-                <User className="w-3.5 h-3.5 text-primary" />
+          {mini ? (
+            /* Mini mode: user avatar with tooltip */
+            user && (
+              <div className="flex flex-col items-center py-2 gap-1">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="w-8 h-8 rounded-md bg-primary/20 flex items-center justify-center">
+                      <User className="w-3.5 h-3.5 text-primary" />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={8}>
+                    <div>
+                      <p className="font-medium">{user.full_name}</p>
+                      <p className="text-[10px] opacity-70">{user.role}</p>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={handleLogout}
+                      className="text-muted-foreground hover:text-destructive transition-colors"
+                      aria-label="Déconnexion"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={8}>
+                    Déconnexion
+                  </TooltipContent>
+                </Tooltip>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-foreground truncate">{user.full_name}</p>
-                <div className="flex items-center gap-1">
-                  <p className="text-[10px] text-muted-foreground font-mono">{user.role}</p>
-                  {isAdmin && <ShieldCheck className="w-2.5 h-2.5 text-red-400" />}
+            )
+          ) : (
+            /* Normal mode: full user info */
+            <>
+              {user && (
+                <div className="px-3 py-2 flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-md bg-primary/20 flex items-center justify-center shrink-0">
+                    <User className="w-3.5 h-3.5 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-foreground truncate">{user.full_name}</p>
+                    <div className="flex items-center gap-1">
+                      <p className="text-[10px] text-muted-foreground font-mono">{user.role}</p>
+                      {isAdmin && <ShieldCheck className="w-2.5 h-2.5 text-red-400" />}
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="text-muted-foreground hover:text-destructive transition-colors"
+                    title="Déconnexion"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="text-muted-foreground hover:text-destructive transition-colors"
-                title="Déconnexion"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
-            </div>
+              )}
+            </>
           )}
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="w-full h-9 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {collapsed ? (
-              <ChevronRight className="w-4 h-4" />
-            ) : (
-              <ChevronLeft className="w-4 h-4" />
-            )}
-          </button>
         </div>
       </aside>
 
       {/* Main content */}
-      <main className={cn("flex-1 transition-all duration-200", collapsed ? "ml-16" : "ml-56")}>
+      <main className={cn("flex-1 transition-all duration-200", mini ? "ml-[60px]" : "ml-56")}>
         {/* Top bar */}
         <header className="h-14 border-b border-border flex items-center justify-between px-6 bg-background/80 backdrop-blur-sm sticky top-0 z-30">
           <div className="flex items-center gap-4">

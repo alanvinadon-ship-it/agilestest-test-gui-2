@@ -68,3 +68,10 @@
 - [x] Feature: Hook useSidebarCounts avec refetch adaptatif (10-15s running, 30-60s notifs)
 - [x] Feature: Badges visuels sur sections sidebar (Exécution, Administration)
 - [x] Feature: Tests unitaires pour sidebar counts (backend + frontend smoke)
+- [x] Feature: Mode mini-sidebar avec toggle collapse/expand
+- [x] Feature: Tooltips sur icônes en mode mini-sidebar
+- [x] Feature: Popovers sous-items pour navigation rapide en mode mini
+- [x] Feature: Persistance mini-sidebar via uiStorage (clé agilestest.ui.sidebarMini)
+- [x] Feature: Accessibilité clavier (Enter/Space pour ouvrir, Escape pour fermer)
+- [x] Feature: Tests unitaires mini-sidebar (uiStorage + toggle + popover)
+- [x] Feature: Mise à jour docs/FRONTEND_SIDEBAR.md (modes + persistance)

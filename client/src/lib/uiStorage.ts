@@ -24,6 +24,7 @@ export type SidebarAccordionState = z.infer<typeof sidebarAccordionsSchema>;
 const UI_KEYS = {
   theme: z.enum(["light", "dark", "system"]),
   sidebarCollapsed: z.boolean(),
+  sidebarMini: z.boolean(),
   locale: z.enum(["fr", "en"]),
   tablePageSize: z.number().int().min(5).max(100),
   lastProjectId: z.number().int().nullable(),
@@ -41,6 +42,7 @@ const PREFIX = "agilestest.ui.";
 const DEFAULTS: { [K in UIKeyName]: UIKeyValue<K> } = {
   theme: "dark",
   sidebarCollapsed: false,
+  sidebarMini: false,
   locale: "fr",
   tablePageSize: 20,
   lastProjectId: null,
