@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { useCallback, useMemo, useEffect } from "react";
+import { useCallback, useMemo } from "react";
 import {
   LayoutDashboard,
   FolderKanban,
@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "../auth/AuthContext";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { useProject } from "../state/projectStore";
+import { useSidebarAccordionState } from "../hooks/useSidebarAccordionState";
 import type { LucideIcon } from "lucide-react";
 
 interface NavItem {
@@ -272,50 +273,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return baseNavSections.filter((s) => !s.adminOnly || isAdmin);
   }, [isAdmin]);
 
-  // Track which accordion sections are expanded (by section label)
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => {
-    // Auto-expand the section containing the current route
-    const initial = new Set<string>();
-    for (const section of baseNavSections) {
-      if (section.flat) continue;
-      const hasActive = section.items.some(
-        (item) => location === item.href || (item.href !== "/" && location.startsWith(item.href))
-      );
-      if (hasActive) {
-        initial.add(section.label);
-      }
-    }
-    return initial;
-  });
-
-  // Auto-expand section when navigating to a new route
-  useEffect(() => {
-    for (const section of navSections) {
-      if (section.flat) continue;
-      const hasActive = section.items.some(
-        (item) => location === item.href || (item.href !== "/" && location.startsWith(item.href))
-      );
-      if (hasActive && !expandedSections.has(section.label)) {
-        setExpandedSections((prev) => {
-          const next = new Set(prev);
-          next.add(section.label);
-          return next;
-        });
-      }
-    }
-  }, [location, navSections]);
-
-  const toggleSection = useCallback((label: string) => {
-    setExpandedSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(label)) {
-        next.delete(label);
-      } else {
-        next.add(label);
-      }
-      return next;
-    });
-  }, []);
+  // Persisted accordion state via uiStorage
+  const { isExpanded, toggle: toggleSection } = useSidebarAccordionState(location, navSections);
 
   return (
     <div className="min-h-screen flex blueprint-grid">
@@ -351,7 +310,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               section={section}
               collapsed={collapsed}
               location={location}
-              expanded={expandedSections.has(section.label)}
+              expanded={isExpanded(section.label)}
               onToggle={() => toggleSection(section.label)}
             />
           ))}

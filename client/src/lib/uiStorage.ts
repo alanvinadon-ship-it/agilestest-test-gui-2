@@ -12,6 +12,15 @@ import { z } from "zod";
 
 // ─── Whitelist of allowed UI keys + their Zod schemas ───────────────────────
 
+const sidebarAccordionsSchema = z.object({
+  configuration: z.boolean(),
+  execution: z.boolean(),
+  driveTest: z.boolean(),
+  administration: z.boolean(),
+});
+
+export type SidebarAccordionState = z.infer<typeof sidebarAccordionsSchema>;
+
 const UI_KEYS = {
   theme: z.enum(["light", "dark", "system"]),
   sidebarCollapsed: z.boolean(),
@@ -19,6 +28,7 @@ const UI_KEYS = {
   tablePageSize: z.number().int().min(5).max(100),
   lastProjectId: z.number().int().nullable(),
   dashboardLayout: z.enum(["grid", "list"]),
+  sidebarAccordions: sidebarAccordionsSchema,
 } as const;
 
 type UIKeyName = keyof typeof UI_KEYS;
@@ -35,6 +45,12 @@ const DEFAULTS: { [K in UIKeyName]: UIKeyValue<K> } = {
   tablePageSize: 20,
   lastProjectId: null,
   dashboardLayout: "grid",
+  sidebarAccordions: {
+    configuration: false,
+    execution: false,
+    driveTest: false,
+    administration: false,
+  },
 };
 
 // ─── Public API ─────────────────────────────────────────────────────────────

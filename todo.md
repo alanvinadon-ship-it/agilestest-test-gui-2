@@ -59,3 +59,8 @@
 - [x] Bug: Configuration email des notifications perdue après migration localStorage → memoryStore — corrigé : memoryStore persiste les clés agilestest_notif_* et agilestest_audit_* dans localStorage
 - [x] Bug: AdminUsersPage — manque bouton Créer utilisateur, filtre statuts, colonne Statut, colonne Projets, boutons d'action (Voir, Reset Password)
 - [x] Bug: Page /projects — tbody imbriqué dans tbody (erreur DOM React) — corrigé dans AdminRbacPage et AdminRolesPage (remplacé tbody par Fragment)
+- [x] Feature: Persister l'état accordéon sidebar dans uiStorage (clé agilestest.ui.sidebar.accordions)
+- [x] Feature: Hook useSidebarAccordionState() avec logique auto-open route active
+- [x] Feature: Mise à jour whitelist uiStorage pour la clé sidebar.accordions
+- [x] Feature: Tests unitaires pour sidebar accordion state persistence
+- [x] Feature: Documentation docs/FRONTEND_SIDEBAR.md
