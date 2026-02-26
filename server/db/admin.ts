@@ -536,15 +536,29 @@ export async function deleteUser(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  // Verify user exists
+  // Negative IDs represent virtual "INVITED" users from the invites table
+  if (id < 0) {
+    const realInviteId = -id; // convert back to positive invite ID
+    const inviteRows = await db.select().from(invites).where(eq(invites.id, realInviteId)).limit(1);
+    if (!inviteRows[0]) throw new Error("Invitation introuvable");
+    const invite = inviteRows[0];
+    await db.delete(invites).where(eq(invites.id, realInviteId));
+    return { success: true, message: `Invitation pour ${invite.email} supprimée` };
+  }
+
+  // Positive IDs: real users in the users table
   const user = await getUserById(id);
   if (!user) throw new Error("Utilisateur introuvable");
 
   // Delete related records first (cascade)
-  // userId in userRoles and projectMemberships is varchar, so convert id to string
   const userIdStr = String(id);
   await db.delete(userRoles).where(eq(userRoles.userId, userIdStr));
   await db.delete(projectMemberships).where(eq(projectMemberships.userId, userIdStr));
+
+  // Also delete any invites for this user's email
+  if (user.email) {
+    await db.delete(invites).where(eq(invites.email, user.email));
+  }
 
   // Delete the user
   await db.delete(users).where(eq(users.id, id));

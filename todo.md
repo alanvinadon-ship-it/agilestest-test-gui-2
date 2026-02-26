@@ -128,3 +128,4 @@
 - [x] Bug: AdminUsersPage migrée vers tRPC/DB — CRUD complet (listUsers, createUser, updateUser, disableUser, enableUser, resetPassword) + invitations via DB
 - [x] Bug: Les invités apparaissent maintenant dans la liste Utilisateurs — invites PENDING fusionnées comme utilisateurs virtuels dans listUsers (22 utilisateurs affichés)
 - [x] Feature: Bouton Supprimer utilisateur dans les actions de chaque ligne (AdminUsersPage) — backend deleteUser + frontend bouton Trash2 + modale confirmation + cascade (memberships, invites, auditLogs)
+- [x] Bug: Erreur "Utilisateur introuvable" lors de la suppression d'un invité PENDING — corrigé : deleteUser détecte les IDs négatifs (invités virtuels) et supprime l'invitation dans la table invites
