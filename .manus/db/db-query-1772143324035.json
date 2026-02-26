@@ -1,0 +1,18 @@
+{
+  "query": "SELECT COLUMN_NAME, COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_NAME = 'probes' AND TABLE_SCHEMA = DATABASE() AND COLUMN_NAME LIKE '%last%' OR (TABLE_NAME = 'probes' AND TABLE_SCHEMA = DATABASE() AND COLUMN_NAME LIKE '%seen%');",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute SELECT COLUMN_NAME, COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_NAME = 'probes' AND TABLE_SCHEMA = DATABASE() AND COLUMN_NAME LIKE '%last%' OR (TABLE_NAME = 'probes' AND TABLE_SCHEMA = DATABASE() AND COLUMN_NAME LIKE '%seen%');",
+  "rows": [
+    {
+      "COLUMN_NAME": "last_seen_at",
+      "COLUMN_TYPE": "timestamp"
+    },
+    {
+      "COLUMN_NAME": "last_error",
+      "COLUMN_TYPE": "text"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\tCOLUMN_TYPE\nlast_seen_at\ttimestamp\nlast_error\ttext\n",
+  "stderr": "",
+  "execution_time_ms": 70
+}

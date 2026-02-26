@@ -8,6 +8,7 @@ import { jobs, executions, artifacts, aiAnalyses, reports, testScenarios, testPr
 import { eq, and, lte, sql, inArray } from "drizzle-orm";
 import { ENV } from "./_core/env";
 import { deleteArtifact } from "./artifactStorage";
+import { evaluateProbesHealthAndAlert } from "./probeAlertService";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -143,6 +144,8 @@ export async function pollAndProcess(): Promise<number> {
   return 1;
 }
 
+let _probeAlertInterval: ReturnType<typeof setInterval> | null = null;
+
 export function startPolling(intervalMs = 5000) {
   if (_polling) return;
   _polling = true;
@@ -155,12 +158,33 @@ export function startPolling(intervalMs = 5000) {
       console.error("[JobQueue] Poll error:", err);
     }
   }, intervalMs);
+
+  // Start probe health evaluation every 60s
+  const probeAlertIntervalMs = Number(process.env.PROBE_ALERT_POLL_MS ?? 60000);
+  _probeAlertInterval = setInterval(async () => {
+    try {
+      const result = await evaluateProbesHealthAndAlert();
+      if (result.alertsSent > 0) {
+        console.log(`[ProbeAlert] ${result.alertsSent} alert(s) sent for ${result.evaluated} probes`);
+      }
+      if (result.errors.length > 0) {
+        console.warn(`[ProbeAlert] Errors:`, result.errors);
+      }
+    } catch (err) {
+      console.error("[ProbeAlert] Evaluation error:", err);
+    }
+  }, probeAlertIntervalMs);
+  console.log(`[ProbeAlert] Health evaluation started (interval: ${probeAlertIntervalMs}ms)`);
 }
 
 export function stopPolling() {
   if (_pollInterval) {
     clearInterval(_pollInterval);
     _pollInterval = null;
+  }
+  if (_probeAlertInterval) {
+    clearInterval(_probeAlertInterval);
+    _probeAlertInterval = null;
   }
   _polling = false;
   console.log("[JobQueue] Polling stopped");

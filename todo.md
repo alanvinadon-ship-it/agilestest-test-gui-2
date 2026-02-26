@@ -153,3 +153,17 @@
 - [x] Étape 3: Frontend — ExportPdfButton dans ExecutionDetailPage (polling + auto-download + retry)
 - [x] Étape 3: Tests — 14 tests reports-pdf.test.ts (router + schema + job handler + frontend)
 - [x] Étape 3: Docs — (intégré dans les tests et le code)
+- [x] Étape 1: Backend — captures.list filtres status/probeId/q server-side (Zod + SQL WHERE)
+- [x] Étape 1: Backend — probes.listLite déjà existant, vérifier qu'il supporte status filter
+- [x] Étape 1: Frontend — filtres CapturesPage (Select statut, Combobox sonde, sync URL query params)
+- [x] Étape 1: Frontend — reset page=1 quand filtre change, keepPreviousData
+- [x] Étape 1: Tests — 18 tests captures-filters.test.ts
+- [x] Étape 2: Backend — reports.listByExecution paginé (items + total + requestedByName)
+- [x] Étape 2: Frontend — ReportsHistoryPanel dans ExecutionDetailPage (table + télécharger)
+- [x] Étape 2: Frontend — invalidation reports.listByExecution après génération PDF
+- [x] Étape 2: Tests — 17 tests reports-history.test.ts
+- [x] Étape 3: Backend — table probe_alert_state (probeId, orgId, healthState, redSinceAt, lastNotifiedAt, alertCount)
+- [x] Étape 3: Backend — probeAlertService (evaluateProbesHealthAndAlert, polling 60s, seuil 5min RED, anti-spam 30min)
+- [x] Étape 3: Backend — notifyOwner avec probe name/type/host/status + durée RED
+- [x] Étape 3: Frontend — badge redProbes dans sidebar + polling rapide 10s quand RED > 0
+- [x] Étape 3: Tests — 27 tests probe-alerts.test.ts (health calc, anti-spam, notification, integration, sidebar badge)

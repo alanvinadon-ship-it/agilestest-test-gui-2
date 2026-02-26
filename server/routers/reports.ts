@@ -7,7 +7,9 @@ import { eq, desc, and } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../_core/trpc";
 import { getDb } from "../db";
-import { reports, executions } from "../../drizzle/schema";
+import { reports, executions, users } from "../../drizzle/schema";
+import { paginationInput } from "../../shared/pagination";
+import { normalizePagination, countRows } from "../lib/pagination";
 import { enqueueJob } from "../jobQueue";
 
 export const reportsRouter = router({
@@ -66,18 +68,48 @@ export const reportsRouter = router({
       return report;
     }),
 
-  /** List reports for an execution */
+  /** List reports for an execution — paginated with user info */
   listByExecution: protectedProcedure
-    .input(z.object({ executionId: z.number() }))
+    .input(z.object({
+      executionId: z.number(),
+      ...paginationInput.shape,
+    }))
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
-
-      const rows = await db.select().from(reports)
-        .where(eq(reports.executionId, input.executionId))
-        .orderBy(desc(reports.createdAt))
-        .limit(20);
-
-      return rows;
+      const { page, pageSize, offset } = normalizePagination(input);
+      const where = eq(reports.executionId, input.executionId);
+      const [rows, cnt] = await Promise.all([
+        db.select({
+          id: reports.id,
+          executionId: reports.executionId,
+          projectId: reports.projectId,
+          status: reports.status,
+          filename: reports.filename,
+          sizeBytes: reports.sizeBytes,
+          downloadUrl: reports.downloadUrl,
+          error: reports.error,
+          requestedBy: reports.requestedBy,
+          createdAt: reports.createdAt,
+          updatedAt: reports.updatedAt,
+        }).from(reports)
+          .where(where)
+          .orderBy(desc(reports.createdAt))
+          .limit(pageSize).offset(offset),
+        countRows(db, reports, where),
+      ]);
+      const total = cnt[0]?.count ?? 0;
+      // Enrich with user names
+      const userIds = [...new Set(rows.map(r => r.requestedBy).filter(Boolean))] as number[];
+      let userMap: Record<number, string> = {};
+      if (userIds.length > 0) {
+        const userRows = await db.select({ id: users.id, name: users.name }).from(users);
+        userMap = Object.fromEntries(userRows.map(u => [u.id, u.name ?? `User #${u.id}`]));
+      }
+      const data = rows.map(r => ({
+        ...r,
+        requestedByName: r.requestedBy ? (userMap[r.requestedBy] ?? `User #${r.requestedBy}`) : null,
+      }));
+      return { data, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
     }),
 });

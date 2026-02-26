@@ -2,7 +2,7 @@
  * CapturesPage — Captures réseau PCAP et collecte de logs
  * Données réelles via tRPC (MySQL) — branchement direct sur le backend.
  */
-import { useState } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useProject } from '../state/projectStore';
 import { usePermission, PermissionKey } from '../security';
 import { trpc } from '@/lib/trpc';
@@ -10,9 +10,10 @@ import type { CaptureStatus, CaptureTargetType, CaptureType } from '../types';
 import {
   Network, Loader2, X, AlertCircle, Plus, Search,
   CheckCircle2, XCircle, Clock, Ban, Play, StopCircle,
-  Trash2, Radio,
+  Trash2, Radio, Filter, RotateCcw,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useSearch, useLocation } from 'wouter';
 
 const captureStatusConfig: Record<CaptureStatus, { icon: typeof CheckCircle2; label: string; cls: string }> = {
   QUEUED:    { icon: Clock,        label: 'En file',   cls: 'text-yellow-400' },
@@ -175,28 +176,75 @@ function CreateCaptureModal({ isOpen, onClose, projectId }: {
 
 // ─── Main Page ────────────────────────────────────────────────────────────
 
+// ─── URL query param helpers ────────────────────────────────────────────
+function useUrlParams() {
+  const searchStr = useSearch();
+  const [, navigate] = useLocation();
+  const params = useMemo(() => new URLSearchParams(searchStr), [searchStr]);
+  const setParams = useCallback((updater: (p: URLSearchParams) => void) => {
+    const next = new URLSearchParams(searchStr);
+    updater(next);
+    // Always reset to page 1 when filters change
+    const path = window.location.pathname;
+    const qs = next.toString();
+    navigate(qs ? `${path}?${qs}` : path, { replace: true });
+  }, [searchStr, navigate]);
+  return { params, setParams };
+}
+
 export default function CapturesPage() {
   const { currentProject } = useProject();
   const { can } = usePermission();
   const canCreateCapture = can(PermissionKey.EXECUTIONS_RUN);
   const [showCreate, setShowCreate] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<string>('');
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
+  const { params, setParams } = useUrlParams();
+
+  // Read filters from URL
+  const statusFilter = params.get('status') || '';
+  const probeIdFilter = params.get('probeId') || '';
+  const searchQuery = params.get('q') || '';
+  const page = Math.max(1, Number(params.get('page')) || 1);
   const pageSize = 25;
+
+  // Local search input (debounced)
+  const [searchInput, setSearchInput] = useState(searchQuery);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchInput !== searchQuery) {
+        setParams(p => {
+          if (searchInput.trim()) p.set('q', searchInput.trim());
+          else p.delete('q');
+          p.set('page', '1');
+        });
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const setPage = (newPage: number) => setParams(p => p.set('page', String(newPage)));
 
   const utils = trpc.useUtils();
 
-  const { data, isLoading } = trpc.captures.list.useQuery(
+  // Fetch probes for dropdown filter
+  const { data: probesLiteData } = trpc.probes.listLite.useQuery(
+    {},
+    { enabled: !!currentProject },
+  );
+  const probesLite = probesLiteData ?? [];
+
+  const { data, isLoading, isPlaceholderData } = trpc.captures.list.useQuery(
     {
       projectId: Number(currentProject?.id) || 0,
       page,
       pageSize,
       ...(statusFilter ? { status: statusFilter as CaptureStatus } : {}),
+      ...(probeIdFilter ? { probeId: Number(probeIdFilter) } : {}),
+      ...(searchQuery ? { q: searchQuery } : {}),
     },
     {
       enabled: !!currentProject,
       refetchInterval: 10000,
+      placeholderData: (prev) => prev, // keepPreviousData
     },
   );
 
@@ -205,21 +253,20 @@ export default function CapturesPage() {
 
   const deleteMutation = trpc.captures.delete.useMutation({
     onSuccess: () => {
-      toast.success('Capture supprimée');
+      toast.success('Capture supprim\u00e9e');
       utils.captures.list.invalidate();
     },
     onError: (err) => toast.error(err.message),
   });
 
-  const filteredCaptures = captures.filter((cap: any) => {
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return (
-      String(cap.id).includes(q) ||
-      (cap.name || '').toLowerCase().includes(q) ||
-      (cap.captureType || '').toLowerCase().includes(q)
-    );
-  });
+  const hasActiveFilters = !!(statusFilter || probeIdFilter || searchQuery);
+  const resetFilters = () => {
+    setSearchInput('');
+    setParams(p => { p.delete('status'); p.delete('probeId'); p.delete('q'); p.set('page', '1'); });
+  };
+
+  // No client-side filtering — all server-side
+  const filteredCaptures = captures;
 
   if (!currentProject) {
     return (
@@ -252,22 +299,38 @@ export default function CapturesPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Rechercher (ID, nom, type)..."
+          <input type="text" value={searchInput} onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Rechercher par nom..."
             className="w-full rounded-md border border-input bg-background pl-10 pr-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
         </div>
-        <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+        <select value={statusFilter} onChange={(e) => setParams(p => { if (e.target.value) p.set('status', e.target.value); else p.delete('status'); p.set('page', '1'); })}
           className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30">
           <option value="">Tous les statuts</option>
           <option value="QUEUED">En file</option>
           <option value="RUNNING">En cours</option>
-          <option value="COMPLETED">Terminé</option>
-          <option value="FAILED">Échoué</option>
-          <option value="CANCELLED">Annulé</option>
+          <option value="COMPLETED">Termin\u00e9</option>
+          <option value="FAILED">\u00c9chou\u00e9</option>
+          <option value="CANCELLED">Annul\u00e9</option>
         </select>
+        <select value={probeIdFilter} onChange={(e) => setParams(p => { if (e.target.value) p.set('probeId', e.target.value); else p.delete('probeId'); p.set('page', '1'); })}
+          className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30">
+          <option value="">Toutes les sondes</option>
+          {probesLite.map((p: any) => (
+            <option key={p.id} value={p.id}>{p.name} ({p.probeType})</option>
+          ))}
+        </select>
+        {hasActiveFilters && (
+          <button onClick={resetFilters}
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-2 rounded-md border border-border hover:bg-secondary">
+            <RotateCcw className="w-3.5 h-3.5" /> Réinitialiser
+          </button>
+        )}
+        {isPlaceholderData && (
+          <Loader2 className="w-4 h-4 text-primary animate-spin" />
+        )}
       </div>
 
       {isLoading ? (
@@ -360,14 +423,14 @@ export default function CapturesPage() {
               </p>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  onClick={() => setPage(Math.max(1, page - 1))}
                   disabled={page <= 1}
                   className="rounded-md border border-border px-3 py-1 text-xs text-foreground hover:bg-secondary disabled:opacity-50 transition-colors"
                 >
                   Précédent
                 </button>
                 <button
-                  onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
+                  onClick={() => setPage(Math.min(pagination.totalPages, page + 1))}
                   disabled={page >= pagination.totalPages}
                   className="rounded-md border border-border px-3 py-1 text-xs text-foreground hover:bg-secondary disabled:opacity-50 transition-colors"
                 >

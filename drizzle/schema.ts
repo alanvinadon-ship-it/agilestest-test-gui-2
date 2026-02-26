@@ -295,3 +295,23 @@ export const reports = mysqlTable("reports", {
 
 export type Report = typeof reports.$inferSelect;
 export type InsertReport = typeof reports.$inferInsert;
+
+// ─── Probe Alert State ─────────────────────────────────────────────────────
+// Tracks health state per probe for alerting (RED > 5min → notify, anti-spam 30min)
+export const probeAlertState = mysqlTable("probe_alert_state", {
+  id: int("id").autoincrement().primaryKey(),
+  probeId: int("probeId").notNull(),
+  orgId: int("orgId").notNull(),
+  /** Current health state: GREEN, ORANGE, RED */
+  healthState: mysqlEnum("healthState", ["GREEN", "ORANGE", "RED"]).default("GREEN").notNull(),
+  /** When the probe first entered RED state (null if not RED) */
+  redSinceAt: timestamp("redSinceAt"),
+  /** Last time a notification was sent for this probe */
+  lastNotifiedAt: timestamp("lastNotifiedAt"),
+  /** Number of consecutive RED alerts sent */
+  alertCount: int("alertCount").default(0).notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ProbeAlertState = typeof probeAlertState.$inferSelect;
+export type InsertProbeAlertState = typeof probeAlertState.$inferInsert;

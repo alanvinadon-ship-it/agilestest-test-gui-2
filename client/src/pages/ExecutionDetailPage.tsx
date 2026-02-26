@@ -6,7 +6,7 @@
  * - Analyse IA (résumé, recommandations)
  * - Boutons Analyser IA / Parser JMeter / Rerun
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRoute, Link, useLocation } from 'wouter';
 import { trpc } from '@/lib/trpc';
 import { useProject } from '../state/projectStore';
@@ -540,6 +540,9 @@ export default function ExecutionDetailPage() {
         )}
       </div>
 
+      {/* Reports History */}
+      <ReportsHistoryPanel executionId={executionId} />
+
       {/* Incidents */}
       <div>
         <h2 className="text-lg font-heading font-semibold text-foreground mb-3">Incidents</h2>
@@ -573,6 +576,117 @@ export default function ExecutionDetailPage() {
                 )}
               </div>
             ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Reports History Panel ──────────────────────────────────────────────
+function ReportsHistoryPanel({ executionId }: { executionId: number }) {
+  const [page, setPage] = useState(1);
+  const { data, isLoading } = trpc.reports.listByExecution.useQuery(
+    { executionId, page, pageSize: 10 },
+    { refetchInterval: 15000 },
+  );
+  const reports = data?.data ?? [];
+  const pagination = data?.pagination;
+
+  if (isLoading && reports.length === 0) {
+    return (
+      <div>
+        <h2 className="text-lg font-heading font-semibold text-foreground mb-3">Rapports PDF</h2>
+        <div className="bg-card border border-border rounded-lg p-6 text-center">
+          <Loader2 className="w-6 h-6 text-primary animate-spin mx-auto" />
+        </div>
+      </div>
+    );
+  }
+
+  if (reports.length === 0) {
+    return (
+      <div>
+        <h2 className="text-lg font-heading font-semibold text-foreground mb-3">Rapports PDF</h2>
+        <div className="bg-card border border-border rounded-lg p-6 text-center">
+          <FileDown className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground">Aucun rapport généré. Cliquez sur "Export PDF" pour en créer un.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const statusBadge = (status: string) => {
+    switch (status) {
+      case 'DONE': return <span className="inline-flex items-center gap-1 text-xs text-green-400"><CheckCircle2 className="w-3 h-3" /> Prêt</span>;
+      case 'PENDING': return <span className="inline-flex items-center gap-1 text-xs text-yellow-400"><Clock className="w-3 h-3" /> En attente</span>;
+      case 'GENERATING': return <span className="inline-flex items-center gap-1 text-xs text-blue-400"><Loader2 className="w-3 h-3 animate-spin" /> Génération</span>;
+      case 'FAILED': return <span className="inline-flex items-center gap-1 text-xs text-red-400"><XCircle className="w-3 h-3" /> Échoué</span>;
+      default: return <span className="text-xs text-muted-foreground">{status}</span>;
+    }
+  };
+
+  const formatBytes = (bytes: number | null) => {
+    if (!bytes) return '—';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  return (
+    <div>
+      <h2 className="text-lg font-heading font-semibold text-foreground mb-3">Rapports PDF</h2>
+      <div className="bg-card border border-border rounded-lg overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border">
+              <th className="text-left px-5 py-3 text-xs font-mono font-medium text-muted-foreground uppercase">Statut</th>
+              <th className="text-left px-5 py-3 text-xs font-mono font-medium text-muted-foreground uppercase">Fichier</th>
+              <th className="text-left px-5 py-3 text-xs font-mono font-medium text-muted-foreground uppercase">Taille</th>
+              <th className="text-left px-5 py-3 text-xs font-mono font-medium text-muted-foreground uppercase">Demandé par</th>
+              <th className="text-left px-5 py-3 text-xs font-mono font-medium text-muted-foreground uppercase">Date</th>
+              <th className="text-right px-5 py-3 text-xs font-mono font-medium text-muted-foreground uppercase">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {reports.map((r: any) => (
+              <tr key={r.id} className="border-b border-border last:border-0 hover:bg-secondary/20">
+                <td className="px-5 py-3">{statusBadge(r.status)}</td>
+                <td className="px-5 py-3">
+                  <span className="text-foreground font-mono text-xs">{r.filename || '—'}</span>
+                </td>
+                <td className="px-5 py-3 text-muted-foreground font-mono text-xs">{formatBytes(r.sizeBytes)}</td>
+                <td className="px-5 py-3 text-sm text-foreground">{r.requestedByName || '—'}</td>
+                <td className="px-5 py-3 text-xs text-muted-foreground">
+                  {r.createdAt ? new Date(r.createdAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                </td>
+                <td className="px-5 py-3 text-right">
+                  {r.status === 'DONE' && r.downloadUrl ? (
+                    <a href={r.downloadUrl} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium">
+                      <Download className="w-3.5 h-3.5" /> Télécharger
+                    </a>
+                  ) : r.status === 'FAILED' && r.error ? (
+                    <span className="text-xs text-red-400" title={r.error}>Erreur</span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {pagination && pagination.totalPages > 1 && (
+          <div className="flex items-center justify-between px-5 py-3 border-t border-border">
+            <p className="text-xs text-muted-foreground">
+              Page {pagination.page} / {pagination.totalPages} — {pagination.total} rapport(s)
+            </p>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page <= 1}
+                className="rounded-md border border-border px-3 py-1 text-xs text-foreground hover:bg-secondary disabled:opacity-50 transition-colors">Précédent</button>
+              <button onClick={() => setPage(Math.min(pagination.totalPages, page + 1))} disabled={page >= pagination.totalPages}
+                className="rounded-md border border-border px-3 py-1 text-xs text-foreground hover:bg-secondary disabled:opacity-50 transition-colors">Suivant</button>
+            </div>
           </div>
         )}
       </div>

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { eq, desc, and, like, SQL } from "drizzle-orm";
+import { eq, desc, and, like, inArray, sql, SQL } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../_core/trpc";
 import { getDb } from "../db";
@@ -279,13 +279,38 @@ export const executionsRouter = router({
 // ─── Captures ───────────────────────────────────────────────────────────────
 export const capturesRouter = router({
   list: protectedProcedure.input(projectScopedList.extend({
-    status: z.enum(["QUEUED", "RUNNING", "COMPLETED", "FAILED", "CANCELLED"]).optional(),
+    status: z.union([
+      z.enum(["QUEUED", "RUNNING", "COMPLETED", "FAILED", "CANCELLED"]),
+      z.array(z.enum(["QUEUED", "RUNNING", "COMPLETED", "FAILED", "CANCELLED"])),
+    ]).optional(),
+    probeId: z.number().optional(),
+    q: z.string().optional(),
   })).query(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     const { page, pageSize, offset } = normalizePagination(input);
     const conditions: SQL[] = [eq(captures.projectId, input.projectId)];
-    if (input.status) conditions.push(eq(captures.status, input.status));
+    // Status filter (single or array)
+    if (input.status) {
+      const statuses = Array.isArray(input.status) ? input.status : [input.status];
+      if (statuses.length === 1) {
+        conditions.push(eq(captures.status, statuses[0]));
+      } else if (statuses.length > 1) {
+        conditions.push(inArray(captures.status, statuses));
+      }
+    }
+    // Probe filter: match probeId stored in config JSON
+    if (input.probeId) {
+      conditions.push(sql`JSON_EXTRACT(${captures.config}, '$.probeId') = ${input.probeId}`);
+    }
+    // Text search on name
+    if (input.q && input.q.trim()) {
+      conditions.push(like(captures.name, `%${input.q.trim()}%`));
+    }
+    // General search (same as existing "search" param)
+    if (input.search && input.search.trim()) {
+      conditions.push(like(captures.name, `%${input.search.trim()}%`));
+    }
     const where = and(...conditions);
     const [data, cnt] = await Promise.all([
       db.select().from(captures).where(where).orderBy(desc(captures.createdAt)).limit(pageSize).offset(offset),

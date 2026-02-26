@@ -2,13 +2,13 @@
  * useSidebarCounts — Fetches badge counts for sidebar sections via tRPC.
  *
  * Refetch intervals:
- *  - If runningExecutions > 0: every 10s (active monitoring)
+ *  - If runningExecutions > 0 or redProbes > 0: every 10s (active monitoring)
  *  - Otherwise: every 60s (idle polling)
  */
 import { trpc } from "@/lib/trpc";
 
 /** Section label → count field mapping */
-export type SidebarCountKey = "runningExecutions" | "pendingInvites" | "activeDriveSessions";
+export type SidebarCountKey = "runningExecutions" | "pendingInvites" | "activeDriveSessions" | "redProbes";
 
 const SECTION_COUNT_MAP: Record<string, SidebarCountKey> = {
   "Exécution": "runningExecutions",
@@ -24,7 +24,7 @@ export function useSidebarCounts() {
   const { data, isLoading } = trpc.ui.sidebarCounts.useQuery(undefined, {
     refetchInterval: (query) => {
       const counts = query.state.data;
-      if (counts && counts.runningExecutions > 0) {
+      if (counts && (counts.runningExecutions > 0 || counts.redProbes > 0)) {
         return ACTIVE_INTERVAL;
       }
       return IDLE_INTERVAL;
@@ -36,16 +36,23 @@ export function useSidebarCounts() {
     runningExecutions: 0,
     pendingInvites: 0,
     activeDriveSessions: 0,
+    redProbes: 0,
   };
 
   /**
    * Get the badge count for a sidebar section label.
+   * For "Exécution" section: combines running executions + red probes.
    * Returns 0 if no mapping exists or count is 0.
    */
   function getCount(sectionLabel: string): number {
     const key = SECTION_COUNT_MAP[sectionLabel];
     if (!key) return 0;
-    return counts[key] ?? 0;
+    const base = counts[key] ?? 0;
+    // For Exécution section, also include red probes
+    if (sectionLabel === "Exécution") {
+      return base + (counts.redProbes ?? 0);
+    }
+    return base;
   }
 
   /**
