@@ -48,3 +48,10 @@
 - [x] Routeurs tRPC pour tous les modules métier
 - [x] Migration frontend localStorage vers tRPC/DB
 - [x] Tests Vitest pour les procédures critiques (32 tests, 3 fichiers, 100% pass)
+- [x] DOC-BACKEND-UPDATE: Mettre à jour la documentation pour les opérations backend et les corrections
+- [x] Documentation du schéma de base de données (42 tables Drizzle) → docs/BACKEND_ARCHITECTURE.md §3
+- [x] Documentation des routeurs tRPC (11 modules, 141 endpoints) → docs/BACKEND_ARCHITECTURE.md §4
+- [x] Documentation des helpers DB (server/db/) → docs/BACKEND_ARCHITECTURE.md §5
+- [x] Documentation de la migration frontend (localStorage → tRPC) → docs/BACKEND_ARCHITECTURE.md §6
+- [x] Documentation des corrections et bugfixes → CHANGELOG.md
+- [x] Changelog / historique des versions → CHANGELOG.md
