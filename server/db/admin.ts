@@ -531,3 +531,23 @@ export async function resetUserPassword(id: number, newPassword: string) {
   await db.update(users).set({ passwordHash: hash } as any).where(eq(users.id, id));
   return { success: true, message: "Mot de passe réinitialisé avec succès" };
 }
+
+export async function deleteUser(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Verify user exists
+  const user = await getUserById(id);
+  if (!user) throw new Error("Utilisateur introuvable");
+
+  // Delete related records first (cascade)
+  // userId in userRoles and projectMemberships is varchar, so convert id to string
+  const userIdStr = String(id);
+  await db.delete(userRoles).where(eq(userRoles.userId, userIdStr));
+  await db.delete(projectMemberships).where(eq(projectMemberships.userId, userIdStr));
+
+  // Delete the user
+  await db.delete(users).where(eq(users.id, id));
+
+  return { success: true, message: `Utilisateur ${user.email || user.name} supprimé` };
+}

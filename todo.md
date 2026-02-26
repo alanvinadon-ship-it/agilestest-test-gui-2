@@ -127,3 +127,4 @@
 - [x] Bug: Liens d'invitation invalides — migré vers tRPC backend (validateInviteToken + acceptInvite publics, DB au lieu de localStorage)
 - [x] Bug: AdminUsersPage migrée vers tRPC/DB — CRUD complet (listUsers, createUser, updateUser, disableUser, enableUser, resetPassword) + invitations via DB
 - [x] Bug: Les invités apparaissent maintenant dans la liste Utilisateurs — invites PENDING fusionnées comme utilisateurs virtuels dans listUsers (22 utilisateurs affichés)
+- [x] Feature: Bouton Supprimer utilisateur dans les actions de chaque ligne (AdminUsersPage) — backend deleteUser + frontend bouton Trash2 + modale confirmation + cascade (memberships, invites, auditLogs)

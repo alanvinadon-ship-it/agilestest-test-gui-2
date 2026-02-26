@@ -8,7 +8,7 @@ import { localNotifSettings } from '../notifications';
 import {
   Users, Plus, Search, Edit2, UserX, UserCheck,
   KeyRound, Eye, Shield, X, ChevronLeft, ChevronRight,
-  Mail, MailX, MailCheck, RefreshCw, Send,
+  Mail, MailX, MailCheck, RefreshCw, Send, Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../auth/AuthContext';
@@ -68,6 +68,7 @@ export default function AdminUsersPage() {
   const [showInvitesList, setShowInvitesList] = useState(false);
   const [resetPasswordUser, setResetPasswordUser] = useState<any | null>(null);
   const [newPassword, setNewPassword] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState<any | null>(null);
 
   // tRPC queries
   const utils = trpc.useUtils();
@@ -100,6 +101,10 @@ export default function AdminUsersPage() {
     onSuccess: () => { toast.success('Mot de passe réinitialisé'); setResetPasswordUser(null); setNewPassword(''); },
     onError: (e) => toast.error(e.message),
   });
+  const deleteMutation = trpc.admin.deleteUser.useMutation({
+    onSuccess: () => { utils.admin.listUsers.invalidate(); toast.success('Utilisateur supprimé'); setConfirmDelete(null); },
+    onError: (e) => toast.error(e.message),
+  });
 
   const handleDisable = useCallback((u: any) => {
     disableMutation.mutate({ id: u.id });
@@ -117,6 +122,10 @@ export default function AdminUsersPage() {
     }
     resetPasswordMutation.mutate({ id: resetPasswordUser.id, newPassword });
   }, [resetPasswordUser, newPassword, resetPasswordMutation]);
+
+  const handleDelete = useCallback((u: any) => {
+    deleteMutation.mutate({ id: u.id });
+  }, [deleteMutation]);
 
   return (
     <div className="space-y-6">
@@ -293,6 +302,13 @@ export default function AdminUsersPage() {
                             <UserCheck className="w-3.5 h-3.5" />
                           </button>
                         )}
+                        <button
+                          onClick={() => setConfirmDelete(u)}
+                          className="p-1.5 text-muted-foreground hover:text-red-500 transition-colors"
+                          title="Supprimer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -390,6 +406,36 @@ export default function AdminUsersPage() {
                 className="px-4 py-2 bg-red-500/10 text-red-400 border border-red-500/20 rounded-md text-sm font-medium hover:bg-red-500/20 transition-colors"
               >
                 Désactiver
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-card border border-border rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-heading font-semibold text-foreground mb-2">Supprimer l'utilisateur</h3>
+            <p className="text-sm text-muted-foreground mb-2">
+              Êtes-vous sûr de vouloir supprimer définitivement <strong className="text-foreground">{confirmDelete.full_name}</strong> ?
+            </p>
+            <p className="text-xs text-red-400 mb-4">
+              Cette action est irréversible. Toutes les données associées (appartenances projets, invitations, journaux d'audit) seront également supprimées.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => handleDelete(confirmDelete)}
+                disabled={deleteMutation.isPending}
+                className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors"
+              >
+                {deleteMutation.isPending ? 'Suppression...' : 'Supprimer définitivement'}
               </button>
             </div>
           </div>

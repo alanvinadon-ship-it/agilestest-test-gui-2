@@ -321,4 +321,9 @@ export const adminRouter = router({
       newPassword: z.string().min(6, "Le mot de passe doit contenir au moins 6 caractères"),
     }))
     .mutation(({ input }) => adminDb.resetUserPassword(input.id, input.newPassword)),
+
+  deleteUser: orgAdminProcedure
+    .use(auditMutation("DELETE", "user"))
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => adminDb.deleteUser(input.id)),
 });
