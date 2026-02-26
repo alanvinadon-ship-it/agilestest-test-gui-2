@@ -53,6 +53,11 @@ export default function LoginPage() {
     try {
       // 1. Essayer l'API distante d'abord
       const response = await adminApi.login({ email, password });
+      // Valider que la réponse contient bien un token et un user
+      // (Vite renvoie 200 + HTML pour les routes inconnues, ce qui ne lève pas d'erreur)
+      if (!response?.access_token || !response?.user) {
+        throw new Error('Invalid API response');
+      }
       login(response.access_token, response.user);
     } catch {
       // 2. Fallback : vérifier les comptes locaux

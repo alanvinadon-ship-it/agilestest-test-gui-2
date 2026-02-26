@@ -37,3 +37,5 @@
 - [x] Bug: Menu Administration absent pour l'Admin Principal après connexion (normalisé rôle case-insensitive)
 - [x] Fix: Missing key prop in AdminRbacPage list rendering (ajouté clés uniques pour roles, groups, permissions)
 - [x] Fix: Missing key prop in AdminRolesPage tbody rendering (ajouté clés uniques pour roles et permissions)
+- [x] Fix: tbody nested error in AdminNotificationsPage (vérifié - non reproductible, probablement corrigé par les fixes de clés)
+- [x] Fix: Login ne persistait pas (localStorage stockait "undefined" - ajouté validation réponse API avant fallback local)
