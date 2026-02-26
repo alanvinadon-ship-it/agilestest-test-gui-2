@@ -5,7 +5,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { trpc } from '@/lib/trpc';
 import {
-  Users, Plus, Search, Edit2, UserX,
+  Users, Plus, Search, Edit2, UserX, UserPlus,
   KeyRound, Eye, Shield, X, ChevronLeft, ChevronRight,
   Mail, MailX, MailCheck, RefreshCw, Send, Trash2, Loader2,
 } from 'lucide-react';
@@ -36,6 +36,15 @@ const GLOBAL_ROLE_COLORS: Record<string, string> = {
   VIEWER: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  active: 'Actif',
+  inactive: 'Inactif',
+};
+const STATUS_COLORS: Record<string, string> = {
+  active: 'text-emerald-400',
+  inactive: 'text-muted-foreground',
+};
+
 const INVITE_STATUS_LABELS: Record<string, string> = {
   PENDING: 'En attente',
   ACCEPTED: 'Acceptée',
@@ -58,17 +67,20 @@ export default function AdminUsersPage() {
   // State
   const [search, setSearch] = useState('');
   const [filterRole, setFilterRole] = useState<string>('');
+  const [filterStatus, setFilterStatus] = useState<string>('');
   const [page, setPage] = useState(1);
   const pageSize = 15;
 
   // Modals
   const [editUser, setEditUser] = useState<any | null>(null);
+  const [viewUser, setViewUser] = useState<any | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<any | null>(null);
+  const [resetPasswordUser, setResetPasswordUser] = useState<any | null>(null);
+  const [showCreateUser, setShowCreateUser] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [showInvitesList, setShowInvitesList] = useState(false);
 
   // ── tRPC queries ──────────────────────────────────────────────────────
-  const [stableSearch] = useState(() => '');
   const searchInput = useMemo(() => search, [search]);
 
   const usersQuery = trpc.admin.listUsers.useQuery({
@@ -100,21 +112,33 @@ export default function AdminUsersPage() {
   const usersData = useMemo(() => {
     if (!usersQuery.data) return { users: [], pagination: { page: 1, pageSize: 15, total: 0, totalPages: 1 } };
     return {
-      users: usersQuery.data.data.map((u: any) => ({
-        id: u.id,
-        name: u.name || 'Sans nom',
-        email: u.email || '',
-        role: DB_ROLE_TO_FRONTEND[u.role] || 'VIEWER',
-        isOwner: u.isOwner || false,
-        createdAt: u.createdAt,
-        lastSignedIn: u.lastSignedIn,
-        openId: u.openId,
-      })),
+      users: usersQuery.data.data.map((u: any) => {
+        // Determine status: user is active if they have logged in at least once
+        const status = u.lastSignedIn ? 'active' : 'inactive';
+        return {
+          id: u.id,
+          name: u.name || 'Sans nom',
+          email: u.email || '',
+          role: DB_ROLE_TO_FRONTEND[u.role] || 'VIEWER',
+          isOwner: u.isOwner || false,
+          status,
+          projectsCount: u.projectsCount ?? 0,
+          createdAt: u.createdAt,
+          lastSignedIn: u.lastSignedIn,
+          openId: u.openId,
+        };
+      }),
       pagination: usersQuery.data.pagination,
     };
   }, [usersQuery.data]);
 
-  const { users: usersList, pagination } = usersData;
+  // Apply status filter client-side (since backend doesn't have status column)
+  const filteredUsers = useMemo(() => {
+    if (!filterStatus) return usersData.users;
+    return usersData.users.filter((u: any) => u.status === filterStatus);
+  }, [usersData.users, filterStatus]);
+
+  const { pagination } = usersData;
 
   return (
     <div className="space-y-6">
@@ -144,6 +168,13 @@ export default function AdminUsersPage() {
             <Send className="w-4 h-4" />
             Inviter
           </button>
+          <button
+            onClick={() => setShowCreateUser(true)}
+            className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Créer utilisateur
+          </button>
         </div>
       </div>
 
@@ -168,6 +199,15 @@ export default function AdminUsersPage() {
           <option value="admin">Administrateur</option>
           <option value="user">Utilisateur</option>
         </select>
+        <select
+          value={filterStatus}
+          onChange={e => { setFilterStatus(e.target.value); setPage(1); }}
+          className="px-3 py-2 bg-card border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+        >
+          <option value="">Tous les statuts</option>
+          <option value="active">Actif</option>
+          <option value="inactive">Inactif</option>
+        </select>
       </div>
 
       {/* Table */}
@@ -179,27 +219,28 @@ export default function AdminUsersPage() {
                 <th className="text-left px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Nom</th>
                 <th className="text-left px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Email</th>
                 <th className="text-left px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Rôle</th>
-                <th className="text-left px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Dernière connexion</th>
-                <th className="text-left px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Inscrit le</th>
+                <th className="text-left px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Statut</th>
+                <th className="text-center px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Projets</th>
+                <th className="text-left px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Dernière activité</th>
                 <th className="text-right px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody>
               {usersQuery.isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
                     <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
                     Chargement...
                   </td>
                 </tr>
-              ) : usersList.length === 0 ? (
+              ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
                     Aucun utilisateur trouvé.
                   </td>
                 </tr>
               ) : (
-                usersList.map((u: any) => (
+                filteredUsers.map((u: any) => (
                   <tr key={u.id} className="border-b border-border last:border-0 hover:bg-secondary/20 transition-colors">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
@@ -225,11 +266,19 @@ export default function AdminUsersPage() {
                         {GLOBAL_ROLE_LABELS[u.role] || u.role}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs">
-                      {u.lastSignedIn ? new Date(u.lastSignedIn).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                    <td className="px-4 py-3">
+                      <span className={`flex items-center gap-1.5 text-xs font-medium ${STATUS_COLORS[u.status] || STATUS_COLORS.inactive}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${u.status === 'active' ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
+                        {STATUS_LABELS[u.status] || u.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center text-muted-foreground text-xs">
+                      {u.projectsCount}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground text-xs">
-                      {u.createdAt ? new Date(u.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                      {u.lastSignedIn
+                        ? new Date(u.lastSignedIn).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
+                        : new Date(u.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
@@ -239,6 +288,20 @@ export default function AdminUsersPage() {
                           title="Modifier"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setViewUser(u)}
+                          className="p-1.5 text-muted-foreground hover:text-primary transition-colors"
+                          title="Voir le profil"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setResetPasswordUser(u)}
+                          className="p-1.5 text-muted-foreground hover:text-amber-400 transition-colors"
+                          title="Réinitialiser le mot de passe"
+                        >
+                          <KeyRound className="w-3.5 h-3.5" />
                         </button>
                         {!u.isOwner && (
                           <button
@@ -301,6 +364,16 @@ export default function AdminUsersPage() {
         />
       )}
 
+      {/* View User Modal */}
+      {viewUser && (
+        <ViewUserModal user={viewUser} onClose={() => setViewUser(null)} />
+      )}
+
+      {/* Reset Password Modal */}
+      {resetPasswordUser && (
+        <ResetPasswordModal user={resetPasswordUser} onClose={() => setResetPasswordUser(null)} />
+      )}
+
       {/* Confirm Delete */}
       {confirmDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -333,6 +406,17 @@ export default function AdminUsersPage() {
         </div>
       )}
 
+      {/* Create User Modal */}
+      {showCreateUser && (
+        <CreateUserModal
+          onClose={() => setShowCreateUser(false)}
+          onCreated={() => {
+            setShowCreateUser(false);
+            utils.admin.listUsers.invalidate();
+          }}
+        />
+      )}
+
       {/* Invite Modal */}
       {showInvite && (
         <InviteModal
@@ -347,6 +431,211 @@ export default function AdminUsersPage() {
           onClose={() => setShowInvitesList(false)}
         />
       )}
+    </div>
+  );
+}
+
+// ─── View User Modal ──────────────────────────────────────────────────
+
+function ViewUserModal({ user, onClose }: { user: any; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-lg w-full max-w-lg">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <h3 className="text-lg font-heading font-semibold text-foreground flex items-center gap-2">
+            <Eye className="w-5 h-5 text-primary" />
+            Profil utilisateur
+          </h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-lg bg-primary/10 flex items-center justify-center">
+              <span className="text-lg font-bold text-primary">
+                {user.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
+              </span>
+            </div>
+            <div>
+              <h4 className="text-lg font-semibold text-foreground">{user.name}</h4>
+              <p className="text-sm text-muted-foreground font-mono">{user.email}</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-secondary/30 rounded-lg p-3">
+              <p className="text-xs text-muted-foreground mb-1">Rôle</p>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${GLOBAL_ROLE_COLORS[user.role] || GLOBAL_ROLE_COLORS.VIEWER}`}>
+                <Shield className="w-3 h-3 mr-1" />
+                {GLOBAL_ROLE_LABELS[user.role] || user.role}
+              </span>
+            </div>
+            <div className="bg-secondary/30 rounded-lg p-3">
+              <p className="text-xs text-muted-foreground mb-1">Statut</p>
+              <span className={`flex items-center gap-1.5 text-xs font-medium ${STATUS_COLORS[user.status] || STATUS_COLORS.inactive}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${user.status === 'active' ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
+                {STATUS_LABELS[user.status] || user.status}
+              </span>
+            </div>
+            <div className="bg-secondary/30 rounded-lg p-3">
+              <p className="text-xs text-muted-foreground mb-1">Projets</p>
+              <p className="text-sm font-medium text-foreground">{user.projectsCount}</p>
+            </div>
+            <div className="bg-secondary/30 rounded-lg p-3">
+              <p className="text-xs text-muted-foreground mb-1">Dernière connexion</p>
+              <p className="text-sm font-medium text-foreground">
+                {user.lastSignedIn
+                  ? new Date(user.lastSignedIn).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
+                  : 'Jamais'}
+              </p>
+            </div>
+            <div className="bg-secondary/30 rounded-lg p-3 col-span-2">
+              <p className="text-xs text-muted-foreground mb-1">Inscrit le</p>
+              <p className="text-sm font-medium text-foreground">
+                {user.createdAt
+                  ? new Date(user.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
+                  : '—'}
+              </p>
+            </div>
+          </div>
+          {user.isOwner && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-md text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              <Shield className="w-3.5 h-3.5" />
+              Cet utilisateur est le propriétaire de l'application.
+            </div>
+          )}
+        </div>
+        <div className="flex justify-end px-6 py-4 border-t border-border">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground">Fermer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Reset Password Modal ─────────────────────────────────────────────
+
+function ResetPasswordModal({ user, onClose }: { user: any; onClose: () => void }) {
+  const handleReset = () => {
+    // TODO: Implement actual password reset via tRPC when endpoint is available
+    toast.info(`Fonctionnalité à venir — la réinitialisation du mot de passe pour ${user.name} sera disponible prochainement.`);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-lg p-6 w-full max-w-md">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
+            <KeyRound className="w-5 h-5 text-amber-400" />
+          </div>
+          <div>
+            <h3 className="text-lg font-heading font-semibold text-foreground">Réinitialiser le mot de passe</h3>
+            <p className="text-xs text-muted-foreground">{user.name} — {user.email}</p>
+          </div>
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">
+          Un email de réinitialisation sera envoyé à <strong className="text-foreground">{user.email}</strong>.
+          L'utilisateur devra définir un nouveau mot de passe via le lien reçu.
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Annuler
+          </button>
+          <button
+            onClick={handleReset}
+            className="px-4 py-2 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-md text-sm font-medium hover:bg-amber-500/20 transition-colors"
+          >
+            Envoyer le lien
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Create User Modal ────────────────────────────────────────────────
+
+function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState<string>('VIEWER');
+
+  const createUserMutation = trpc.admin.createInvite.useMutation({
+    onSuccess: () => {
+      toast.success(`Utilisateur ${name} créé avec succès`);
+      onCreated();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const handleCreate = () => {
+    if (!name.trim()) { toast.error('Le nom est requis'); return; }
+    if (!email.trim()) { toast.error('L\'email est requis'); return; }
+    createUserMutation.mutate({ email, role: role as 'ADMIN' | 'MANAGER' | 'VIEWER' });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-lg w-full max-w-lg">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <h3 className="text-lg font-heading font-semibold text-foreground flex items-center gap-2">
+            <UserPlus className="w-5 h-5 text-primary" />
+            Créer un utilisateur
+          </h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Nom complet</label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Jean Dupont"
+              className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="jean.dupont@exemple.com"
+              className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Rôle global</label>
+            <select
+              value={role}
+              onChange={e => setRole(e.target.value)}
+              className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="VIEWER">Lecteur</option>
+              <option value="MANAGER">Manager</option>
+              <option value="ADMIN">Administrateur</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-2 rounded-md text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20">
+            <Mail className="w-3.5 h-3.5" />
+            Une invitation sera envoyée à l'adresse email indiquée.
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 px-6 py-4 border-t border-border">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground">Annuler</button>
+          <button
+            onClick={handleCreate}
+            disabled={createUserMutation.isPending}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+          >
+            {createUserMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            Créer
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
