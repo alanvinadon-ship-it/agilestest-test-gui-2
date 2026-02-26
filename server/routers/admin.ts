@@ -1,26 +1,44 @@
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 import { router } from "../_core/trpc";
 import {
   viewerProcedure, qaManagerProcedure, orgAdminProcedure,
   auditMutation,
 } from "../rbac/middleware";
 import * as adminDb from "../db/admin";
-import { paginationInput, paginateInMemory } from "../pagination";
+import { paginationInput, paginate, paginateInMemory, dateRangeFilter } from "../pagination";
+import { getDb } from "../db";
+import { auditLogs, invites } from "../../drizzle/schema";
+
+// ─── Allowed sort fields ─────────────────────────────────────────────────
+const AUDIT_SORT_FIELDS = ["timestamp", "action", "entityType", "actorName"];
+const INVITE_SORT_FIELDS = ["createdAt", "email", "status"];
 
 export const adminRouter = router({
   // ══════════════════════════════════════════════════
-  //  Invites — paginated, ORG_ADMIN only
+  //  Invites — SQL-native pagination, ORG_ADMIN only
   // ══════════════════════════════════════════════════
   listInvites: orgAdminProcedure
-    .input(z.object({ status: z.enum(["PENDING", "ACCEPTED", "REVOKED", "EXPIRED"]).optional() }).merge(paginationInput))
+    .input(z.object({
+      status: z.enum(["PENDING", "ACCEPTED", "REVOKED", "EXPIRED"]).optional(),
+    }).merge(paginationInput))
     .query(async ({ input }) => {
-      const all = await adminDb.listInvites(input.status);
-      return paginateInMemory(all, input, (a: any, b: any) => {
-        const field = input.sortBy || "createdAt";
-        const aVal = a[field], bVal = b[field];
-        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-        return input.sortDir === "asc" ? cmp : -cmp;
-      });
+      const db = await getDb();
+      if (!db) return { items: [], total: 0, page: input.page, pageSize: input.pageSize };
+
+      const where: any[] = [];
+      if (input.status) where.push(eq(invites.status, input.status));
+
+      return paginate(
+        db.select().from(invites).$dynamic(),
+        invites,
+        input,
+        {
+          allowedSortFields: INVITE_SORT_FIELDS,
+          defaultSort: { by: "createdAt", dir: "desc" },
+          where: where.length > 0 ? where : undefined,
+        },
+      );
     }),
 
   getInviteByToken: viewerProcedure
@@ -172,28 +190,36 @@ export const adminRouter = router({
     .mutation(({ input }) => adminDb.removeRoleFromUser(input.userId, input.roleId)),
 
   // ══════════════════════════════════════════════════
-  //  Audit Logs — paginated (high volume), QA_MANAGER+ can read
+  //  Audit Logs — SQL-native pagination + filters (high volume)
   // ══════════════════════════════════════════════════
   listAuditLogs: qaManagerProcedure
     .input(z.object({
       actorId: z.string().optional(),
       entityType: z.string().optional(),
       action: z.string().optional(),
+      dateFrom: z.string().optional(),
+      dateTo: z.string().optional(),
     }).merge(paginationInput))
     .query(async ({ input }) => {
-      // Pass limit from pagination to DB helper for efficiency
-      const all = await adminDb.listAuditLogs({
-        actorId: input.actorId,
-        entityType: input.entityType,
-        action: input.action,
-        limit: 1000, // fetch up to 1000 for in-memory pagination
-      });
-      return paginateInMemory(all, input, (a: any, b: any) => {
-        const field = input.sortBy || "createdAt";
-        const aVal = a[field], bVal = b[field];
-        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-        return input.sortDir === "asc" ? cmp : -cmp;
-      });
+      const db = await getDb();
+      if (!db) return { items: [], total: 0, page: input.page, pageSize: input.pageSize };
+
+      const where: any[] = [];
+      if (input.actorId) where.push(eq(auditLogs.actorId, input.actorId));
+      if (input.entityType) where.push(eq(auditLogs.entityType, input.entityType));
+      if (input.action) where.push(eq(auditLogs.action, input.action));
+      where.push(...dateRangeFilter(auditLogs.timestamp, input.dateFrom, input.dateTo));
+
+      return paginate(
+        db.select().from(auditLogs).$dynamic(),
+        auditLogs,
+        input,
+        {
+          allowedSortFields: AUDIT_SORT_FIELDS,
+          defaultSort: { by: "timestamp", dir: "desc" },
+          where: where.length > 0 ? where : undefined,
+        },
+      );
     }),
 
   createAuditLog: orgAdminProcedure

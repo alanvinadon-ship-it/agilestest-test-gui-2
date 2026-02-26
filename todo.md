@@ -108,3 +108,19 @@
 - [x] Tous les 101 tests passent (6 fichiers, 0 échec)
 - [x] Documentation docs/PAGINATION.md (standard, contrat, helpers, endpoints, index, tests)
 - [x] DOCS-SEARCH: Bouton de recherche globale dans la documentation (DocSearchDialog + Ctrl+K / ⌘K)
+- [x] PAGINATION-UI-SQL-FILTERS: Pagination prod-grade (UI + SQL natif + filtres serveur)
+- [x] Composant <Pagination /> réutilisable (prev/next + numéros + ellipsis + sélecteur taille)
+- [x] Backend: migré paginateInMemory → paginate() SQL natif (executions, captures, audit_logs, invites)
+- [x] Backend: standard input page/pageSize (+ legacy limit/offset supporté)
+- [x] Backend: standard output { items, total, page, pageSize }
+- [x] Filtres avancés executions: status, dateFrom, dateTo
+- [x] Filtres avancés captures: status, dateFrom, dateTo
+- [x] Filtres avancés audit_logs: action, entityType, actorId, dateFrom, dateTo
+- [x] Whitelist sortBy (colonnes indexées uniquement, anti SQL-injection)
+- [x] Intégration <Pagination /> sur page Exécutions
+- [x] Intégration <Pagination /> sur page Captures
+- [x] Intégration <Pagination /> sur page Audit Logs
+- [x] Hooks tRPC mis à jour: page/pageSize + filters
+- [x] Tests vitest: 28 tests pagination (schema, paginateInMemory, intégration routeurs)
+- [x] Documentation docs/PAGINATION.md v2 (standard, contrat, helpers, endpoints, UI, index, tests)
+- [x] 0 erreur TypeScript, 105 tests passent (6 fichiers)

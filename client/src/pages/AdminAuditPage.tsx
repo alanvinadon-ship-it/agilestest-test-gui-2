@@ -3,7 +3,7 @@
  * Journal d'audit durci : filtres enrichis (action, entity, date range, acteur),
  * export CSV/JSON, statistiques, affichage amélioré.
  */
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   ScrollText, Search, Clock, User, Download, FileJson, FileSpreadsheet,
   ChevronDown, ChevronUp, BarChart3, Filter, X,
@@ -11,6 +11,9 @@ import {
 import { adminAudit } from '../admin/adminStore';
 import type { AuditEntry, AuditAction, AuditEntityType } from '../admin/types';
 import { toast } from 'sonner';
+import Pagination from '../components/Pagination';
+import { useQuery } from '@tanstack/react-query';
+import { trpcVanilla } from '@/lib/trpc';
 
 // ─── Labels & Colors ──────────────────────────────────────────────────
 
@@ -108,17 +111,62 @@ export default function AdminAuditPage() {
   const [filterActor, setFilterActor] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
-  const [limit, setLimit] = useState(50);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
   const [showStats, setShowStats] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
-  // Load all entries then filter client-side
-  const allEntries = useMemo(() => {
+  // Reset page when filters change
+  useEffect(() => { setPage(1); }, [filterEntity, filterAction, filterActor, filterDateFrom, filterDateTo]);
+
+  // Server-side paginated query
+  const { data: serverData, isLoading: serverLoading } = useQuery({
+    queryKey: ['audit-logs', filterEntity, filterAction, filterActor, filterDateFrom, filterDateTo, page, pageSize],
+    queryFn: async () => {
+      try {
+        const result = await trpcVanilla.admin.listAuditLogs.query({
+          page,
+          pageSize,
+          ...(filterAction ? { action: filterAction } : {}),
+          ...(filterEntity ? { entityType: filterEntity } : {}),
+          ...(filterActor ? { actorId: filterActor } : {}),
+          ...(filterDateFrom ? { dateFrom: filterDateFrom } : {}),
+          ...(filterDateTo ? { dateTo: filterDateTo } : {}),
+        });
+        return result;
+      } catch {
+        // Fallback to localStorage if tRPC fails (e.g. not admin)
+        return null;
+      }
+    },
+  });
+
+  // Fallback: local store entries
+  const localEntries = useMemo(() => {
     return adminAudit.list({ limit: 1000 });
   }, []);
 
-  const entries = useMemo(() => {
-    let result = allEntries;
+  // Use server data if available, otherwise fallback to local
+  const useServer = serverData != null;
+  const entries: AuditEntry[] = useMemo(() => {
+    if (useServer) {
+      // Map server rows to AuditEntry shape
+      return ((serverData as any)?.items ?? []).map((row: any) => ({
+        id: row.uid ?? row.id,
+        timestamp: row.timestamp ? new Date(row.timestamp).toISOString() : '',
+        actor_id: row.actorId ?? row.actor_id ?? '',
+        actor_name: row.actorName ?? row.actor_name ?? '',
+        actor_email: row.actorEmail ?? row.actor_email ?? '',
+        action: row.action ?? '',
+        entity_type: row.entityType ?? row.entity_type ?? '',
+        entity_id: row.entityId ?? row.entity_id ?? '',
+        target_label: row.targetLabel ?? row.target_label ?? '',
+        metadata: row.metadata ?? {},
+        trace_id: row.traceId ?? row.trace_id ?? '',
+      })) as AuditEntry[];
+    }
+    // Fallback: local filtering
+    let result = localEntries;
     if (filterEntity) result = result.filter(e => e.entity_type === filterEntity);
     if (filterAction) result = result.filter(e => e.action === filterAction);
     if (filterActor) {
@@ -135,10 +183,13 @@ export default function AdminAuditPage() {
       const to = new Date(filterDateTo + 'T23:59:59').getTime();
       result = result.filter(e => new Date(e.timestamp).getTime() <= to);
     }
-    return result.slice(0, limit);
-  }, [allEntries, filterEntity, filterAction, filterActor, filterDateFrom, filterDateTo, limit]);
+    return result.slice((page - 1) * pageSize, page * pageSize);
+  }, [useServer, serverData, localEntries, filterEntity, filterAction, filterActor, filterDateFrom, filterDateTo, page, pageSize]);
 
-  // Stats
+  const total = useServer ? ((serverData as any)?.total ?? entries.length) : localEntries.length;
+
+  // Stats (from local entries for now — always available)
+  const allEntries = localEntries;
   const stats = useMemo(() => {
     const byAction: Record<string, number> = {};
     const byEntity: Record<string, number> = {};
@@ -149,8 +200,8 @@ export default function AdminAuditPage() {
       byActor[e.actor_name] = (byActor[e.actor_name] || 0) + 1;
     }
     const topActors = Object.entries(byActor).sort((a, b) => b[1] - a[1]).slice(0, 5);
-    return { total: allEntries.length, byAction, byEntity, topActors };
-  }, [allEntries]);
+    return { total: useServer ? total : allEntries.length, byAction, byEntity, topActors };
+  }, [allEntries, useServer, total]);
 
   const hasActiveFilters = filterEntity || filterAction || filterActor || filterDateFrom || filterDateTo;
 
@@ -289,15 +340,14 @@ export default function AdminAuditPage() {
             </button>
           )}
           <select
-            value={limit}
-            onChange={e => setLimit(Number(e.target.value))}
+            value={pageSize}
+            onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
             className="px-3 py-2 bg-card border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
           >
             <option value={25}>25 entrées</option>
             <option value={50}>50 entrées</option>
             <option value={100}>100 entrées</option>
             <option value={200}>200 entrées</option>
-            <option value={500}>500 entrées</option>
           </select>
         </div>
 
@@ -368,15 +418,16 @@ export default function AdminAuditPage() {
         )}
       </div>
 
-      {entries.length >= limit && (
-        <div className="text-center">
-          <button
-            onClick={() => setLimit(l => l + 50)}
-            className="text-sm text-primary hover:underline"
-          >
-            Charger plus...
-          </button>
-        </div>
+      {/* Pagination */}
+      {total > 0 && (
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          pageSizeOptions={[25, 50, 100, 200]}
+        />
       )}
     </div>
   );

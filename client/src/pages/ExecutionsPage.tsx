@@ -3,7 +3,7 @@
  * Sélection automatique du script ACTIVE, bundle, env, runner.
  * Bloque le lancement si aucun script ACTIVE.
  */
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
 import { usePermission } from '../hooks/usePermission';
@@ -23,6 +23,8 @@ import {
 } from 'lucide-react';
 import { localExecutions, localCapturePolicies } from '../api/localStoreTrpc';
 import { toast } from 'sonner';
+import Pagination from '../components/Pagination';
+import { trpcVanilla } from '@/lib/trpc';
 import { resolveCapturePolicy, CaptureModeBadge } from '../capture';
 import type { CapturePolicy, CaptureMode } from '../capture/types';
 import { DEFAULT_CAPTURE_POLICY, DEFAULT_RUNNER_TCPDUMP, DEFAULT_PROBE_SPAN_TAP } from '../capture/types';
@@ -386,18 +388,32 @@ export default function ExecutionsPage() {
   const [showLaunch, setShowLaunch] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
+  // Reset page when filters change
+  useEffect(() => { setPage(1); }, [statusFilter]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['executions', currentProject?.id, statusFilter],
-    queryFn: () => repositoryApi.listExecutions(currentProject!.id, {
-      limit: 50,
-      ...(statusFilter ? { status: statusFilter } : {}),
-    }),
+    queryKey: ['executions', currentProject?.id, statusFilter, page, pageSize],
+    queryFn: async () => {
+      const result = await trpcVanilla.executions.list.query({
+        projectId: currentProject!.id,
+        page,
+        pageSize,
+        ...(statusFilter ? { status: statusFilter as any } : {}),
+      });
+      return result;
+    },
     enabled: !!currentProject,
     refetchInterval: 10000,
   });
 
-  const executions = (data?.data || []) as Execution[];
+  const executions = useMemo(() => {
+    const items = (data as any)?.items ?? (data as any)?.data ?? [];
+    return items as Execution[];
+  }, [data]);
+  const total = (data as any)?.total ?? executions.length;
 
   const filteredExecutions = useMemo(() => {
     if (!search.trim()) return executions;
@@ -551,6 +567,17 @@ export default function ExecutionsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* Pagination */}
+      {!isLoading && total > 0 && (
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       )}
 
       <RunCenterModal isOpen={showLaunch} onClose={() => setShowLaunch(false)} projectId={currentProject.id} />

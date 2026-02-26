@@ -1,9 +1,11 @@
 /**
  * Pagination helpers — standardised offset pagination for all list endpoints.
  *
- * Standard chosen: **Offset pagination** (Option A)
- *   input  → { limit (default 25, max 100), offset (default 0), sortBy?, sortDir? }
- *   output → { items: T[], total: number }
+ * Standard: **Page-based offset pagination**
+ *   input  → { page (default 1), pageSize (default 25, max 100), sortBy?, sortDir?, filters? }
+ *   output → { items: T[], total: number, page: number, pageSize: number }
+ *
+ * Also supports legacy limit/offset for backward compat.
  *
  * Usage in a tRPC procedure:
  *   .input(paginationInput.extend({ projectId: z.string() }))
@@ -23,11 +25,19 @@ import { getDb } from "./db";
 
 // ─── Zod schemas ────────────────────────────────────────────────────────────
 
-/** Base pagination input — merge into your procedure input with .extend() */
+/** Base pagination input — merge into your procedure input with .extend() or .merge() */
 export const paginationInput = z.object({
-  limit: z.number().int().min(1).max(100).default(25),
-  offset: z.number().int().min(0).default(0),
+  /** Page number (1-based). Takes priority over offset if both provided. */
+  page: z.number().int().min(1).default(1),
+  /** Items per page */
+  pageSize: z.number().int().min(1).max(100).default(25),
+  /** Legacy: limit (alias for pageSize) */
+  limit: z.number().int().min(1).max(100).optional(),
+  /** Legacy: offset (computed from page if not provided) */
+  offset: z.number().int().min(0).optional(),
+  /** Sort field — must be in allowedSortFields whitelist */
   sortBy: z.string().optional(),
+  /** Sort direction */
   sortDir: z.enum(["asc", "desc"]).default("desc"),
 });
 
@@ -37,6 +47,36 @@ export type PaginationInput = z.infer<typeof paginationInput>;
 export interface PaginatedResult<T> {
   items: T[];
   total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** Resolve effective limit/offset from input (page/pageSize take priority) */
+function resolveOffsets(input: PaginationInput): { limit: number; offset: number; page: number; pageSize: number } {
+  const pageSize = input.limit ?? input.pageSize;
+  const page = input.page;
+  const offset = input.offset ?? (page - 1) * pageSize;
+  return { limit: pageSize, offset, page, pageSize };
+}
+
+// ─── Date filter helper ─────────────────────────────────────────────────────
+
+/** Build date range WHERE clauses for a timestamp column */
+export function dateRangeFilter(
+  column: any,
+  dateFrom?: string | Date | null,
+  dateTo?: string | Date | null,
+): SQL[] {
+  const clauses: SQL[] = [];
+  if (dateFrom) {
+    const from = typeof dateFrom === "string" ? new Date(dateFrom) : dateFrom;
+    clauses.push(sql`${column} >= ${from}`);
+  }
+  if (dateTo) {
+    const to = typeof dateTo === "string" ? new Date(dateTo + (typeof dateTo === "string" && dateTo.length === 10 ? "T23:59:59" : "")) : dateTo;
+    clauses.push(sql`${column} <= ${to}`);
+  }
+  return clauses;
 }
 
 // ─── Sort whitelist helper ──────────────────────────────────────────────────
@@ -79,11 +119,11 @@ export interface PaginateOptions {
 }
 
 /**
- * Apply pagination to a Drizzle select query and return { items, total }.
+ * Apply pagination to a Drizzle select query and return { items, total, page, pageSize }.
  *
  * @param baseQuery  – a `db.select().from(table).$dynamic()` query
  * @param table      – the Drizzle table reference (for count + sort resolution)
- * @param input      – validated pagination input (limit, offset, sortBy, sortDir)
+ * @param input      – validated pagination input (page, pageSize, sortBy, sortDir)
  * @param opts       – sort whitelist, default sort, where clauses
  */
 export async function paginate<T>(
@@ -92,6 +132,8 @@ export async function paginate<T>(
   input: PaginationInput,
   opts: PaginateOptions = {},
 ): Promise<PaginatedResult<T>> {
+  const { limit, offset, page, pageSize } = resolveOffsets(input);
+
   // Build WHERE
   const whereClauses: SQL[] = [];
   if (opts.where) {
@@ -110,7 +152,7 @@ export async function paginate<T>(
   // Count query
   const database = await getDb();
   if (!database) {
-    return { items: [] as T[], total: 0 };
+    return { items: [] as T[], total: 0, page, pageSize };
   }
 
   const countQuery = database
@@ -136,11 +178,11 @@ export async function paginate<T>(
     dataQuery = (dataQuery as any).orderBy(orderBy);
   }
 
-  dataQuery = (dataQuery as any).limit(input.limit).offset(input.offset);
+  dataQuery = (dataQuery as any).limit(limit).offset(offset);
 
   const items = (await dataQuery) as T[];
 
-  return { items, total };
+  return { items, total, page, pageSize };
 }
 
 // ─── Convenience: wrap an existing DB helper with pagination ────────────────
@@ -155,8 +197,9 @@ export function paginateInMemory<T>(
   input: PaginationInput,
   sortFn?: (a: T, b: T) => number,
 ): PaginatedResult<T> {
+  const { limit, offset, page, pageSize } = resolveOffsets(input);
   let sorted = sortFn ? [...allItems].sort(sortFn) : allItems;
   const total = sorted.length;
-  const items = sorted.slice(input.offset, input.offset + input.limit);
-  return { items, total };
+  const items = sorted.slice(offset, offset + limit);
+  return { items, total, page, pageSize };
 }

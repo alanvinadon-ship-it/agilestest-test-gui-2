@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
 import { usePermission, PermissionKey } from '../security';
@@ -11,6 +11,7 @@ import {
   CheckCircle2, XCircle, Clock, Ban, Play, StopCircle,
   Eye
 } from 'lucide-react';
+import Pagination from '../components/Pagination';
 
 const captureStatusConfig: Record<CaptureStatus, { label: string; cls: string }> = {
   QUEUED: { label: 'En file', cls: 'text-yellow-400' },
@@ -180,6 +181,8 @@ export default function CapturesPage() {
   const canCreateCapture = can(PermissionKey.EXECUTIONS_RUN);
   const [showCreate, setShowCreate] = useState(false);
   const queryClient = useQueryClient();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   // We need an execution to list captures — list all executions then fetch captures for each
   const { data: execData, isLoading: loadingExec } = useQuery({
@@ -192,16 +195,28 @@ export default function CapturesPage() {
   const latestExecId = executions[0]?.id || '';
 
   const { data: capturesData, isLoading: loadingCaptures } = useQuery({
-    queryKey: ['captures', latestExecId],
+    queryKey: ['captures', currentProject?.id, page, pageSize],
     queryFn: async () => {
-      const jobs = await trpcVanilla.captures.listJobs.query({ projectId: currentProject?.id || '' });
-      return { data: jobs };
+      const result = await trpcVanilla.captures.listJobs.query({
+        projectId: currentProject?.id || '',
+        page,
+        pageSize,
+      });
+      return result;
     },
-    enabled: !!latestExecId,
+    enabled: !!currentProject,
     refetchInterval: 10000,
   });
 
-  const captures = (capturesData?.data || []) as any[];
+  const captures = useMemo(() => {
+    const d = capturesData as any;
+    if (!d) return [];
+    if (Array.isArray(d)) return d;
+    if (d.items) return d.items;
+    if (d.data) return Array.isArray(d.data) ? d.data : (d.data.items ?? []);
+    return [];
+  }, [capturesData]);
+  const capturesTotal = (capturesData as any)?.total ?? captures.length;
 
   const cancelMutation = useMutation({
     mutationFn: async (captureId: string) => {
@@ -255,7 +270,7 @@ export default function CapturesPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {captures.map((cap) => {
+          {captures.map((cap: any) => {
             const status = captureStatusConfig[cap.status as CaptureStatus] || captureStatusConfig['QUEUED'];
             return (
               <div key={cap.capture_id} className="flex items-center justify-between bg-card border border-border rounded-lg px-5 py-4">
@@ -286,6 +301,17 @@ export default function CapturesPage() {
             );
           })}
         </div>
+      )}
+
+      {/* Pagination */}
+      {!isLoading && capturesTotal > 0 && (
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={capturesTotal}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       )}
 
       <CreateCaptureModal isOpen={showCreate} onClose={() => setShowCreate(false)} projectId={currentProject.id} />

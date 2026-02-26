@@ -1,25 +1,51 @@
 import { z } from "zod";
+import { eq, sql } from "drizzle-orm";
 import { router } from "../_core/trpc";
 import {
   viewerProcedure, testEngineerProcedure, qaManagerProcedure, orgAdminProcedure,
   auditMutation, requireProjectAccess,
 } from "../rbac/middleware";
 import * as execDb from "../db/executions";
-import { paginationInput, paginateInMemory } from "../pagination";
+import { paginationInput, paginate, paginateInMemory, dateRangeFilter } from "../pagination";
+import { getDb } from "../db";
+import { executions, incidents } from "../../drizzle/schema";
+
+// ─── Allowed sort fields (whitelist — prevents SQL injection) ────────────
+const EXEC_SORT_FIELDS = ["createdAt", "status", "startedAt", "finishedAt", "durationMs"];
+const INCIDENT_SORT_FIELDS = ["detectedAt", "severity", "title"];
 
 export const executionsRouter = router({
-  // ── READ — paginated list ──
+  // ── READ — paginated list with SQL-native pagination + filters ──
   list: viewerProcedure
     .use(requireProjectAccess("PROJECT_VIEWER"))
-    .input(z.object({ projectId: z.string() }).merge(paginationInput))
+    .input(z.object({
+      projectId: z.string(),
+      // Advanced filters
+      status: z.enum(["PENDING", "RUNNING", "PASSED", "FAILED", "ERROR", "CANCELLED"]).optional(),
+      dateFrom: z.string().optional(),
+      dateTo: z.string().optional(),
+      targetEnv: z.enum(["DEV", "PREPROD", "PILOT_ORANGE", "PROD"]).optional(),
+    }).merge(paginationInput))
     .query(async ({ input }) => {
-      const all = await execDb.listExecutions(input.projectId);
-      return paginateInMemory(all, input, (a: any, b: any) => {
-        const field = input.sortBy || "createdAt";
-        const aVal = a[field], bVal = b[field];
-        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-        return input.sortDir === "asc" ? cmp : -cmp;
-      });
+      const db = await getDb();
+      if (!db) return { items: [], total: 0, page: input.page, pageSize: input.pageSize };
+
+      // Build WHERE clauses
+      const where: any[] = [eq(executions.projectId, input.projectId)];
+      if (input.status) where.push(eq(executions.status, input.status));
+      if (input.targetEnv) where.push(eq(executions.targetEnv, input.targetEnv));
+      where.push(...dateRangeFilter(executions.createdAt, input.dateFrom, input.dateTo));
+
+      return paginate(
+        db.select().from(executions).$dynamic(),
+        executions,
+        input,
+        {
+          allowedSortFields: EXEC_SORT_FIELDS,
+          defaultSort: { by: "createdAt", dir: "desc" },
+          where,
+        },
+      );
     }),
 
   getByUid: viewerProcedure
@@ -74,7 +100,7 @@ export const executionsRouter = router({
       return execDb.deleteExecution(input.uid);
     }),
 
-  // ── Runner Jobs — paginated ──
+  // ── Runner Jobs — paginated (small volume, keep paginateInMemory) ──
   listJobs: viewerProcedure
     .input(z.object({ executionId: z.string() }).merge(paginationInput))
     .query(async ({ input }) => {
@@ -115,7 +141,7 @@ export const executionsRouter = router({
       return execDb.updateRunnerJob(uid, data);
     }),
 
-  // ── Artifacts — paginated ──
+  // ── Artifacts — paginated (small volume, keep paginateInMemory) ──
   listArtifacts: viewerProcedure
     .input(z.object({ executionId: z.string() }).merge(paginationInput))
     .query(async ({ input }) => {
@@ -144,18 +170,33 @@ export const executionsRouter = router({
       return execDb.createArtifact(input);
     }),
 
-  // ── Incidents — paginated ──
+  // ── Incidents — SQL-native pagination + filters ──
   listIncidents: viewerProcedure
     .use(requireProjectAccess("PROJECT_VIEWER"))
-    .input(z.object({ projectId: z.string() }).merge(paginationInput))
+    .input(z.object({
+      projectId: z.string(),
+      severity: z.enum(["CRITICAL", "MAJOR", "MINOR", "INFO"]).optional(),
+      dateFrom: z.string().optional(),
+      dateTo: z.string().optional(),
+    }).merge(paginationInput))
     .query(async ({ input }) => {
-      const all = await execDb.listIncidents(input.projectId);
-      return paginateInMemory(all, input, (a: any, b: any) => {
-        const field = input.sortBy || "detectedAt";
-        const aVal = a[field], bVal = b[field];
-        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-        return input.sortDir === "asc" ? cmp : -cmp;
-      });
+      const db = await getDb();
+      if (!db) return { items: [], total: 0, page: input.page, pageSize: input.pageSize };
+
+      const where: any[] = [eq(incidents.projectId, input.projectId)];
+      if (input.severity) where.push(eq(incidents.severity, input.severity));
+      where.push(...dateRangeFilter(incidents.detectedAt, input.dateFrom, input.dateTo));
+
+      return paginate(
+        db.select().from(incidents).$dynamic(),
+        incidents,
+        input,
+        {
+          allowedSortFields: INCIDENT_SORT_FIELDS,
+          defaultSort: { by: "detectedAt", dir: "desc" },
+          where,
+        },
+      );
     }),
 
   listIncidentsByExecution: viewerProcedure

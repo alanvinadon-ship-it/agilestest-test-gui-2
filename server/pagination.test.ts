@@ -59,24 +59,31 @@ function createTestContext(): TrpcContext {
 describe("paginationInput schema", () => {
   it("applies default values when empty object is provided", () => {
     const result = paginationInput.parse({});
-    expect(result).toEqual({
-      limit: 25,
-      offset: 0,
-      sortDir: "desc",
-    });
+    expect(result.page).toBe(1);
+    expect(result.pageSize).toBe(25);
+    expect(result.sortDir).toBe("desc");
   });
 
   it("accepts valid custom values", () => {
     const result = paginationInput.parse({
-      limit: 50,
-      offset: 100,
+      page: 3,
+      pageSize: 50,
       sortBy: "name",
       sortDir: "asc",
     });
-    expect(result.limit).toBe(50);
-    expect(result.offset).toBe(100);
+    expect(result.page).toBe(3);
+    expect(result.pageSize).toBe(50);
     expect(result.sortBy).toBe("name");
     expect(result.sortDir).toBe("asc");
+  });
+
+  it("accepts legacy limit/offset", () => {
+    const result = paginationInput.parse({
+      limit: 50,
+      offset: 100,
+    });
+    expect(result.limit).toBe(50);
+    expect(result.offset).toBe(100);
   });
 
   it("rejects limit > 100", () => {
@@ -91,6 +98,14 @@ describe("paginationInput schema", () => {
     expect(() => paginationInput.parse({ offset: -1 })).toThrow();
   });
 
+  it("rejects pageSize > 100", () => {
+    expect(() => paginationInput.parse({ pageSize: 200 })).toThrow();
+  });
+
+  it("rejects page < 1", () => {
+    expect(() => paginationInput.parse({ page: 0 })).toThrow();
+  });
+
   it("rejects invalid sortDir", () => {
     expect(() => paginationInput.parse({ sortDir: "random" })).toThrow();
   });
@@ -103,25 +118,33 @@ describe("paginationInput schema", () => {
 describe("paginateInMemory", () => {
   const items = fakeItems(50);
 
-  it("returns items.length <= limit", () => {
-    const result = paginateInMemory(items, { limit: 10, offset: 0, sortDir: "desc" });
+  it("returns items.length <= pageSize", () => {
+    const result = paginateInMemory(items, { page: 1, pageSize: 10, sortDir: "desc" });
     expect(result.items.length).toBeLessThanOrEqual(10);
     expect(result.items.length).toBe(10);
   });
 
-  it("returns correct total regardless of limit/offset", () => {
-    const result = paginateInMemory(items, { limit: 5, offset: 20, sortDir: "desc" });
+  it("returns correct total regardless of page/pageSize", () => {
+    const result = paginateInMemory(items, { page: 5, pageSize: 5, sortDir: "desc" });
     expect(result.total).toBe(50);
   });
 
-  it("returns empty items when offset exceeds total", () => {
-    const result = paginateInMemory(items, { limit: 10, offset: 100, sortDir: "desc" });
+  it("returns empty items when page exceeds total", () => {
+    const result = paginateInMemory(items, { page: 20, pageSize: 10, sortDir: "desc" });
     expect(result.items).toEqual([]);
     expect(result.total).toBe(50);
   });
 
-  it("respects offset for slicing", () => {
-    const result = paginateInMemory(items, { limit: 5, offset: 10, sortDir: "desc" });
+  it("respects page for slicing", () => {
+    const result = paginateInMemory(items, { page: 3, pageSize: 5, sortDir: "desc" });
+    // page 3, pageSize 5 → offset 10
+    expect(result.items[0]).toEqual(items[10]);
+    expect(result.items.length).toBe(5);
+  });
+
+  it("supports legacy limit/offset", () => {
+    const result = paginateInMemory(items, { page: 1, pageSize: 25, limit: 5, offset: 10, sortDir: "desc" });
+    // limit/offset take priority via resolveOffsets
     expect(result.items[0]).toEqual(items[10]);
     expect(result.items.length).toBe(5);
   });

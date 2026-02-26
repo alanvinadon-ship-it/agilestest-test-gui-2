@@ -1,25 +1,52 @@
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 import { router } from "../_core/trpc";
 import {
   viewerProcedure, testEngineerProcedure, orgAdminProcedure,
   auditMutation, requireProjectAccess,
 } from "../rbac/middleware";
 import * as capturesDb from "../db/captures";
-import { paginationInput, paginateInMemory } from "../pagination";
+import { paginationInput, paginate, paginateInMemory, dateRangeFilter } from "../pagination";
+import { getDb } from "../db";
+import { captureJobs, captureSources, captureArtifacts, captureSessions } from "../../drizzle/schema";
+
+// ─── Allowed sort fields ─────────────────────────────────────────────────
+const CAPTURE_JOB_SORT_FIELDS = ["createdAt", "status", "startedAt", "completedAt"];
+const CAPTURE_SESSION_SORT_FIELDS = ["createdAt", "startedAt", "completedAt"];
 
 export const capturesRouter = router({
-  // ── Capture Jobs — paginated ──
+  // ── Capture Jobs — SQL-native pagination + filters ──
   listJobs: viewerProcedure
     .use(requireProjectAccess("PROJECT_VIEWER"))
-    .input(z.object({ projectId: z.string() }).merge(paginationInput))
+    .input(z.object({
+      projectId: z.string(),
+      // Advanced filters
+      status: z.enum(["QUEUED", "RUNNING", "COMPLETED", "FAILED", "CANCELLED"]).optional(),
+      captureType: z.enum(["LOGS", "PCAP"]).optional(),
+      targetType: z.enum(["K8S", "SSH", "PROBE"]).optional(),
+      dateFrom: z.string().optional(),
+      dateTo: z.string().optional(),
+    }).merge(paginationInput))
     .query(async ({ input }) => {
-      const all = await capturesDb.listCaptureJobs(input.projectId);
-      return paginateInMemory(all, input, (a: any, b: any) => {
-        const field = input.sortBy || "createdAt";
-        const aVal = a[field], bVal = b[field];
-        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-        return input.sortDir === "asc" ? cmp : -cmp;
-      });
+      const db = await getDb();
+      if (!db) return { items: [], total: 0, page: input.page, pageSize: input.pageSize };
+
+      const where: any[] = [eq(captureJobs.projectId, input.projectId)];
+      if (input.status) where.push(eq(captureJobs.status, input.status));
+      if (input.captureType) where.push(eq(captureJobs.captureType, input.captureType));
+      if (input.targetType) where.push(eq(captureJobs.targetType, input.targetType));
+      where.push(...dateRangeFilter(captureJobs.createdAt, input.dateFrom, input.dateTo));
+
+      return paginate(
+        db.select().from(captureJobs).$dynamic(),
+        captureJobs,
+        input,
+        {
+          allowedSortFields: CAPTURE_JOB_SORT_FIELDS,
+          defaultSort: { by: "createdAt", dir: "desc" },
+          where,
+        },
+      );
     }),
 
   getJobByUid: viewerProcedure
@@ -61,7 +88,7 @@ export const capturesRouter = router({
       return capturesDb.updateCaptureJob(uid, data);
     }),
 
-  // ── Capture Sources — paginated ──
+  // ── Capture Sources — small volume, keep paginateInMemory ──
   listSources: viewerProcedure
     .input(z.object({ captureId: z.string() }).merge(paginationInput))
     .query(async ({ input }) => {
@@ -92,7 +119,7 @@ export const capturesRouter = router({
       return capturesDb.deleteCaptureSource(input.uid);
     }),
 
-  // ── Capture Artifacts — paginated ──
+  // ── Capture Artifacts — small volume, keep paginateInMemory ──
   listArtifacts: viewerProcedure
     .input(z.object({ captureJobId: z.string() }).merge(paginationInput))
     .query(async ({ input }) => {
@@ -118,17 +145,30 @@ export const capturesRouter = router({
       return capturesDb.createCaptureArtifact(input);
     }),
 
-  // ── Capture Sessions — paginated ──
+  // ── Capture Sessions — SQL-native pagination + filters ──
   listSessions: viewerProcedure
-    .input(z.object({ policyId: z.string() }).merge(paginationInput))
+    .input(z.object({
+      policyId: z.string(),
+      dateFrom: z.string().optional(),
+      dateTo: z.string().optional(),
+    }).merge(paginationInput))
     .query(async ({ input }) => {
-      const all = await capturesDb.listCaptureSessions(input.policyId);
-      return paginateInMemory(all, input, (a: any, b: any) => {
-        const field = input.sortBy || "startedAt";
-        const aVal = a[field], bVal = b[field];
-        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-        return input.sortDir === "asc" ? cmp : -cmp;
-      });
+      const db = await getDb();
+      if (!db) return { items: [], total: 0, page: input.page, pageSize: input.pageSize };
+
+      const where: any[] = [eq(captureSessions.policyId, input.policyId)];
+      where.push(...dateRangeFilter(captureSessions.createdAt, input.dateFrom, input.dateTo));
+
+      return paginate(
+        db.select().from(captureSessions).$dynamic(),
+        captureSessions,
+        input,
+        {
+          allowedSortFields: CAPTURE_SESSION_SORT_FIELDS,
+          defaultSort: { by: "createdAt", dir: "desc" },
+          where,
+        },
+      );
     }),
 
   listSessionsByExecution: viewerProcedure
