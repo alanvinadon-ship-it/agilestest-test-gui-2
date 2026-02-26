@@ -1,20 +1,32 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import { type Server } from "http";
-import { nanoid } from "nanoid";
 import path from "path";
-import { createServer as createViteServer } from "vite";
-import viteConfig from "../../vite.config";
 
+/**
+ * setupVite — only called in development (NODE_ENV=development).
+ * All vite-related imports are fully dynamic so esbuild never bundles them.
+ */
 export async function setupVite(app: Express, server: Server) {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const viteModule = await (Function('return import("vite")')() as Promise<typeof import("vite")>);
+  const { nanoid } = await (Function('return import("nanoid")')() as Promise<typeof import("nanoid")>);
+
+  // Load vite.config.ts at runtime via dynamic import
+  const viteConfigPath = path.resolve(import.meta.dirname, "../..", "vite.config.ts");
+  const viteConfigModule = await viteModule.loadConfigFromFile(
+    { command: "serve", mode: "development" },
+    viteConfigPath
+  );
+
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
     allowedHosts: true as const,
   };
 
-  const vite = await createViteServer({
-    ...viteConfig,
+  const vite = await viteModule.createServer({
+    ...(viteConfigModule?.config ?? {}),
     configFile: false,
     server: serverOptions,
     appType: "custom",
@@ -32,7 +44,6 @@ export async function setupVite(app: Express, server: Server) {
         "index.html"
       );
 
-      // always reload the index.html file from disk incase it changes
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
       template = template.replace(
         `src="/src/main.tsx"`,

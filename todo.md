@@ -114,3 +114,10 @@
 - [x] Core: Vérifier /healthz (200 ok), /readyz (200 ready), /metrics (Prometheus format)
 - [x] Core: Tests d'intégration (13 tests: requestId, metrics, security headers, rate limit, CORS, health registration)
 - [x] Core: Mettre à jour docs/OPERATIONS.md (section Middleware Pipeline ajoutée)
+- [x] Docker: Valider docker build (161MB, fix vite.ts imports dynamiques Function())
+- [x] Docker: Valider docker compose local-test (MySQL healthy, MinIO healthy, backend healthy)
+- [x] Docker: Vérifier logs backend/mysql/minio (tous OK, OAuth warning attendu sans config)
+- [x] Docker: Tester /healthz (200 ok), /readyz (200 ready, DB ok), /metrics (Prometheus)
+- [x] Docker: Tester MinIO (upload OK, download OK, list OK, presigned URL OK via boto3)
+- [x] Docker: Smoke test (healthz + readyz + metrics + frontend HTML + security headers)
+- [x] Docker: Documenter dans docs/INSTALL_DOCKER.md
