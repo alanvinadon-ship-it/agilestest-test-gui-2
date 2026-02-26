@@ -58,3 +58,4 @@
 - [x] Bug: AdminUsersPage affiche des données fictives du memoryStore au lieu des vrais utilisateurs de la DB Postgres — corrigé : réécriture complète avec hooks tRPC admin.listUsers/updateUser/deleteUser/createInvite/listInvites/revokeInvite
 - [x] Bug: Configuration email des notifications perdue après migration localStorage → memoryStore — corrigé : memoryStore persiste les clés agilestest_notif_* et agilestest_audit_* dans localStorage
 - [x] Bug: AdminUsersPage — manque bouton Créer utilisateur, filtre statuts, colonne Statut, colonne Projets, boutons d'action (Voir, Reset Password)
+- [x] Bug: Page /projects — tbody imbriqué dans tbody (erreur DOM React) — corrigé dans AdminRbacPage et AdminRolesPage (remplacé tbody par Fragment)

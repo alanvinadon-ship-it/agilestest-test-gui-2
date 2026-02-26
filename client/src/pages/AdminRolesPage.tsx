@@ -9,7 +9,7 @@
  * - Rôles système : pas de delete ; edit permissions limité si is_system
  * - Empêcher delete si rôle utilisé (409)
  */
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, Fragment } from 'react';
 import { toast } from 'sonner';
 import {
   ShieldCheck, Plus, Pencil, Trash2, Lock, Check, X, ChevronDown, ChevronRight,
@@ -126,7 +126,7 @@ export default function AdminRolesPage() {
           </thead>
           <tbody>
             {roles.map((role, roleIdx) => (
-              <tbody key={`role-tbody-${role.role_id}-${roleIdx}`}>
+              <Fragment key={`role-tbody-${role.role_id}-${roleIdx}`}>
                 <tr key={role.role_id} className="border-b border-border/50 hover:bg-secondary/20 transition-colors">
                   <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{role.role_id}</td>
                   <td className="px-4 py-3 font-medium text-foreground flex items-center gap-2">
@@ -184,7 +184,7 @@ export default function AdminRolesPage() {
                     </td>
                   </tr>
                 )}
-              </tbody>
+              </Fragment>
             ))}
             {roles.length === 0 && (
               <tr>

@@ -3,7 +3,7 @@
  * Matrice RBAC dynamique : affiche les permissions réelles des rôles (système + custom)
  * depuis le catalogue permissions.ts
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import { ShieldCheck, Check, Minus, Info, Lock, Unlock, Search } from 'lucide-react';
 import {
   PERMISSION_GROUPS,
@@ -146,7 +146,7 @@ export default function AdminRbacPage() {
             </thead>
             <tbody>
               {filteredGroups.map((group, groupIdx) => (
-                <tbody key={`group-${groupIdx}`}>
+                <Fragment key={`group-${groupIdx}`}>
                   {/* Group header */}
                   <tr key={`grp-${group.id}`} className="bg-secondary/10">
                     <td
@@ -188,7 +188,7 @@ export default function AdminRbacPage() {
                       })}
                     </tr>
                   ))}
-                </tbody>
+                </Fragment>
               ))}
             </tbody>
           </table>
