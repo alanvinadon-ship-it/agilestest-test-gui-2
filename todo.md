@@ -107,3 +107,4 @@
 - [x] Tests Vitest: 24 tests pagination (schema, paginateInMemory, intégration routeurs)
 - [x] Tous les 101 tests passent (6 fichiers, 0 échec)
 - [x] Documentation docs/PAGINATION.md (standard, contrat, helpers, endpoints, index, tests)
+- [x] DOCS-SEARCH: Bouton de recherche globale dans la documentation (DocSearchDialog + Ctrl+K / ⌘K)

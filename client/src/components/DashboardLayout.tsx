@@ -30,7 +30,10 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "../auth/AuthContext";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { useProject } from "../state/projectStore";
+import { DocSearchDialog, useDocSearchShortcut } from "./DocSearchDialog";
+import { Kbd } from "@/components/ui/kbd";
 import type { LucideIcon } from "lucide-react";
+import { Search } from "lucide-react";
 
 interface NavItem {
   href: string;
@@ -109,6 +112,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     navigate('/login');
   }, [logout, navigate]);
   const { currentProject } = useProject();
+  const docSearch = useDocSearchShortcut();
 
   const navSections = useMemo(() => {
     return baseNavSections.filter(s => !s.adminOnly || isAdmin);
@@ -219,6 +223,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             )}
           </div>
           <div className="flex items-center gap-3">
+            {/* Search docs button */}
+            <button
+              onClick={() => docSearch.setOpen(true)}
+              className="flex items-center gap-2 h-8 px-3 rounded-md border border-border bg-secondary/40 text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors text-sm"
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline text-xs">Rechercher docs...</span>
+              <div className="hidden sm:flex items-center gap-0.5">
+                <Kbd>⌘</Kbd><Kbd>K</Kbd>
+              </div>
+            </button>
             <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground">
               <span className="status-led status-led-success animate-pulse-glow" />
               <span>v0.1.2</span>
@@ -231,6 +246,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </div>
       </main>
+
+      {/* Global doc search dialog */}
+      <DocSearchDialog open={docSearch.open} onOpenChange={docSearch.setOpen} />
     </div>
   );
 }
