@@ -369,34 +369,77 @@ export async function listUsers(filters?: {
   const db = await getDb();
   if (!db) return [];
 
-  const conditions: any[] = [];
-  if (filters?.status) conditions.push(eq(users.status, filters.status));
-  if (filters?.role) {
-    // Map frontend role names to DB enum values
-    const dbRole = filters.role.toLowerCase() as UserRole;
-    conditions.push(eq(users.role, dbRole));
+  // --- 1. Fetch real users from the users table ---
+  let userResults: any[] = [];
+  const onlyInvited = filters?.status === "INVITED";
+
+  if (!onlyInvited) {
+    const conditions: any[] = [];
+    if (filters?.status) conditions.push(eq(users.status, filters.status));
+    if (filters?.role) {
+      const dbRole = filters.role.toLowerCase() as UserRole;
+      conditions.push(eq(users.role, dbRole));
+    }
+
+    let query;
+    if (conditions.length > 0) {
+      query = db.select().from(users).where(and(...conditions)).orderBy(desc(users.createdAt));
+    } else {
+      query = db.select().from(users).orderBy(desc(users.createdAt));
+    }
+    userResults = await query;
   }
 
-  let query;
-  if (conditions.length > 0) {
-    query = db.select().from(users).where(and(...conditions)).orderBy(desc(users.createdAt));
-  } else {
-    query = db.select().from(users).orderBy(desc(users.createdAt));
+  // --- 2. Fetch PENDING invitations and merge as virtual "INVITED" users ---
+  const shouldIncludeInvited = !filters?.status || filters.status === "INVITED";
+  let inviteResults: any[] = [];
+
+  if (shouldIncludeInvited) {
+    const inviteConditions: any[] = [eq(invites.status, "PENDING")];
+    if (filters?.role) {
+      inviteConditions.push(eq(invites.role, filters.role.toUpperCase() as any));
+    }
+
+    inviteResults = await db.select().from(invites)
+      .where(inviteConditions.length > 1 ? and(...inviteConditions) : inviteConditions[0])
+      .orderBy(desc(invites.createdAt));
   }
 
-  let rows = await query;
+  // Map invites to virtual user rows
+  const inviteAsUsers = inviteResults.map((inv: any) => ({
+    id: -inv.id, // negative ID to distinguish from real users
+    openId: `invite_${inv.uid}`,
+    name: inv.email.split("@")[0], // use email prefix as name
+    email: inv.email,
+    fullName: inv.email.split("@")[0],
+    loginMethod: "invite",
+    role: inv.role ? inv.role.toLowerCase() : "viewer",
+    status: "INVITED" as const,
+    passwordHash: null,
+    createdAt: inv.createdAt,
+    updatedAt: inv.createdAt,
+    lastSignedIn: inv.createdAt,
+    // Extra invite metadata
+    _inviteUid: inv.uid,
+    _inviteRole: inv.role,
+    _invitedBy: inv.invitedByName,
+    _expiresAt: inv.expiresAt,
+  }));
 
-  // Apply search filter in-memory (name/email)
+  // Merge: real users first, then invited users
+  let combined = [...userResults, ...inviteAsUsers];
+
+  // --- 3. Apply search filter in-memory (name/email) ---
   if (filters?.search) {
     const q = filters.search.toLowerCase();
-    rows = rows.filter(r =>
+    combined = combined.filter((r: any) =>
       (r.fullName && r.fullName.toLowerCase().includes(q)) ||
       (r.name && r.name.toLowerCase().includes(q)) ||
       (r.email && r.email.toLowerCase().includes(q))
     );
   }
 
-  return rows;
+  return combined;
 }
 
 export async function getUserById(id: number) {

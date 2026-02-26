@@ -1,0 +1,98 @@
+{
+  "query": "DESCRIBE invites;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute DESCRIBE invites;",
+  "rows": [
+    {
+      "Field": "id",
+      "Type": "int(11)",
+      "Null": "NO",
+      "Key": "PRI",
+      "Default": "NULL",
+      "Extra": "auto_increment"
+    },
+    {
+      "Field": "uid",
+      "Type": "varchar(36)",
+      "Null": "NO",
+      "Key": "UNI",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "email",
+      "Type": "varchar(320)",
+      "Null": "NO",
+      "Key": "MUL",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "invite_role",
+      "Type": "enum('ADMIN','MANAGER','VIEWER')",
+      "Null": "NO",
+      "Key": "",
+      "Default": "VIEWER",
+      "Extra": ""
+    },
+    {
+      "Field": "invite_status",
+      "Type": "enum('PENDING','ACCEPTED','REVOKED','EXPIRED')",
+      "Null": "NO",
+      "Key": "MUL",
+      "Default": "PENDING",
+      "Extra": ""
+    },
+    {
+      "Field": "token",
+      "Type": "varchar(128)",
+      "Null": "NO",
+      "Key": "UNI",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "invited_by",
+      "Type": "varchar(64)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "invited_by_name",
+      "Type": "varchar(255)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "expires_at",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "accepted_at",
+      "Type": "timestamp",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "created_at",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": ""
+    }
+  ],
+  "messages": [],
+  "stdout": "Field\tType\tNull\tKey\tDefault\tExtra\nid\tint(11)\tNO\tPRI\tNULL\tauto_increment\nuid\tvarchar(36)\tNO\tUNI\tNULL\t\nemail\tvarchar(320)\tNO\tMUL\tNULL\t\ninvite_role\tenum('ADMIN','MANAGER','VIEWER')\tNO\t\tVIEWER\t\ninvite_status\tenum('PENDING','ACCEPTED','REVOKED','EXPIRED')\tNO\tMUL\tPENDING\t\ntoken\tvarchar(128)\tNO\tUNI\tNULL\t\ninvited_by\tvarchar(64)\tYES\t\tNULL\t\ninvited_by_name\tvarchar(255)\tYES\t\tNULL\t\nexpires_at\ttimestamp\tNO\t\tNULL\t\naccepted_at\ttimestamp\tYES\t\tNULL\t\ncreated_at\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\t\n",
+  "stderr": "",
+  "execution_time_ms": 57
+}
