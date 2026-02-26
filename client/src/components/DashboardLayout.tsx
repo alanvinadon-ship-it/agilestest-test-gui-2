@@ -32,6 +32,7 @@ import { useAuth } from "../auth/AuthContext";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { useProject } from "../state/projectStore";
 import { useSidebarAccordionState } from "../hooks/useSidebarAccordionState";
+import { useSidebarCounts } from "../hooks/useSidebarCounts";
 import type { LucideIcon } from "lucide-react";
 
 interface NavItem {
@@ -120,12 +121,14 @@ function NavSectionAccordion({
   location,
   expanded,
   onToggle,
+  badge,
 }: {
   section: NavSection;
   collapsed: boolean;
   location: string;
   expanded: boolean;
   onToggle: () => void;
+  badge?: string | null;
 }) {
   const hasActiveItem = section.items.some(
     (item) => location === item.href || (item.href !== "/" && location.startsWith(item.href))
@@ -179,7 +182,7 @@ function NavSectionAccordion({
         <div className="flex items-center justify-center py-2">
           <div
             className={cn(
-              "w-8 h-8 rounded-md flex items-center justify-center transition-colors",
+              "relative w-8 h-8 rounded-md flex items-center justify-center transition-colors",
               hasActiveItem
                 ? "bg-primary/10 text-primary"
                 : "text-muted-foreground hover:text-foreground hover:bg-secondary"
@@ -187,6 +190,11 @@ function NavSectionAccordion({
             title={section.label}
           >
             <section.icon className="w-4 h-4" />
+            {badge && (
+              <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full text-[8px] font-bold leading-none bg-primary text-primary-foreground">
+                {badge}
+              </span>
+            )}
           </div>
         </div>
       ) : (
@@ -208,6 +216,14 @@ function NavSectionAccordion({
           >
             {section.label}
           </span>
+          {badge && (
+            <span
+              className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold leading-none bg-primary text-primary-foreground shrink-0"
+              aria-label={`${badge} éléments actifs`}
+            >
+              {badge}
+            </span>
+          )}
           <ChevronDown
             className={cn(
               "w-3.5 h-3.5 shrink-0 transition-transform duration-200",
@@ -215,7 +231,7 @@ function NavSectionAccordion({
             )}
           />
           {/* Active indicator dot when collapsed */}
-          {hasActiveItem && !expanded && (
+          {hasActiveItem && !expanded && !badge && (
             <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
           )}
         </button>
@@ -276,6 +292,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Persisted accordion state via uiStorage
   const { isExpanded, toggle: toggleSection } = useSidebarAccordionState(location, navSections);
 
+  // Badge counts from backend
+  const { formatCount } = useSidebarCounts();
+
   return (
     <div className="min-h-screen flex blueprint-grid">
       {/* Sidebar */}
@@ -312,6 +331,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               location={location}
               expanded={isExpanded(section.label)}
               onToggle={() => toggleSection(section.label)}
+              badge={formatCount(section.label)}
             />
           ))}
         </nav>

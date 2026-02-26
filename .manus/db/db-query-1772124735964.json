@@ -1,0 +1,170 @@
+{
+  "query": "DESCRIBE executions;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute DESCRIBE executions;",
+  "rows": [
+    {
+      "Field": "id",
+      "Type": "int(11)",
+      "Null": "NO",
+      "Key": "PRI",
+      "Default": "NULL",
+      "Extra": "auto_increment"
+    },
+    {
+      "Field": "uid",
+      "Type": "varchar(36)",
+      "Null": "NO",
+      "Key": "UNI",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "project_id",
+      "Type": "varchar(36)",
+      "Null": "NO",
+      "Key": "MUL",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "profile_id",
+      "Type": "varchar(36)",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "scenario_id",
+      "Type": "varchar(36)",
+      "Null": "NO",
+      "Key": "MUL",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "status",
+      "Type": "enum('PENDING','RUNNING','PASSED','FAILED','ERROR','CANCELLED')",
+      "Null": "NO",
+      "Key": "MUL",
+      "Default": "PENDING",
+      "Extra": ""
+    },
+    {
+      "Field": "runner_type",
+      "Type": "varchar(50)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "script_id",
+      "Type": "varchar(36)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "script_version",
+      "Type": "int(11)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "dataset_bundle_id",
+      "Type": "varchar(36)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "target_env",
+      "Type": "enum('DEV','PREPROD','PILOT_ORANGE','PROD')",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "runner_id",
+      "Type": "varchar(64)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "ai_repair_from_execution_id",
+      "Type": "varchar(36)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "started_at",
+      "Type": "timestamp",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "finished_at",
+      "Type": "timestamp",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "duration_ms",
+      "Type": "int(11)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "artifacts_count",
+      "Type": "int(11)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "incidents_count",
+      "Type": "int(11)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "created_at",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "MUL",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": ""
+    },
+    {
+      "Field": "updated_at",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+    }
+  ],
+  "messages": [],
+  "stdout": "Field\tType\tNull\tKey\tDefault\tExtra\nid\tint(11)\tNO\tPRI\tNULL\tauto_increment\nuid\tvarchar(36)\tNO\tUNI\tNULL\t\nproject_id\tvarchar(36)\tNO\tMUL\tNULL\t\nprofile_id\tvarchar(36)\tNO\t\tNULL\t\nscenario_id\tvarchar(36)\tNO\tMUL\tNULL\t\nstatus\tenum('PENDING','RUNNING','PASSED','FAILED','ERROR','CANCELLED')\tNO\tMUL\tPENDING\t\nrunner_type\tvarchar(50)\tYES\t\tNULL\t\nscript_id\tvarchar(36)\tYES\t\tNULL\t\nscript_version\tint(11)\tYES\t\tNULL\t\ndataset_bundle_id\tvarchar(36)\tYES\t\tNULL\t\ntarget_env\tenum('DEV','PREPROD','PILOT_ORANGE','PROD')\tYES\t\tNULL\t\nrunner_id\tvarchar(64)\tYES\t\tNULL\t\nai_repair_from_execution_id\tvarchar(36)\tYES\t\tNULL\t\nstarted_at\ttimestamp\tYES\t\tNULL\t\nfinished_at\ttimestamp\tYES\t\tNULL\t\nduration_ms\tint(11)\tYES\t\tNULL\t\nartifacts_count\tint(11)\tYES\t\t0\t\nincidents_count\tint(11)\tYES\t\t0\t\ncreated_at\ttimestamp\tNO\tMUL\tCURRENT_TIMESTAMP\t\nupdated_at\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\tDEFAULT_GENERATED on update CURRENT_TIMESTAMP\n",
+  "stderr": "",
+  "execution_time_ms": 51
+}

@@ -64,3 +64,7 @@
 - [x] Feature: Mise à jour whitelist uiStorage pour la clé sidebar.accordions
 - [x] Feature: Tests unitaires pour sidebar accordion state persistence
 - [x] Feature: Documentation docs/FRONTEND_SIDEBAR.md
+- [x] Feature: Endpoint tRPC ui.sidebarCounts (runningExecutions, pendingInvites)
+- [x] Feature: Hook useSidebarCounts avec refetch adaptatif (10-15s running, 30-60s notifs)
+- [x] Feature: Badges visuels sur sections sidebar (Exécution, Administration)
+- [x] Feature: Tests unitaires pour sidebar counts (backend + frontend smoke)
