@@ -16,7 +16,7 @@ import {
 import {
   localDriveCampaigns, localDriveRoutes, localProjects,
   localDriveJobs, localKpiSamples, localDriveRunSummaries,
-} from '@/api/localStore';
+} from '@/api/localStoreTrpc';
 import type { DriveCampaign, DriveRoute, DriveJob, KpiSample, DriveRunSummary, DriveKpi } from '@/types';
 import { getThresholdLevel } from '@/ai/kpiParsers';
 import {
@@ -92,21 +92,21 @@ function kpiValues(samples: KpiSample[], kpi: DriveKpi): number[] {
 
 // ─── Build Report ───────────────────────────────────────────────────────────
 
-function buildReport(
+async function buildReport(
   campaign: DriveCampaign,
   routes: DriveRoute[],
   jobs: DriveJob[],
   windowSize: WindowSize,
   selectedKpi: string,
-): CampaignReport {
+): Promise<CampaignReport> {
   // Collect samples
   const allSamples: KpiSample[] = [];
   const summaries: DriveRunSummary[] = [];
   for (const job of jobs) {
-    const s = localDriveRunSummaries.get(job.drive_job_id);
-    if (s) summaries.push(s);
-    const samplesResult = localKpiSamples.list({ drive_job_id: job.drive_job_id });
-    allSamples.push(...samplesResult.data);
+    const s = await localDriveRunSummaries.get(job.drive_job_id);
+    if (s) summaries.push(s as any);
+    const samplesRaw = await localKpiSamples.list({ drive_job_id: job.drive_job_id });
+    allSamples.push(...(samplesRaw as any[]));
   }
 
   // If no real data, simulate
@@ -561,8 +561,16 @@ function IncidentsSummary({ incidents, onRepair }: {
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 export default function DriveReportingPage() {
-  const [projects] = useState(() => localProjects.list({ limit: 200 }).data);
-  const [projectId, setProjectId] = useState(projects[0]?.id || '');
+  const [projects, setProjects] = useState<any[]>([]);
+  const [projectId, setProjectId] = useState('');
+
+  useEffect(() => {
+    localProjects.list({ limit: 200 }).then(result => {
+      const data = result?.data || [];
+      setProjects(data);
+      if (data.length > 0) setProjectId(data[0]?.id || '');
+    });
+  }, []);
   const [campaigns, setCampaigns] = useState<DriveCampaign[]>([]);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
   const [selectedJobId, setSelectedJobId] = useState<string>('ALL');
@@ -583,44 +591,45 @@ export default function DriveReportingPage() {
 
   useEffect(() => {
     if (!projectId) return;
-    const result = localDriveCampaigns.list(projectId, { limit: 200 });
-    setCampaigns(result.data);
-    if (result.data.length > 0 && !selectedCampaignId) {
-      setSelectedCampaignId(result.data[0].campaign_id);
-    }
+    localDriveCampaigns.list(projectId, { limit: 200 }).then(result => {
+      setCampaigns(result.data as any[]);
+      if (result.data.length > 0 && !selectedCampaignId) {
+        setSelectedCampaignId((result.data[0] as any).campaign_id);
+      }
+    });
   }, [projectId]);
 
-  const generateReport = useCallback(() => {
+  const generateReport = useCallback(async () => {
     if (!selectedCampaignId) return;
     setLoading(true);
     setSelectedSegment(null);
-    setTimeout(() => {
-      try {
-        const campaign = localDriveCampaigns.get(selectedCampaignId);
-        const routes = localDriveRoutes.list(selectedCampaignId);
-        const jobsResult = localDriveJobs.list({ campaign_id: selectedCampaignId, limit: 200 });
-        const jobs = selectedJobId !== 'ALL'
-          ? jobsResult.data.filter(j => j.drive_job_id === selectedJobId)
-          : jobsResult.data;
-        const r = buildReport(campaign, routes, jobs, windowSize, selectedKpi);
-        setReport(r);
-        const label = r.dataSource === 'real' ? 'réels' : 'simulés';
-        toast.success(`Rapport généré : ${r.segments.length} segments, ${r.incidents.length} incidents (${label})`);
-      } catch (e: any) {
-        toast.error(e.message);
-      }
-      setLoading(false);
-    }, 200);
+    try {
+      const campaign = await localDriveCampaigns.get(selectedCampaignId) as any;
+      const routes = await localDriveRoutes.list(selectedCampaignId) as any[];
+      const jobsResult = await localDriveJobs.list({ campaign_id: selectedCampaignId, limit: 200 });
+      const jobs = selectedJobId !== 'ALL'
+        ? jobsResult.data.filter((j: any) => j.drive_job_id === selectedJobId)
+        : jobsResult.data;
+      const r = await buildReport(campaign, routes, jobs as any[], windowSize, selectedKpi);
+      setReport(r);
+      const label = r.dataSource === 'real' ? 'réels' : 'simulés';
+      toast.success(`Rapport généré : ${r.segments.length} segments, ${r.incidents.length} incidents (${label})`);
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+    setLoading(false);
   }, [selectedCampaignId, selectedJobId, windowSize, selectedKpi]);
 
   useEffect(() => {
     if (selectedCampaignId) generateReport();
   }, [selectedCampaignId, selectedJobId, windowSize]);
 
-  const availableJobs = useMemo(() => {
-    if (!selectedCampaignId) return [];
-    try { return localDriveJobs.list({ campaign_id: selectedCampaignId, limit: 200 }).data; }
-    catch { return []; }
+  const [availableJobs, setAvailableJobs] = useState<any[]>([]);
+  useEffect(() => {
+    if (!selectedCampaignId) { setAvailableJobs([]); return; }
+    localDriveJobs.list({ campaign_id: selectedCampaignId, limit: 200 })
+      .then(result => setAvailableJobs(result.data as any[]))
+      .catch(() => setAvailableJobs([]));
   }, [selectedCampaignId]);
 
   // Drill-down data
@@ -689,7 +698,7 @@ export default function DriveReportingPage() {
         <div className="flex items-center gap-2 flex-wrap">
           <Select value={projectId} onValueChange={setProjectId}>
             <SelectTrigger className="w-[160px]"><SelectValue placeholder="Projet" /></SelectTrigger>
-            <SelectContent>{projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+            <SelectContent>{projects.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
           </Select>
           <Select value={selectedCampaignId} onValueChange={v => { setSelectedCampaignId(v); setSelectedJobId('ALL'); }}>
             <SelectTrigger className="w-[180px]"><SelectValue placeholder="Campagne" /></SelectTrigger>
@@ -700,7 +709,7 @@ export default function DriveReportingPage() {
               <SelectTrigger className="w-[160px]"><SelectValue placeholder="Job" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">Tous les jobs</SelectItem>
-                {availableJobs.map(j => <SelectItem key={j.drive_job_id} value={j.drive_job_id}>{j.drive_job_id.slice(0, 8)} ({j.status})</SelectItem>)}
+                {availableJobs.map((j: any) => <SelectItem key={j.drive_job_id} value={j.drive_job_id}>{j.drive_job_id.slice(0, 8)} ({j.status})</SelectItem>)}
               </SelectContent>
             </Select>
           )}

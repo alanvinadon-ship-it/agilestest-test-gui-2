@@ -3,8 +3,8 @@ import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
 import { usePermission, PermissionKey } from '../security';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { collectorApi } from '../api/collectorApi';
-import { repositoryApi } from '../api/repositoryApi';
+import { repositoryApi } from '../api/repositoryApiTrpc';
+import { trpcVanilla } from '@/lib/trpc';
 import type { CaptureJob, CaptureStatus, Execution, CreateCaptureRequest, CaptureTargetType, CaptureType } from '../types';
 import {
   Network, Loader2, X, AlertCircle, Plus, Search,
@@ -41,7 +41,16 @@ function CreateCaptureModal({ isOpen, onClose, projectId }: {
   const executions = (execData?.data || []) as Execution[];
 
   const mutation = useMutation({
-    mutationFn: (data: CreateCaptureRequest) => collectorApi.createCapture(data),
+    mutationFn: async (data: CreateCaptureRequest) => {
+      return trpcVanilla.captures.createJob.mutate({
+        executionId: data.execution_id ?? '',
+        projectId: data.project_id ?? '',
+        captureType: (data.capture_type ?? 'PCAP') as 'LOGS' | 'PCAP',
+        targetType: (data.target_type ?? 'SSH') as 'K8S' | 'SSH' | 'PROBE',
+        durationSeconds: data.duration_seconds,
+        maxSizeMb: data.max_size_mb,
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['captures'] });
       onClose();
@@ -184,15 +193,20 @@ export default function CapturesPage() {
 
   const { data: capturesData, isLoading: loadingCaptures } = useQuery({
     queryKey: ['captures', latestExecId],
-    queryFn: () => collectorApi.listCaptures(latestExecId),
+    queryFn: async () => {
+      const jobs = await trpcVanilla.captures.listJobs.query({ projectId: currentProject?.id || '' });
+      return { data: jobs };
+    },
     enabled: !!latestExecId,
     refetchInterval: 10000,
   });
 
-  const captures = (capturesData?.data || []) as CaptureJob[];
+  const captures = (capturesData?.data || []) as any[];
 
   const cancelMutation = useMutation({
-    mutationFn: (captureId: string) => collectorApi.cancelCapture(captureId),
+    mutationFn: async (captureId: string) => {
+      return trpcVanilla.captures.updateJob.mutate({ uid: captureId, status: 'CANCELLED' });
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['captures'] }),
   });
 
@@ -242,7 +256,7 @@ export default function CapturesPage() {
       ) : (
         <div className="space-y-2">
           {captures.map((cap) => {
-            const status = captureStatusConfig[cap.status];
+            const status = captureStatusConfig[cap.status as CaptureStatus] || captureStatusConfig['QUEUED'];
             return (
               <div key={cap.capture_id} className="flex items-center justify-between bg-card border border-border rounded-lg px-5 py-4">
                 <div className="flex items-center gap-4">

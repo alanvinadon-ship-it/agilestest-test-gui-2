@@ -9,7 +9,7 @@ import { useAuth } from '../auth/AuthContext';
 import { usePermission } from '../hooks/usePermission';
 import { PermissionKey } from '../admin/permissions';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { repositoryApi } from '../api/repositoryApi';
+import { repositoryApi } from '../api/repositoryApiTrpc';
 import { localScriptRepository } from '../ai/scriptRepository';
 import { useDatasetStorage } from '../contexts/DatasetStorageContext';
 import { Link } from 'wouter';
@@ -21,7 +21,7 @@ import {
   Code2, Database, Globe, Server, ChevronDown, Sparkles,
   RotateCcw, FileCode, Package,
 } from 'lucide-react';
-import { localExecutions, localCapturePolicies } from '../api/localStore';
+import { localExecutions, localCapturePolicies } from '../api/localStoreTrpc';
 import { toast } from 'sonner';
 import { resolveCapturePolicy, CaptureModeBadge } from '../capture';
 import type { CapturePolicy, CaptureMode } from '../capture/types';

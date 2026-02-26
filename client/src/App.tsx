@@ -1,5 +1,4 @@
 import { Switch, Route, Redirect } from "wouter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
@@ -37,16 +36,7 @@ import DriveReportingPage from "./pages/DriveReportingPage";
 import DriveIncidentReportPage from "./pages/DriveIncidentReportPage";
 import ProjectSettingsPage from "./pages/ProjectSettingsPage";
 
-// ─── Query Client ───────────────────────────────────────────────────────────
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      staleTime: 30_000,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
+
 // ─── Auth Guards ────────────────────────────────────────────────────────────
 function RequireAuth({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -193,18 +183,16 @@ function AppRouter() {
 // ─── App ────────────────────────────────────────────────────────────────────
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="dark" storageKey="agilestest-theme">
-        <AuthProvider>
-          <ProjectProvider>
-            <DatasetStorageProvider>
-              <AppRouter />
-              <Toaster />
-            </DatasetStorageProvider>
-          </ProjectProvider>
-        </AuthProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <ThemeProvider defaultTheme="dark" storageKey="agilestest-theme">
+      <AuthProvider>
+        <ProjectProvider>
+          <DatasetStorageProvider>
+            <AppRouter />
+            <Toaster />
+          </DatasetStorageProvider>
+        </ProjectProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

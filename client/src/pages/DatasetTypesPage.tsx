@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { localDatasetTypes } from '../api/localStore';
+import { localDatasetTypes } from '../api/localStoreTrpc';
 import type { DatasetType, DatasetTypeField, TestType } from '../types';
 import {
   Plus, Database, Search, Filter, Edit2, Trash2, X, AlertCircle,
@@ -348,20 +348,20 @@ export default function DatasetTypesPage() {
   });
 
   const items = useMemo(() => {
-    const all = data?.data || [];
+    const all: any[] = Array.isArray(data) ? data : (data as any)?.data || [];
     if (!searchQuery) return all;
     const q = searchQuery.toLowerCase();
-    return all.filter(dt =>
-      dt.name.toLowerCase().includes(q) ||
-      dt.dataset_type_id.toLowerCase().includes(q) ||
-      dt.description.toLowerCase().includes(q) ||
-      dt.tags.some(t => t.toLowerCase().includes(q))
+    return all.filter((dt: any) =>
+      dt.name?.toLowerCase().includes(q) ||
+      dt.dataset_type_id?.toLowerCase().includes(q) ||
+      dt.description?.toLowerCase().includes(q) ||
+      dt.tags?.some((t: string) => t.toLowerCase().includes(q))
     );
   }, [data, searchQuery]);
 
   const uniqueDomains = useMemo(() => {
-    const all = data?.data || [];
-    return Array.from(new Set(all.map(dt => dt.domain))).sort();
+    const all: any[] = Array.isArray(data) ? data : (data as any)?.data || [];
+    return Array.from(new Set(all.map((dt: any) => dt.domain))).sort();
   }, [data]);
 
   return (
@@ -426,7 +426,7 @@ export default function DatasetTypesPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {items.map(dt => {
+          {items.map((dt: any) => {
             const isExpanded = expandedId === dt.id;
             return (
               <div key={dt.id} className="border border-border/50 rounded-lg bg-card/50 overflow-hidden">
@@ -443,7 +443,7 @@ export default function DatasetTypesPage() {
                   <span className="text-xs text-muted-foreground ml-auto">{dt.schema_fields.length} champ{dt.schema_fields.length !== 1 ? 's' : ''}</span>
                   {dt.tags.length > 0 && (
                     <div className="flex items-center gap-1 ml-2">
-                      {dt.tags.slice(0, 3).map(tag => (
+                      {dt.tags.slice(0, 3).map((tag: string) => (
                         <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground">{tag}</span>
                       ))}
                       {dt.tags.length > 3 && <span className="text-[10px] text-muted-foreground">+{dt.tags.length - 3}</span>}

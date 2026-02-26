@@ -127,8 +127,8 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
 
     const toImport = response.suggestions.filter(s => selected.has(s.scenario_code));
 
-    setTimeout(() => {
-      const report = bulkImportSuggestions(toImport, profile.id, projectId, importMode);
+    setTimeout(async () => {
+      const report = await bulkImportSuggestions(toImport, profile.id, projectId, importMode);
       setImportReport(report);
       setImporting(false);
       setStep('report');

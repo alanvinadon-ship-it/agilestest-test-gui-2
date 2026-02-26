@@ -3,8 +3,8 @@ import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
 import { usePermission, PermissionKey } from '../security';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { localDatasetTypes } from '../api/localStore';
-import { repositoryApi } from '../api/repositoryApi';
+import { localDatasetTypes } from '../api/localStoreTrpc';
+import { repositoryApi } from '../api/repositoryApiTrpc';
 import { useDatasetStorage } from '../contexts/DatasetStorageContext';
 import type {
   DatasetBundle, DatasetInstance, DatasetType, TargetEnv, BundleStatus,
@@ -307,7 +307,7 @@ function BundleDetail({ bundle, projectId }: { bundle: DatasetBundle; projectId:
     queryFn: () => localDatasetTypes.list(),
   });
   const dtMap = useMemo(() => {
-    const types = (dtData?.data || []) as DatasetType[];
+    const types = (Array.isArray(dtData) ? dtData : (dtData as any)?.data || []) as DatasetType[];
     return new Map(types.map(dt => [dt.dataset_type_id, dt]));
   }, [dtData]);
 

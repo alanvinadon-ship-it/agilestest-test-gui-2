@@ -27,7 +27,7 @@ import {
   localProjects,
   localDriveJobs,
   localDriveRunSummaries,
-} from '@/api/localStore';
+} from '@/api/localStoreTrpc';
 import type {
   DriveCampaign,
   DriveRoute,
@@ -71,7 +71,7 @@ import {
 import { toast } from 'sonner';
 import { CapturePolicyEditor, CaptureModeBadge } from '@/capture';
 import type { CapturePolicy } from '@/capture/types';
-import { localCapturePolicies } from '@/api/localStore';
+import { localCapturePolicies } from '@/api/localStoreTrpc';
 
 // ─── Constants ────────────────────────────────────────────────────────────
 
@@ -110,8 +110,16 @@ export default function DriveCampaignsPage() {
   const canRunCampaign = can(PermissionKey.DRIVE_CAMPAIGNS_UPDATE);
 
   // Project selection
-  const [projects] = useState(() => localProjects.list({ limit: 200 }).data);
-  const [projectId, setProjectId] = useState(projects[0]?.id || '');
+  const [projects, setProjects] = useState<any[]>([]);
+  const [projectId, setProjectId] = useState('');
+
+  useEffect(() => {
+    localProjects.list({ limit: 200 }).then(result => {
+      const data = result?.data || [];
+      setProjects(data);
+      if (data.length > 0 && !projectId) setProjectId(data[0]?.id || '');
+    });
+  }, []);
 
   // Campaigns
   const [campaigns, setCampaigns] = useState<DriveCampaign[]>([]);
@@ -167,49 +175,49 @@ export default function DriveCampaignsPage() {
 
   // ─── Load data ────────────────────────────────────────────────────────
 
-  const loadCampaigns = () => {
+  const loadCampaigns = async () => {
     if (!projectId) return;
-    const result = localDriveCampaigns.list(projectId, { limit: 200 });
+    const result = await localDriveCampaigns.list(projectId, { limit: 200 });
     setCampaigns(result.data);
   };
 
-  const loadRoutes = (campaignId: string) => {
-    const r = localDriveRoutes.list(campaignId);
+  const loadRoutes = async (campaignId: string) => {
+    const r = await localDriveRoutes.list(campaignId);
     setRoutes(prev => ({ ...prev, [campaignId]: r }));
   };
 
-  const loadDevices = () => {
+  const loadDevices = async () => {
     if (!projectId) return;
-    const result = localTestDevices.list(projectId, { limit: 200 });
+    const result = await localTestDevices.list(projectId, { limit: 200 });
     setDevices(result.data);
   };
 
-  const loadProbeConfigs = () => {
+  const loadProbeConfigs = async () => {
     if (!projectId) return;
-    const p = localDriveProbeConfigs.list(projectId);
+    const p = await localDriveProbeConfigs.list(projectId);
     setProbeConfigs(p);
   };
 
-  const loadDriveJobs = (campaignId: string) => {
-    const result = localDriveJobs.list({ campaign_id: campaignId, limit: 200 });
+  const loadDriveJobs = async (campaignId: string) => {
+    const result = await localDriveJobs.list({ campaign_id: campaignId, limit: 200 });
     setDriveJobs(prev => ({ ...prev, [campaignId]: result.data }));
     // Load summaries for each job
     for (const j of result.data) {
-      const s = localDriveRunSummaries.get(j.drive_job_id);
-      setJobSummaries(prev => ({ ...prev, [j.drive_job_id]: s }));
+      const s = await localDriveRunSummaries.get(j.drive_job_id);
+      setJobSummaries(prev => ({ ...prev, [j.drive_job_id]: s as any }));
     }
   };
 
-  const openRunCampaign = (c: DriveCampaign) => {
+  const openRunCampaign = async (c: DriveCampaign) => {
     setRunCampaign(c);
-    const cRoutes = routes[c.campaign_id] || localDriveRoutes.list(c.campaign_id);
+    const cRoutes = routes[c.campaign_id] || await localDriveRoutes.list(c.campaign_id);
     if (Array.isArray(cRoutes) && cRoutes.length > 0) setRunRouteId(cRoutes[0].route_id);
     if (devices.length > 0) setRunDeviceId(devices[0].device_id);
     setRunCapturePcap(false);
     setShowRunModal(true);
   };
 
-  const executeRun = () => {
+  const executeRun = async () => {
     if (!runCampaign || !runRouteId || !runDeviceId) {
       toast.error('Sélectionnez une route et un équipement');
       return;
@@ -217,17 +225,19 @@ export default function DriveCampaignsPage() {
     try {
       setIsRunning(true);
       // Créer le job
-      const job = localDriveJobs.create({
+      const job = await localDriveJobs.create({
         campaign_id: runCampaign.campaign_id,
         route_id: runRouteId,
         device_id: runDeviceId,
         target_env: runCampaign.target_env,
-      });
-      setRunningJobId(job.drive_job_id);
-      toast.info(`Job ${job.drive_job_id.slice(0, 8)} créé (PENDING)`);
+      }) as any;
+      const jobId = job?.uid || job?.drive_job_id || 'unknown';
+      setRunningJobId(jobId);
+      toast.info(`Job ${jobId.slice(0, 8)} créé (PENDING)`);
 
       // Simuler l'exécution
-      const route = localDriveRoutes.list(runCampaign.campaign_id).find(r => r.route_id === runRouteId);
+      const routesList = await localDriveRoutes.list(runCampaign.campaign_id);
+      const route = routesList.find((r: any) => r.route_id === runRouteId || r.uid === runRouteId);
       if (!route) throw new Error('Route introuvable');
 
       // Seuils par défaut
@@ -237,8 +247,8 @@ export default function DriveCampaignsPage() {
         LATENCY: 50, JITTER: 20, PACKET_LOSS: 1,
       };
 
-      const result = localDriveJobs.simulateExecution(job.drive_job_id, route, thresholds);
-      toast.success(`Exécution terminée : ${result.status}`);
+      const result = await localDriveJobs.simulateExecution(jobId, route, thresholds);
+      toast.success(`Exécution terminée : ${(result as any).status || 'OK'}`);
 
       // Refresh
       loadCampaigns();
@@ -284,13 +294,13 @@ export default function DriveCampaignsPage() {
     setShowCampaignModal(true);
   };
 
-  const saveCampaign = () => {
+  const saveCampaign = async () => {
     try {
       if (editingCampaign) {
-        localDriveCampaigns.update(editingCampaign.campaign_id, campaignForm);
+        await localDriveCampaigns.update(editingCampaign.campaign_id, campaignForm);
         toast.success('Campagne mise à jour');
       } else {
-        localDriveCampaigns.create(projectId, campaignForm);
+        await localDriveCampaigns.create(projectId, campaignForm);
         toast.success('Campagne créée');
       }
       setShowCampaignModal(false);
@@ -300,14 +310,14 @@ export default function DriveCampaignsPage() {
     }
   };
 
-  const deleteCampaign = (id: string) => {
-    localDriveCampaigns.delete(id);
+  const deleteCampaign = async (id: string) => {
+    await localDriveCampaigns.delete(id);
     toast.success('Campagne supprimée');
     loadCampaigns();
   };
 
-  const updateCampaignStatus = (id: string, status: CampaignStatus) => {
-    localDriveCampaigns.updateStatus(id, status);
+  const updateCampaignStatus = async (id: string, status: CampaignStatus) => {
+    await localDriveCampaigns.updateStatus(id, status);
     toast.success(`Statut → ${status}`);
     loadCampaigns();
   };
@@ -320,13 +330,13 @@ export default function DriveCampaignsPage() {
     setShowRouteModal(true);
   };
 
-  const saveRoute = () => {
+  const saveRoute = async () => {
     try {
       let geojson = null;
       if (routeForm.route_geojson_str.trim()) {
         geojson = JSON.parse(routeForm.route_geojson_str);
       }
-      localDriveRoutes.create(routeParentId, {
+      await localDriveRoutes.create(routeParentId, {
         name: routeForm.name,
         expected_duration_min: routeForm.expected_duration_min,
         route_geojson: geojson,
@@ -339,8 +349,8 @@ export default function DriveCampaignsPage() {
     }
   };
 
-  const deleteRoute = (routeId: string, campaignId: string) => {
-    localDriveRoutes.delete(routeId);
+  const deleteRoute = async (routeId: string, campaignId: string) => {
+    await localDriveRoutes.delete(routeId);
     toast.success('Route supprimée');
     loadRoutes(campaignId);
   };
@@ -352,9 +362,9 @@ export default function DriveCampaignsPage() {
     setShowDeviceModal(true);
   };
 
-  const saveDevice = () => {
+  const saveDevice = async () => {
     try {
-      localTestDevices.create(projectId, deviceForm);
+      await localTestDevices.create(projectId, deviceForm);
       toast.success('Équipement ajouté');
       setShowDeviceModal(false);
       loadDevices();
@@ -363,8 +373,8 @@ export default function DriveCampaignsPage() {
     }
   };
 
-  const deleteDevice = (id: string) => {
-    localTestDevices.delete(id);
+  const deleteDevice = async (id: string) => {
+    await localTestDevices.delete(id);
     toast.success('Équipement supprimé');
     loadDevices();
   };
@@ -376,9 +386,9 @@ export default function DriveCampaignsPage() {
     setShowProbeModal(true);
   };
 
-  const saveProbe = () => {
+  const saveProbe = async () => {
     try {
-      localDriveProbeConfigs.create(projectId, probeForm);
+      await localDriveProbeConfigs.create(projectId, probeForm);
       toast.success('Sonde ajoutée');
       setShowProbeModal(false);
       loadProbeConfigs();
@@ -387,8 +397,8 @@ export default function DriveCampaignsPage() {
     }
   };
 
-  const deleteProbe = (id: string) => {
-    localDriveProbeConfigs.delete(id);
+  const deleteProbe = async (id: string) => {
+    await localDriveProbeConfigs.delete(id);
     toast.success('Sonde supprimée');
     loadProbeConfigs();
   };

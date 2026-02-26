@@ -6,8 +6,9 @@
  *   const instances = await adapter.instances.list(projectId);
  *
  * Le mode est déterminé par VITE_DATASET_STORAGE_MODE :
- *   - "local" (défaut) → localStorage
- *   - "api"            → Repository API avec fallback local
+ *   - "trpc" (défaut) → tRPC (base de données)
+ *   - "local"         → localStorage (demo/offline)
+ *   - "api"           → Repository API avec fallback local
  */
 import { createContext, useContext, type ReactNode } from 'react';
 import {
@@ -15,25 +16,32 @@ import {
   getStorageMode,
   type DatasetStorageAdapter,
 } from '../api/datasetStorageAdapter';
+import { TRPC_ADAPTER } from '../api/datasetTrpcAdapter';
 
 interface DatasetStorageContextValue {
   adapter: DatasetStorageAdapter;
-  mode: 'local' | 'api';
+  mode: 'local' | 'api' | 'trpc';
 }
 
-const DatasetStorageCtx = createContext<DatasetStorageContextValue>({
-  adapter: datasetStorage,
-  mode: getStorageMode(),
-});
+function resolveAdapter(): DatasetStorageContextValue {
+  const envMode = (import.meta.env.VITE_DATASET_STORAGE_MODE || '').toLowerCase();
+  if (envMode === 'local') {
+    return { adapter: datasetStorage, mode: 'local' };
+  }
+  if (envMode === 'api') {
+    return { adapter: datasetStorage, mode: 'api' };
+  }
+  // Default: use tRPC adapter (database)
+  return { adapter: TRPC_ADAPTER, mode: 'trpc' };
+}
+
+const resolved = resolveAdapter();
+
+const DatasetStorageCtx = createContext<DatasetStorageContextValue>(resolved);
 
 export function DatasetStorageProvider({ children }: { children: ReactNode }) {
-  const value: DatasetStorageContextValue = {
-    adapter: datasetStorage,
-    mode: getStorageMode(),
-  };
-
   return (
-    <DatasetStorageCtx.Provider value={value}>
+    <DatasetStorageCtx.Provider value={resolved}>
       {children}
     </DatasetStorageCtx.Provider>
   );

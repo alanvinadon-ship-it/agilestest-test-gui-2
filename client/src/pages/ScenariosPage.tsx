@@ -3,8 +3,8 @@ import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
 import { usePermission, PermissionKey } from '../security';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { repositoryApi } from '../api/repositoryApi';
-import { localScenarios } from '../api/localStore';
+import { repositoryApi } from '../api/repositoryApiTrpc';
+import { localScenarios } from '../api/localStoreTrpc';
 import type { TestProfile, TestScenario, TestType, ScenarioStatus } from '../types';
 import {
   Plus, FileText, Loader2, Trash2, X, AlertCircle, Search,
@@ -14,12 +14,12 @@ import {
 } from 'lucide-react';
 import GeneratePromptModal from '../components/GeneratePromptModal';
 import GenerateScriptModal from '../components/GenerateScriptModal';
-import { localDatasetTypes } from '../api/localStore';
+import { localDatasetTypes } from '../api/localStoreTrpc';
 import SuggestScenariosModal from '../components/SuggestScenariosModal';
 import ScenarioDatasetSection from '../components/ScenarioDatasetSection';
 import { CapturePolicyEditor } from '../capture';
 import type { CapturePolicy } from '../capture/types';
-import { localCapturePolicies } from '../api/localStore';
+import { localCapturePolicies } from '../api/localStoreTrpc';
 import {
   type ProfileDomain, DOMAIN_META, PROFILE_TYPE_META, type ProfileType,
 } from '../config/profileDomains';
@@ -93,12 +93,15 @@ function FinalizeDialog({ scenario, onClose, onFinalized }: {
 
   const handleFinalize = () => {
     setProcessing(true);
-    setTimeout(() => {
-      const res = localScenarios.finalize(scenario.id);
-      setResult(res);
-      setProcessing(false);
-      if (res.success) {
+    setTimeout(async () => {
+      try {
+        await localScenarios.finalize(scenario.id);
+        setResult({ success: true, errors: [] });
+        setProcessing(false);
         setTimeout(() => { onFinalized(); onClose(); }, 800);
+      } catch (err: any) {
+        setResult({ success: false, errors: [err?.message || 'Erreur lors de la finalisation'] });
+        setProcessing(false);
       }
     }, 400);
   };
@@ -343,7 +346,7 @@ function EditScenarioModal({ scenario, profile, onClose }: {
     queryKey: ['dataset-types-for-scenario', profile?.domain, profile?.test_type],
     queryFn: () => localDatasetTypes.list({ domain: profile?.domain, test_type: profile?.test_type }),
   });
-  const availableDatasetTypes = datasetTypesData?.data || [];
+  const availableDatasetTypes: any[] = Array.isArray(datasetTypesData) ? datasetTypesData : (datasetTypesData as any)?.data || [];
 
   const toggleDatasetType = (dtId: string) => {
     setRequiredDatasetTypes(prev => prev.includes(dtId) ? prev.filter(id => id !== dtId) : [...prev, dtId]);

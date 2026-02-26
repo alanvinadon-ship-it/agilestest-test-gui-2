@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { localKpiSamples, localDriveRunSummaries } from '@/api/localStore';
+import { localKpiSamples, localDriveRunSummaries } from '@/api/localStoreTrpc';
 import { parseFile, detectFormat, type ImportFormat, type KpiSampleInput } from '@/ai/kpiParsers';
 import type { DriveKpi, KpiSample } from '@/types';
 import {
@@ -109,7 +109,7 @@ export default function ImportResultsModal({
     setPreview(result);
   }, [content, selectedFormat, detectedFormat, driveJobId, campaignId, routeId]);
 
-  const doImport = useCallback(() => {
+  const doImport = useCallback(async () => {
     if (!preview || preview.samples.length === 0) {
       toast.error('Aucun échantillon à importer');
       return;
@@ -131,7 +131,7 @@ export default function ImportResultsModal({
         cell_id: s.cell_id,
         technology: s.technology as any,
       }));
-      const count = localKpiSamples.bulkInsert(kpiSamples);
+      const count = await localKpiSamples.bulkInsert(kpiSamples);
 
       // Recalculate summary using computeAndStore
       const thresholds: Record<string, number> = {
@@ -139,7 +139,7 @@ export default function ImportResultsModal({
         THROUGHPUT_DL: 20, THROUGHPUT_UL: 5,
         LATENCY: 50, JITTER: 20, PACKET_LOSS: 1,
       };
-      localDriveRunSummaries.computeAndStore(driveJobId, campaignId, thresholds);
+      await localDriveRunSummaries.computeAndStore(driveJobId, campaignId, thresholds);
 
       setImported(true);
       toast.success(`${count} échantillons importés, résumé recalculé`);

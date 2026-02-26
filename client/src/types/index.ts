@@ -325,8 +325,15 @@ export interface CreateProbeRequest {
   site: string;
   zone: string;
   type: ProbeType;
+  status?: ProbeStatus;
   capabilities: ProbeCapability[];
   project_ids?: string[];
+  version?: string;
+  interfaces?: string[];
+  metadata?: Record<string, unknown>;
+  heartbeat_interval_sec?: number;
+  allowlist_cidrs?: string[];
+  tls_enabled?: boolean;
   policy?: {
     max_capture_duration_sec?: number;
     max_capture_size_mb?: number;
@@ -344,8 +351,12 @@ export interface CreateProbeRequest {
 export interface UpdateProbeRequest {
   site?: string;
   zone?: string;
+  status?: ProbeStatus;
   capabilities?: ProbeCapability[];
   project_ids?: string[];
+  version?: string;
+  interfaces?: string[];
+  metadata?: Record<string, unknown>;
   policy?: CreateProbeRequest['policy'];
 }
 
