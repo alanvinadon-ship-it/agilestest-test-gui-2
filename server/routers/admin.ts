@@ -258,4 +258,67 @@ export const adminRouter = router({
       traceId: z.string().optional(),
     }))
     .mutation(({ input }) => adminDb.createAuditLog(input)),
+
+  // ══════════════════════════════════════════════════
+  //  Users Management — ORG_ADMIN only
+  // ══════════════════════════════════════════════════
+  listUsers: orgAdminProcedure
+    .input(z.object({
+      search: z.string().optional(),
+      role: z.string().optional(),
+      status: z.enum(["ACTIVE", "DISABLED", "INVITED"]).optional(),
+    }).merge(paginationInput))
+    .query(async ({ input }) => {
+      const all = await adminDb.listUsers({
+        search: input.search,
+        role: input.role,
+        status: input.status,
+      });
+      return paginateInMemory(all, input);
+    }),
+
+  getUser: orgAdminProcedure
+    .input(z.object({ id: z.number() }))
+    .query(({ input }) => adminDb.getUserById(input.id)),
+
+  createUser: orgAdminProcedure
+    .use(auditMutation("CREATE", "user"))
+    .input(z.object({
+      fullName: z.string().min(2, "Le nom doit contenir au moins 2 caractères"),
+      email: z.string().email("Adresse email invalide"),
+      role: z.enum(["ADMIN", "MANAGER", "VIEWER"]),
+      password: z.string().min(6, "Le mot de passe doit contenir au moins 6 caractères").optional(),
+    }))
+    .mutation(({ input }) => adminDb.createUser(input)),
+
+  updateUser: orgAdminProcedure
+    .use(auditMutation("UPDATE", "user"))
+    .input(z.object({
+      id: z.number(),
+      fullName: z.string().min(2).optional(),
+      email: z.string().email().optional(),
+      role: z.enum(["ADMIN", "MANAGER", "VIEWER"]).optional(),
+    }))
+    .mutation(({ input }) => {
+      const { id, ...data } = input;
+      return adminDb.updateUser(id, data);
+    }),
+
+  disableUser: orgAdminProcedure
+    .use(auditMutation("DISABLE", "user"))
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => adminDb.disableUser(input.id)),
+
+  enableUser: orgAdminProcedure
+    .use(auditMutation("ENABLE", "user"))
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => adminDb.enableUser(input.id)),
+
+  resetUserPassword: orgAdminProcedure
+    .use(auditMutation("PASSWORD_RESET", "user"))
+    .input(z.object({
+      id: z.number(),
+      newPassword: z.string().min(6, "Le mot de passe doit contenir au moins 6 caractères"),
+    }))
+    .mutation(({ input }) => adminDb.resetUserPassword(input.id, input.newPassword)),
 });

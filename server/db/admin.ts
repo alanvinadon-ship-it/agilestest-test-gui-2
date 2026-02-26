@@ -353,3 +353,138 @@ export async function createAuditLog(data: {
   const rows = await db.select().from(auditLogs).where(eq(auditLogs.uid, uid)).limit(1);
   return rows[0];
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+// USERS MANAGEMENT
+// ══════════════════════════════════════════════════════════════════════════
+
+type UserRole = "admin" | "manager" | "viewer" | "user";
+type UserStatus = "ACTIVE" | "DISABLED" | "INVITED";
+
+export async function listUsers(filters?: {
+  search?: string;
+  role?: string;
+  status?: UserStatus;
+}) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const conditions: any[] = [];
+  if (filters?.status) conditions.push(eq(users.status, filters.status));
+  if (filters?.role) {
+    // Map frontend role names to DB enum values
+    const dbRole = filters.role.toLowerCase() as UserRole;
+    conditions.push(eq(users.role, dbRole));
+  }
+
+  let query;
+  if (conditions.length > 0) {
+    query = db.select().from(users).where(and(...conditions)).orderBy(desc(users.createdAt));
+  } else {
+    query = db.select().from(users).orderBy(desc(users.createdAt));
+  }
+
+  let rows = await query;
+
+  // Apply search filter in-memory (name/email)
+  if (filters?.search) {
+    const q = filters.search.toLowerCase();
+    rows = rows.filter(r =>
+      (r.fullName && r.fullName.toLowerCase().includes(q)) ||
+      (r.name && r.name.toLowerCase().includes(q)) ||
+      (r.email && r.email.toLowerCase().includes(q))
+    );
+  }
+
+  return rows;
+}
+
+export async function getUserById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  return rows[0];
+}
+
+export async function createUser(data: {
+  fullName: string;
+  email: string;
+  role: string;
+  password?: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Check email uniqueness
+  const existing = await getUserByEmail(data.email);
+  if (existing) throw new Error(`L'email ${data.email} est déjà utilisé.`);
+
+  const dbRole = data.role.toLowerCase() as UserRole;
+  const openId = `local_${uuid()}`;
+  const passwordHash = data.password ? await bcrypt.hash(data.password, 10) : null;
+
+  await db.insert(users).values({
+    openId,
+    fullName: data.fullName,
+    name: data.fullName,
+    email: data.email,
+    role: dbRole,
+    status: "ACTIVE",
+    loginMethod: "local",
+    passwordHash,
+  });
+
+  const rows = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+  return rows[0];
+}
+
+export async function updateUser(id: number, data: {
+  fullName?: string;
+  email?: string;
+  role?: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const updateSet: Record<string, unknown> = {};
+  if (data.fullName) {
+    updateSet.full_name = data.fullName;
+    updateSet.name = data.fullName;
+  }
+  if (data.email) updateSet.email = data.email;
+  if (data.role) updateSet.role = data.role.toLowerCase();
+
+  if (Object.keys(updateSet).length === 0) throw new Error("Aucun champ à mettre à jour");
+
+  await db.update(users).set(updateSet as any).where(eq(users.id, id));
+  return getUserById(id);
+}
+
+export async function disableUser(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set({ status: "DISABLED" } as any).where(eq(users.id, id));
+  return getUserById(id);
+}
+
+export async function enableUser(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set({ status: "ACTIVE" } as any).where(eq(users.id, id));
+  return getUserById(id);
+}
+
+export async function resetUserPassword(id: number, newPassword: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const hash = await bcrypt.hash(newPassword, 10);
+  await db.update(users).set({ passwordHash: hash } as any).where(eq(users.id, id));
+  return { success: true, message: "Mot de passe réinitialisé avec succès" };
+}

@@ -125,3 +125,4 @@
 - [x] Documentation docs/PAGINATION.md v2 (standard, contrat, helpers, endpoints, UI, index, tests)
 - [x] 0 erreur TypeScript, 105 tests passent (6 fichiers)
 - [x] Bug: Liens d'invitation invalides — migré vers tRPC backend (validateInviteToken + acceptInvite publics, DB au lieu de localStorage)
+- [x] Bug: AdminUsersPage migrée vers tRPC/DB — CRUD complet (listUsers, createUser, updateUser, disableUser, enableUser, resetPassword) + invitations via DB
