@@ -8,6 +8,18 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 
+// ── Observability & Security ──────────────────────────────────────────────
+import {
+  requestIdMiddleware,
+  requestLoggingMiddleware,
+  metricsMiddleware,
+  registerHealthEndpoints,
+} from "../observability";
+import {
+  registerSecurityMiddleware,
+  corsMiddleware,
+} from "../security";
+
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
     const server = net.createServer();
@@ -30,12 +42,30 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
-  // Configure body parser with larger size limit for file uploads
+
+  // ── 1. Observability middleware (earliest possible) ──────────────────
+  // Request ID must be first so all subsequent middleware/routes can use it
+  app.use(requestIdMiddleware);
+  app.use(requestLoggingMiddleware);
+  app.use(metricsMiddleware);
+
+  // ── 2. Security middleware (before any routes) ──────────────────────
+  // Security headers, rate limiting on /api/oauth and /api/trpc
+  registerSecurityMiddleware(app);
+  app.use(corsMiddleware);
+
+  // ── 3. Body parsers ─────────────────────────────────────────────────
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  // OAuth callback under /api/oauth/callback
+
+  // ── 4. Health & metrics endpoints ───────────────────────────────────
+  // Registered before app routes so /healthz, /readyz, /metrics are always accessible
+  registerHealthEndpoints(app);
+
+  // ── 5. OAuth callback under /api/oauth/callback ─────────────────────
   registerOAuthRoutes(app);
-  // tRPC API
+
+  // ── 6. tRPC API ─────────────────────────────────────────────────────
   app.use(
     "/api/trpc",
     createExpressMiddleware({
@@ -43,7 +73,8 @@ async function startServer() {
       createContext,
     })
   );
-  // development mode uses Vite, production mode uses static files
+
+  // ── 7. Frontend (Vite dev or static) ────────────────────────────────
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
   } else {

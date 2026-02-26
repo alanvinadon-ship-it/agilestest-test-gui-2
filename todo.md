@@ -108,3 +108,9 @@
 - [x] Tests: job queue exports + handler registration
 - [x] Tests: ENV config (retention, security, S3) + schema tables
 - [x] Tests: smoke test script (scripts/smoke-test.sh)
+- [x] Core: Brancher registerSecurityMiddleware(app) AVANT les routes tRPC
+- [x] Core: Brancher registerHealthEndpoints(app) AVANT app.listen
+- [x] Core: Brancher requestIdMiddleware + requestLoggingMiddleware + metricsMiddleware
+- [x] Core: Vérifier /healthz (200 ok), /readyz (200 ready), /metrics (Prometheus format)
+- [x] Core: Tests d'intégration (13 tests: requestId, metrics, security headers, rate limit, CORS, health registration)
+- [x] Core: Mettre à jour docs/OPERATIONS.md (section Middleware Pipeline ajoutée)

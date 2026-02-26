@@ -7,6 +7,7 @@ import { Request, Response, NextFunction, Express } from "express";
 import { randomUUID } from "crypto";
 import logger from "./logger";
 import { getDb } from "./db";
+import { sql } from "drizzle-orm";
 
 // ── Request ID Middleware ──────────────────────────────────────────────────
 
@@ -204,9 +205,7 @@ export function registerHealthEndpoints(app: Express) {
       }
 
       // Quick DB ping
-      await db.execute(
-        require("drizzle-orm").sql`SELECT 1`
-      );
+      await db.execute(sql`SELECT 1`);
 
       res.status(200).json({
         status: "ready",

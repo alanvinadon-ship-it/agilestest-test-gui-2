@@ -44,6 +44,37 @@ Voir `.env.example.prod` pour la liste complète. Les variables critiques :
 
 ---
 
+## Middleware Pipeline (server/_core/index.ts)
+
+Les middlewares sont branchés dans `server/_core/index.ts` dans l'ordre suivant :
+
+| Ordre | Middleware | Fichier | Rôle |
+|-------|-----------|---------|------|
+| 1 | `requestIdMiddleware` | `server/observability.ts` | Génère/propage `x-request-id` sur chaque requête |
+| 2 | `requestLoggingMiddleware` | `server/observability.ts` | Log JSON structuré (pino) de chaque requête |
+| 3 | `metricsMiddleware` | `server/observability.ts` | Compteurs Prometheus (HTTP, tRPC, jobs) |
+| 4 | `registerSecurityMiddleware` | `server/security.ts` | Headers sécurité + rate limit `/api/oauth` (10/15min) + `/api/trpc` (200/min) |
+| 5 | `corsMiddleware` | `server/security.ts` | CORS strict via `CORS_ORIGIN` (prod) ou permissif (dev) |
+| 6 | Body parsers | Express built-in | JSON/URL-encoded avec limite 50MB |
+| 7 | `registerHealthEndpoints` | `server/observability.ts` | `/healthz`, `/readyz`, `/metrics` |
+| 8 | OAuth routes | `server/_core/oauth.ts` | `/api/oauth/callback` |
+| 9 | tRPC routes | `server/routers.ts` | `/api/trpc/*` |
+| 10 | Frontend | Vite (dev) / static (prod) | SPA fallback |
+
+**Variables ENV pour activer/configurer :**
+
+| Variable | Défaut | Description |
+|----------|--------|-------------|
+| `LOG_LEVEL` | `info` | Niveau de log pino (debug, info, warn, error) |
+| `METRICS_ENABLED` | `true` | Active les compteurs Prometheus |
+| `METRICS_BASIC_AUTH_USER` | _(vide)_ | Si défini, protège `/metrics` par Basic Auth |
+| `METRICS_BASIC_AUTH_PASSWORD` | _(vide)_ | Mot de passe Basic Auth pour `/metrics` |
+| `CORS_ORIGIN` | _(vide)_ | Origines autorisées (CSV). Vide = permissif en dev, bloqué en prod |
+| `RATE_LIMIT_LOGIN_MAX` | `10` | Requêtes max sur `/api/oauth` par fenêtre |
+| `RATE_LIMIT_LOGIN_WINDOW_MS` | `900000` | Fenêtre de rate limit login (15 min) |
+
+---
+
 ## Endpoints de monitoring
 
 | Endpoint | Méthode | Auth | Description |
