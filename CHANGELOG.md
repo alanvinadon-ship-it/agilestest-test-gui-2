@@ -6,6 +6,38 @@ Toutes les dates sont au format ISO 8601. Les entrées sont classées par versio
 
 ---
 
+## v0.4.0 — 2026-02-26 — Auth Serveur Persistante
+
+Cette version migre l'authentification d'un système basé sur localStorage vers une authentification serveur persistante via cookie HTTPOnly. Le flux OAuth Manus existant est conservé et enrichi avec les rôles RBAC.
+
+### Ajouts
+
+**auth.me enrichi** — L'endpoint `auth.me` retourne désormais les champs RBAC résolus : `appRoles`, `effectiveRole`, `permissions`, `isAdmin`, `canWrite`, `isActive`. La résolution des rôles utilise le cache en mémoire du middleware RBAC (TTL 60s).
+
+**AuthContext réécrit** — Le `AuthContext` frontend (`client/src/auth/AuthContext.tsx`) utilise désormais `trpc.auth.me.useQuery()` au lieu de `localStorage.getItem('access_token')`. L'interface reste 100% rétro-compatible : `user`, `isAuthenticated`, `isAdmin`, `canWrite`, `hasRole`, `logout`.
+
+**LoginPage OAuth** — La page de login redirige désormais vers le portail OAuth Manus au lieu d'afficher un formulaire email/password local.
+
+**api/client.ts sécurisé** — Le client Axios utilise `withCredentials: true` pour envoyer le cookie automatiquement. Plus aucun Bearer token n'est injecté depuis localStorage.
+
+**14 tests auth** — `server/auth.test.ts` couvre : auth.me authentifié/non authentifié, champs RBAC, mapping admin/viewer, dates ISO, logout cookie clear, protection des procédures, absence de token dans le body, idempotence.
+
+**Documentation AUTH.md** — `docs/AUTH.md` documente le flux OAuth complet, le stockage session, les variables d'environnement, le mapping des rôles et le diagramme de séquence.
+
+### Corrections
+
+**0 token dans localStorage** — Suppression de tous les usages de `localStorage.getItem('access_token')` et `localStorage.getItem('user')` dans le frontend. Le nettoyage au logout supprime les clés résiduelles.
+
+**AdminRolesPage** — Remplacement du comptage de rôles basé sur localStorage par un placeholder serveur (sera complété avec un endpoint dédié).
+
+**permissions.ts** — Suppression de la validation de suppression de rôle basée sur localStorage (désormais gérée côté serveur via RBAC).
+
+### Tests
+
+**77 tests passent** (5 fichiers, 0 échec) : 1 auth.logout, 10 emailService, 14 auth, 21 routers, 31 RBAC.
+
+---
+
 ## v0.3.0 — 2026-02-26 — RBAC Enforcement serveur
 
 Cette version implémente le contrôle d’accès RBAC (Role-Based Access Control) strict côté serveur sur toutes les procédures tRPC. Chaque requête est interceptée par des middlewares composables qui vérifient l’authentification, le rôle applicatif, les permissions granulaires et l’appartenance aux projets.

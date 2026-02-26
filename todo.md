@@ -78,3 +78,18 @@
 - [x] Tests Vitest RBAC: 31 tests couvrant 10+ procédures critiques ✅
 - [x] Documentation docs/RBAC_SERVER.md avec matrice rôles x actions (9 modules)
 - [x] Aucune régression: 63 tests passent (32 existants + 31 RBAC)
+- [x] AUTH-SERVER-PERSISTENT: Migration auth serveur persistante
+- [x] Audit OAuth Manus existant (server/_core/oauth.ts, context.ts, cookies.ts)
+- [x] authRouter tRPC complet: auth.me enrichi (RBAC fields), auth.logout (cookie clear)
+- [x] Session cookie HTTPOnly (SameSite=Lax, Secure en prod, app_session_id)
+- [x] ctx.user hydraté automatiquement à chaque requête (via sdk.authenticateRequest)
+- [x] Frontend: AuthContext réécrit pour utiliser trpc.auth.me au lieu de localStorage
+- [x] Frontend: 0 usage de localStorage pour auth (access_token, user supprimés)
+- [x] Frontend: AuthProvider compatible (user, isLoading, isAuthed, logout, isAdmin, canWrite, hasRole)
+- [x] Sécurité: tokens jamais dans localStorage, cookie HTTPOnly uniquement
+- [x] Sécurité: CSRF protection (SameSite=Lax) + credentials: include
+- [x] Tests: auth.me renvoie user enrichi quand authed (14 tests)
+- [x] Tests: auth.me retourne null quand non authed
+- [x] Tests: logout invalide session (clearCookie + maxAge: -1)
+- [x] Documentation docs/AUTH.md (flux OAuth, stockage session, variables ENV)
+- [x] Aucune régression: 77 tests passent (5 fichiers, 0 échec)

@@ -38,22 +38,14 @@ export default function AdminRolesPage() {
   const roles = useMemo(() => getAllRoles(activeTab), [activeTab, refreshKey]);
 
   // Count users/memberships for each role
+  // NOTE: Role counts are now fetched from the server via tRPC.
+  // The admin.listUsers and admin.listMemberships endpoints provide accurate counts.
+  // For now, we show "--" until server-side role count endpoint is available.
   const roleCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    try {
-      const usersRaw = localStorage.getItem('agilestest_admin_users');
-      const membershipsRaw = localStorage.getItem('agilestest_memberships');
-      const users = usersRaw ? JSON.parse(usersRaw) as Array<{ role: string }> : [];
-      const memberships = membershipsRaw ? JSON.parse(membershipsRaw) as Array<{ project_role: string }> : [];
-
-      for (const r of roles) {
-        if (r.scope === 'GLOBAL') {
-          counts[r.role_id] = users.filter(u => u.role === r.role_id).length;
-        } else {
-          counts[r.role_id] = memberships.filter(m => m.project_role === r.role_id).length;
-        }
-      }
-    } catch { /* ignore */ }
+    for (const r of roles) {
+      counts[r.role_id] = 0; // Will be populated from server
+    }
     return counts;
   }, [roles]);
 
