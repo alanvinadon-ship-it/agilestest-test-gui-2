@@ -17,6 +17,8 @@ import {
   Package, Container, AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { DocSearchDialog, useDocSearchShortcut } from '../components/DocSearchDialog';
+import { Kbd } from '@/components/ui/kbd';
 
 // ─── Guide definitions ──────────────────────────────────────────────────
 
@@ -105,6 +107,7 @@ export default function DocsPage() {
   const [search, setSearch] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const docSearch = useDocSearchShortcut();
 
   // Fetch markdown
   useEffect(() => {
@@ -167,7 +170,7 @@ export default function DocsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
             <BookOpen className="w-5 h-5 text-primary" />
@@ -177,7 +180,19 @@ export default function DocsPage() {
             <p className="text-sm text-muted-foreground">Guides utilisateur, administration et exploitation</p>
           </div>
         </div>
+        <button
+          onClick={() => docSearch.setOpen(true)}
+          className="flex items-center gap-2 h-9 px-4 rounded-md border border-border bg-secondary/40 text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors"
+        >
+          <Search className="w-4 h-4" />
+          <span className="text-sm">Recherche globale</span>
+          <div className="flex items-center gap-0.5 ml-1">
+            <Kbd>⌘</Kbd><Kbd>K</Kbd>
+          </div>
+        </button>
       </div>
+
+      <DocSearchDialog open={docSearch.open} onOpenChange={docSearch.setOpen} />
 
       <div className="flex gap-6">
         {/* Left sidebar — Guide nav + TOC */}
