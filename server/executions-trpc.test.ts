@@ -179,6 +179,14 @@ describe("frontend pages: no memoryStore imports", () => {
     expect(content).toContain("trpc");
   });
 
+  it("ExecutionsPage should have scenario filter dropdown", async () => {
+    const fs = await import("fs");
+    const content = fs.readFileSync("client/src/pages/ExecutionsPage.tsx", "utf-8");
+    expect(content).toContain("scenarioFilter");
+    expect(content).toContain("Tous les scénarios");
+    expect(content).toContain("trpc.scenarios.list.useQuery");
+  });
+
   it("CapturesPage should not import from localStore/memoryStore", async () => {
     const fs = await import("fs");
     const content = fs.readFileSync("client/src/pages/CapturesPage.tsx", "utf-8");

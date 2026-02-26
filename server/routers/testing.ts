@@ -6,6 +6,7 @@ import { getDb } from "../db";
 import {
   testProfiles, testScenarios, datasets, executions,
   artifacts, incidents, captures, probes, generatedScripts,
+  aiAnalyses,
 } from "../../drizzle/schema";
 import { paginationInput } from "../../shared/pagination";
 import { normalizePagination, countRows } from "../lib/pagination";
@@ -207,12 +208,14 @@ export const datasetsRouter = router({
 export const executionsRouter = router({
   list: protectedProcedure.input(projectScopedList.extend({
     status: z.enum(["PENDING", "RUNNING", "PASSED", "FAILED", "ERROR", "CANCELLED"]).optional(),
+    scenarioId: z.number().optional(),
   })).query(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     const { page, pageSize, offset } = normalizePagination(input);
     const conditions: SQL[] = [eq(executions.projectId, input.projectId)];
     if (input.status) conditions.push(eq(executions.status, input.status));
+    if (input.scenarioId) conditions.push(eq(executions.scenarioId, input.scenarioId));
     const where = and(...conditions);
     const [data, cnt] = await Promise.all([
       db.select().from(executions).where(where).orderBy(desc(executions.createdAt)).limit(pageSize).offset(offset),
@@ -226,11 +229,22 @@ export const executionsRouter = router({
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     const r = await db.select().from(executions).where(eq(executions.id, input.executionId)).limit(1);
     if (!r.length) throw new TRPCError({ code: "NOT_FOUND", message: "Exécution introuvable" });
-    const [arts, incs] = await Promise.all([
+    // Fetch related data in parallel
+    const [arts, incs, analyses, scenario, profile] = await Promise.all([
       db.select().from(artifacts).where(eq(artifacts.executionId, input.executionId)),
-      db.select().from(incidents).where(eq(incidents.executionId, input.executionId)),
+      db.select().from(incidents).where(eq(incidents.executionId, input.executionId)).orderBy(desc(incidents.createdAt)),
+      db.select().from(aiAnalyses).where(eq(aiAnalyses.executionId, input.executionId)).orderBy(desc(aiAnalyses.createdAt)),
+      r[0].scenarioId ? db.select().from(testScenarios).where(eq(testScenarios.id, r[0].scenarioId)).limit(1) : Promise.resolve([]),
+      r[0].profileId ? db.select().from(testProfiles).where(eq(testProfiles.id, r[0].profileId)).limit(1) : Promise.resolve([]),
     ]);
-    return { ...r[0], artifacts: arts, incidents: incs };
+    return {
+      ...r[0],
+      artifacts: arts,
+      incidents: incs,
+      analyses,
+      scenario: scenario[0] ?? null,
+      profile: profile[0] ?? null,
+    };
   }),
   create: protectedProcedure.input(z.object({
     projectId: z.number(), profileId: z.number().optional(), scenarioId: z.number().optional(),
@@ -308,12 +322,16 @@ export const probesRouter = router({
   list: protectedProcedure.input(z.object({
     ...paginationInput.shape,
     status: z.enum(["ONLINE", "OFFLINE", "DEGRADED"]).optional(),
+    probeType: z.enum(["LINUX_EDGE", "K8S_CLUSTER", "NETWORK_TAP"]).optional(),
+    search: z.string().optional(),
   })).query(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     const { page, pageSize, offset } = normalizePagination(input);
     const conditions: SQL[] = [];
     if (input.status) conditions.push(eq(probes.status, input.status));
+    if (input.probeType) conditions.push(eq(probes.probeType, input.probeType));
+    if (input.search) conditions.push(like(probes.name, `%${input.search}%`));
     const where = conditions.length ? and(...conditions) : undefined;
     const baseQuery = where ? db.select().from(probes).where(where) : db.select().from(probes);
     const [data, cnt] = await Promise.all([
@@ -322,6 +340,25 @@ export const probesRouter = router({
     ]);
     const total = cnt[0]?.count ?? 0;
     return { data, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
+  }),
+  get: protectedProcedure.input(z.object({ probeId: z.number() })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const r = await db.select().from(probes).where(eq(probes.id, input.probeId)).limit(1);
+    if (!r.length) throw new TRPCError({ code: "NOT_FOUND", message: "Sonde introuvable" });
+    // Fetch captures linked to this probe (targetType = PROBE)
+    const linkedCaptures = await db.select().from(captures)
+      .where(and(eq(captures.targetType, "PROBE")))
+      .orderBy(desc(captures.createdAt))
+      .limit(50);
+    // Filter captures whose config references this probe
+    const probeCaptures = linkedCaptures.filter((c: any) => {
+      try {
+        const cfg = typeof c.config === 'string' ? JSON.parse(c.config) : c.config;
+        return cfg?.probeId === input.probeId;
+      } catch { return false; }
+    });
+    return { ...r[0], captures: probeCaptures };
   }),
   create: protectedProcedure.input(z.object({
     name: z.string().min(1), probeType: z.enum(["LINUX_EDGE", "K8S_CLUSTER", "NETWORK_TAP"]).default("LINUX_EDGE"),
@@ -336,6 +373,38 @@ export const probesRouter = router({
       capabilities: input.capabilities ?? null, config: input.config ?? null,
     });
     return { success: true, probeId: Number(res[0].insertId) };
+  }),
+  update: protectedProcedure.input(z.object({
+    probeId: z.number(),
+    name: z.string().optional(),
+    probeType: z.enum(["LINUX_EDGE", "K8S_CLUSTER", "NETWORK_TAP"]).optional(),
+    host: z.string().optional(),
+    port: z.number().optional(),
+    capabilities: z.any().optional(),
+    config: z.any().optional(),
+  })).mutation(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const u: Record<string, unknown> = {};
+    if (input.name !== undefined) u.name = input.name;
+    if (input.probeType !== undefined) u.probeType = input.probeType;
+    if (input.host !== undefined) u.host = input.host;
+    if (input.port !== undefined) u.port = input.port;
+    if (input.capabilities !== undefined) u.capabilities = input.capabilities;
+    if (input.config !== undefined) u.config = input.config;
+    if (Object.keys(u).length) await db.update(probes).set(u).where(eq(probes.id, input.probeId));
+    return { success: true };
+  }),
+  updateStatus: protectedProcedure.input(z.object({
+    probeId: z.number(),
+    status: z.enum(["ONLINE", "OFFLINE", "DEGRADED"]),
+  })).mutation(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const updateSet: Record<string, unknown> = { status: input.status };
+    if (input.status === "ONLINE") updateSet.lastSeenAt = new Date();
+    await db.update(probes).set(updateSet).where(eq(probes.id, input.probeId));
+    return { success: true };
   }),
   delete: protectedProcedure.input(z.object({ probeId: z.number() })).mutation(async ({ input }) => {
     const db = await getDb();

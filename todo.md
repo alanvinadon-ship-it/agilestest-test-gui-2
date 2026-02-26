@@ -130,3 +130,16 @@
 - [x] UI: Bouton Analyser IA + Parser JMeter avec statut job (badge QUEUED/RUNNING/COMPLETED/FAILED)
 - [x] UI: Invalidation cache après enqueue (invalidate executions.list + jobs.listByRun)
 - [x] Tests: 25 tests ciblés (router structure, input validation, status values, schema tables, no memoryStore)
+- [x] Étape 1: Backend — endpoints results.getByRun, artifacts.listByRun, issues.listByRun
+- [x] Étape 1: Frontend — ExecutionDetailPage branchée sur tRPC (plus de memoryStore)
+- [x] Étape 1: Frontend — hooks useExecution, useRunResults, useRunArtifacts, useRunIssues, useRunJobs
+- [x] Étape 1: Frontend — boutons Analyser IA / Parser JMeter dans ExecutionDetailPage
+- [x] Étape 1: Tests — get/run scope + forbidden cross-org + smoke page (17 tests execution-detail.test.ts)
+- [x] Étape 2: Backend — executions.list filtre scenarioId + endpoint scenarios.list
+- [x] Étape 2: Frontend — Dropdown scénario dans ExecutionsPage (filtre server-side)
+- [x] Étape 2: Tests — list filtered by scenarioId (1 test dans executions-trpc.test.ts)
+- [x] Étape 3: Backend — probesRouter enrichi (list+get+create+update+updateStatus+delete) + liaison captures
+- [x] Étape 3: Frontend — ProbesPage réécrite tRPC (CRUD + pagination + filtres status/type/search)
+- [x] Étape 3: Frontend — intégration captures liées dans ProbeCard (expanded view)
+- [x] Étape 3: Tests — 25 tests probes-trpc.test.ts (CRUD, input validation, frontend migration)
+- [x] Étape 3: Docs — (intégré dans les tests et le code)
