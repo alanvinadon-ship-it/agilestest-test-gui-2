@@ -28,9 +28,11 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 
+import { memoryStore } from '../api/memoryStore';
+
 // Feature flag: show disabled + tooltip instead of hiding
 const EXPLAIN_MODE = typeof window !== 'undefined'
-  ? localStorage.getItem('RBAC_EXPLAIN_MODE') === 'true'
+  ? memoryStore.getItem('RBAC_EXPLAIN_MODE') === 'true'
   : false;
 
 interface PermissionGateProps {

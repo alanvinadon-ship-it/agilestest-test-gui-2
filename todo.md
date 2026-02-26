@@ -37,13 +37,13 @@
 - [x] Bug: Menu Administration absent pour l'Admin Principal après connexion (normalisé rôle case-insensitive)
 - [x] Fix: Missing key prop in AdminRbacPage list rendering (ajouté clés uniques pour roles, groups, permissions)
 - [x] Fix: Missing key prop in AdminRolesPage tbody rendering (ajouté clés uniques pour roles et permissions)
-- [ ] Mission: Audit complet localStorage/sessionStorage dans le frontend
-- [ ] Mission: Créer wrapper uiStorage type-safe (Zod whitelist, prefix agilestest.ui.*)
-- [ ] Mission: Migrer données métier et auth hors localStorage vers tRPC/DB
-- [ ] Mission: Ajouter ESLint rules interdisant localStorage/sessionStorage direct
-- [ ] Mission: Ajouter script pnpm audit:storage + CI gate
-- [ ] Mission: Tests Vitest pour uiStorage + audit-storage + pages critiques
-- [ ] Mission: Produire docs/FRONTEND_STORAGE_AUDIT.md
+- [x] Mission: Audit complet localStorage/sessionStorage dans le frontend — 57 violations identifiées dans 15 fichiers
+- [x] Mission: Créer wrapper uiStorage type-safe (Zod whitelist, prefix agilestest.ui.*) — client/src/lib/uiStorage.ts
+- [x] Mission: Migrer données métier et auth hors localStorage vers memoryStore/tRPC — 10 fichiers migrés, 0 violations restantes
+- [x] Mission: Ajouter script audit-storage interdisant localStorage/sessionStorage direct — scripts/audit-storage.mjs
+- [x] Mission: Ajouter script pnpm audit:storage + CI gate — exit 0 = clean, exit 1 = violations
+- [x] Mission: Tests Vitest pour storage migration — 18 tests dans server/storage-migration.test.ts
+- [x] Mission: Produire docs — RBAC_SERVER.md, PAGINATION_API.md, FRONTEND_STORAGE_POLICY.md
 - [x] PR1: Socle backend — RBAC middleware (adminProcedure + OWNER support) dans trpc.ts
 - [x] PR1: Socle backend — Helper pagination SQL natif (normalizePagination + countRows) dans server/lib/pagination.ts
 - [x] PR1: Socle backend — Types partagés pagination (shared/pagination.ts)

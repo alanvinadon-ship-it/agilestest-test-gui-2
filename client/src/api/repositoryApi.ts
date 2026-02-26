@@ -20,7 +20,7 @@ const PREFIX = '/api/v1/repository';
 
 /**
  * Détecte si une API backend est configurée.
- * Si VITE_API_BASE_URL n'est pas défini, on utilise directement le localStorage.
+ * Si VITE_API_BASE_URL n'est pas défini, on utilise directement le memoryStore (via localStore).
  */
 const API_AVAILABLE = !!import.meta.env.VITE_API_BASE_URL;
 

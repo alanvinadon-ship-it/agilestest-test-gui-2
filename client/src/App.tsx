@@ -1,5 +1,4 @@
 import { Switch, Route, Redirect } from "wouter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
@@ -37,19 +36,16 @@ import DriveReportingPage from "./pages/DriveReportingPage";
 import DriveIncidentReportPage from "./pages/DriveIncidentReportPage";
 import ProjectSettingsPage from "./pages/ProjectSettingsPage";
 
-// ─── Query Client ───────────────────────────────────────────────────────────
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      staleTime: 30_000,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
 // ─── Auth Guards ────────────────────────────────────────────────────────────
 function RequireAuth({ children }: { children: ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
   if (!isAuthenticated) return <Redirect to="/login" />;
   return <>{children}</>;
 }
@@ -80,14 +76,13 @@ function ProjectScoped({ children }: { children: ReactNode }) {
 
 // ─── Router ─────────────────────────────────────────────────────────────────
 function AppRouter() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
 
-  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
       {/* Login */}
       <Route path="/login">
-        {isAuthenticated ? <Redirect to="/" /> : <LoginPage />}
+        {loading ? null : isAuthenticated ? <Redirect to="/" /> : <LoginPage />}
       </Route>
 
       {/* Invitation acceptance (public, no auth required) */}
@@ -193,18 +188,16 @@ function AppRouter() {
 // ─── App ────────────────────────────────────────────────────────────────────
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="dark" storageKey="agilestest-theme">
-        <AuthProvider>
-          <ProjectProvider>
-            <DatasetStorageProvider>
-              <AppRouter />
-              <Toaster />
-            </DatasetStorageProvider>
-          </ProjectProvider>
-        </AuthProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <ThemeProvider defaultTheme="dark" storageKey="agilestest-theme">
+      <AuthProvider>
+        <ProjectProvider>
+          <DatasetStorageProvider>
+            <AppRouter />
+            <Toaster />
+          </DatasetStorageProvider>
+        </ProjectProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

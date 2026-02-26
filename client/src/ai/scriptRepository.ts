@@ -1,11 +1,12 @@
 /**
  * ScriptRepository — CRUD pour les scripts générés par l'IA.
  *
- * Stockage localStorage (mode local) avec les mêmes patterns que localStore.
+ * Stockage memoryStore (in-memory) avec les mêmes patterns que localStore.
  * Les endpoints API sont définis pour le mode production.
  */
 import type { GeneratedScript, ScriptFramework, ScriptStatus, CodeLanguage } from './types';
 import type { TargetEnv, PaginatedResponse } from '../types';
+import { memoryStore } from '../api/memoryStore';
 
 const STORAGE_KEY = 'agilestest_generated_scripts';
 
@@ -13,13 +14,13 @@ const STORAGE_KEY = 'agilestest_generated_scripts';
 
 function readAll(): GeneratedScript[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = memoryStore.getItem(STORAGE_KEY);
     return raw ? JSON.parse(raw) : [];
   } catch { return []; }
 }
 
 function writeAll(scripts: GeneratedScript[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(scripts));
+  memoryStore.setItem(STORAGE_KEY, JSON.stringify(scripts));
 }
 
 function generateId(): string {

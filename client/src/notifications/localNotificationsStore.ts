@@ -39,15 +39,17 @@ const uid = () => `notif_${Date.now()}_${Math.random().toString(36).slice(2, 8)}
 const now = () => new Date().toISOString();
 const traceId = () => `tr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 
+import { memoryStore } from '../api/memoryStore';
+
 function getItem<T>(key: string, fallback: T): T {
   try {
-    const raw = localStorage.getItem(STORAGE_PREFIX + key);
+    const raw = memoryStore.getItem(STORAGE_PREFIX + key);
     return raw ? JSON.parse(raw) : fallback;
   } catch { return fallback; }
 }
 
 function setItem<T>(key: string, value: T): void {
-  localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(value));
+  memoryStore.setItem(STORAGE_PREFIX + key, JSON.stringify(value));
 }
 
 const MASK = '********';
@@ -456,7 +458,7 @@ function renderTemplate(template: string, context: DispatchContext, schema: Temp
 
 function addAudit(action: string, actor: string, details: Record<string, unknown>): void {
   try {
-    const raw = localStorage.getItem('agilestest_audit_log');
+    const raw = memoryStore.getItem('agilestest_audit_log');
     const items = raw ? JSON.parse(raw) : [];
     items.push({
       id: uid(),
@@ -470,7 +472,7 @@ function addAudit(action: string, actor: string, details: Record<string, unknown
       details,
       trace_id: traceId(),
     });
-    localStorage.setItem('agilestest_audit_log', JSON.stringify(items));
+    memoryStore.setItem('agilestest_audit_log', JSON.stringify(items));
   } catch { /* ignore */ }
 }
 

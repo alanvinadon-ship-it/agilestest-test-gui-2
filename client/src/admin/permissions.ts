@@ -7,6 +7,7 @@
  *   2. Si projectId fourni → permissions du rôle projet
  *   3. Sinon → permissions du rôle global
  */
+import { memoryStore } from '../api/memoryStore';
 
 // ─── PermissionKey Enum ────────────────────────────────────────────────
 
@@ -471,7 +472,7 @@ export function getEffectivePermissions(
 
 function getMembershipsFromStore(userId: string): Array<{ project_id: string; project_role: string }> {
   try {
-    const raw = localStorage.getItem('agilestest_memberships');
+    const raw = memoryStore.getItem('agilestest_memberships');
     if (!raw) return [];
     const all = JSON.parse(raw) as Array<{ user_id: string; project_id: string; project_role: string }>;
     return all.filter(m => m.user_id === userId);
@@ -485,9 +486,9 @@ function getRoleDefinition(roleId: string): RoleDefinition | undefined {
   const systemRole = SYSTEM_ROLES.find(r => r.role_id === roleId);
   if (systemRole) return systemRole;
 
-  // Then check custom roles from localStorage
+  // Then check custom roles from memoryStore
   try {
-    const raw = localStorage.getItem('agilestest_custom_roles');
+    const raw = memoryStore.getItem('agilestest_custom_roles');
     if (!raw) return undefined;
     const customRoles = JSON.parse(raw) as RoleDefinition[];
     return customRoles.find(r => r.role_id === roleId);
@@ -507,7 +508,7 @@ export function getAllRoles(scope?: 'GLOBAL' | 'PROJECT'): RoleDefinition[] {
 
 export function getCustomRoles(): RoleDefinition[] {
   try {
-    const raw = localStorage.getItem('agilestest_custom_roles');
+    const raw = memoryStore.getItem('agilestest_custom_roles');
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -522,21 +523,21 @@ export function saveCustomRole(role: RoleDefinition): RoleDefinition {
   } else {
     roles.push({ ...role, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
   }
-  localStorage.setItem('agilestest_custom_roles', JSON.stringify(roles));
+  memoryStore.setItem('agilestest_custom_roles', JSON.stringify(roles));
   return idx >= 0 ? roles[idx] : roles[roles.length - 1];
 }
 
 export function deleteCustomRole(roleId: string): void {
   // Check if role is in use
   try {
-    const memberships = localStorage.getItem('agilestest_memberships');
+    const memberships = memoryStore.getItem('agilestest_memberships');
     if (memberships) {
       const all = JSON.parse(memberships) as Array<{ project_role: string }>;
       if (all.some(m => m.project_role === roleId)) {
         throw new Error('Impossible de supprimer un rôle utilisé par des memberships (409).');
       }
     }
-    const users = localStorage.getItem('agilestest_admin_users');
+    const users = memoryStore.getItem('agilestest_admin_users');
     if (users) {
       const all = JSON.parse(users) as Array<{ role: string }>;
       if (all.some(u => u.role === roleId)) {
@@ -552,5 +553,5 @@ export function deleteCustomRole(roleId: string): void {
   if (idx === -1) throw new Error('Rôle non trouvé');
   if (roles[idx].is_system) throw new Error('Impossible de supprimer un rôle système.');
   roles.splice(idx, 1);
-  localStorage.setItem('agilestest_custom_roles', JSON.stringify(roles));
+  memoryStore.setItem('agilestest_custom_roles', JSON.stringify(roles));
 }

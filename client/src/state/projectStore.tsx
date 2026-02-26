@@ -1,8 +1,17 @@
-import { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import type { ReactNode } from 'react';
-import type { Project } from '../types';
+/**
+ * ProjectProvider — Manages the currently selected project.
+ *
+ * MIGRATION NOTE:
+ * - Replaced raw localStorage with uiStorage (lastProjectId only).
+ * - Project details are fetched from tRPC when a lastProjectId is stored.
+ * - selectProject stores the ID in uiStorage and sets state.
+ */
 
-const STORAGE_KEY = 'agilestest_current_project';
+import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import type { ReactNode } from "react";
+import type { Project } from "../types";
+import { uiGet, uiSet, uiRemove } from "@/lib/uiStorage";
+import { trpc } from "@/lib/trpc";
 
 interface ProjectStoreValue {
   currentProject: Project | null;
@@ -12,37 +21,44 @@ interface ProjectStoreValue {
 
 const ProjectStoreContext = createContext<ProjectStoreValue | null>(null);
 
-function loadProjectFromStorage(): Project | null {
-  try {
-    const json = localStorage.getItem(STORAGE_KEY);
-    if (json) return JSON.parse(json) as Project;
-  } catch {
-    // corrupted
-  }
-  return null;
-}
-
 export function ProjectProvider({ children }: { children: ReactNode }) {
-  const [currentProject, setCurrentProject] = useState<Project | null>(loadProjectFromStorage);
+  const [currentProject, setCurrentProject] = useState<Project | null>(null);
+
+  // On mount, try to restore last selected project from uiStorage
+  const lastProjectId = uiGet("lastProjectId");
+  const projectQuery = trpc.projects.get.useQuery(
+    { projectId: lastProjectId ?? 0 },
+    {
+      enabled: lastProjectId !== null && lastProjectId > 0 && currentProject === null,
+      retry: false,
+    }
+  );
+
+  // When the query resolves, set the current project
+  useEffect(() => {
+    if (projectQuery.data && !currentProject) {
+      const p = projectQuery.data;
+      setCurrentProject({
+        id: String(p.id),
+        name: p.name,
+        description: p.description ?? "",
+        domain: p.domain,
+        status: p.status as Project["status"],
+        created_by: String(p.createdBy),
+        created_at: p.createdAt ? new Date(p.createdAt).toISOString() : "",
+        updated_at: p.updatedAt ? new Date(p.updatedAt).toISOString() : "",
+      });
+    }
+  }, [projectQuery.data, currentProject]);
 
   const selectProject = useCallback((project: Project) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
+    uiSet("lastProjectId", Number(project.id));
     setCurrentProject(project);
   }, []);
 
   const clearProject = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
+    uiRemove("lastProjectId");
     setCurrentProject(null);
-  }, []);
-
-  useEffect(() => {
-    const handler = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY) {
-        setCurrentProject(loadProjectFromStorage());
-      }
-    };
-    window.addEventListener('storage', handler);
-    return () => window.removeEventListener('storage', handler);
   }, []);
 
   return (
@@ -54,6 +70,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
 export function useProject(): ProjectStoreValue {
   const ctx = useContext(ProjectStoreContext);
-  if (!ctx) throw new Error('useProject must be used within ProjectProvider');
+  if (!ctx) throw new Error("useProject must be used within ProjectProvider");
   return ctx;
 }

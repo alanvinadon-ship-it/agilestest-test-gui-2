@@ -26,6 +26,8 @@ import { DATASET_TYPE_CATALOG } from '../config/datasetTypeCatalog';
 import type { CapturePolicy, CaptureSession, CaptureSessionStatus } from '../capture/types';
 import { DEFAULT_CAPTURE_POLICY } from '../capture/types';
 
+import { memoryStore } from './memoryStore';
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function uid(): string {
@@ -38,7 +40,7 @@ function now(): string {
 
 function getCollection<T>(key: string): T[] {
   try {
-    const raw = localStorage.getItem(`agilestest_${key}`);
+    const raw = memoryStore.getItem(`agilestest_${key}`);
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -46,7 +48,7 @@ function getCollection<T>(key: string): T[] {
 }
 
 function setCollection<T>(key: string, data: T[]): void {
-  localStorage.setItem(`agilestest_${key}`, JSON.stringify(data));
+  memoryStore.setItem(`agilestest_${key}`, JSON.stringify(data));
 }
 
 function paginate<T>(items: T[], page = 1, limit = 50): PaginatedResponse<T> {

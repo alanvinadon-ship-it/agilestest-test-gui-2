@@ -1,6 +1,7 @@
 /**
- * ADMIN-USERS-ROLES-1 — Admin Store (localStorage CRUD + API wrappers)
+ * ADMIN-USERS-ROLES-1 — Admin Store (memoryStore CRUD + API wrappers)
  * Gère : users (admin), memberships (projet), audit log
+ * MIGRATION: localStorage remplacé par memoryStore (in-memory Map)
  */
 import type { UserRole } from '../types';
 import type {
@@ -18,8 +19,9 @@ import type {
   InviteInput,
   InviteStatus,
 } from './types';
+import { memoryStore } from '../api/memoryStore';
 
-// ─── Helpers ────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────
 
 function uid(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -35,7 +37,7 @@ function now(): string {
 
 function getStore<T>(key: string): T[] {
   try {
-    const raw = localStorage.getItem(key);
+    const raw = memoryStore.getItem(key);
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -43,7 +45,7 @@ function getStore<T>(key: string): T[] {
 }
 
 function setStore<T>(key: string, data: T[]): void {
-  localStorage.setItem(key, JSON.stringify(data));
+  memoryStore.setItem(key, JSON.stringify(data));
 }
 
 // ─── Seed default users ─────────────────────────────────────────────────
@@ -605,10 +607,10 @@ export const adminInvites = {
     }
     setStore('agilestest_admin_users', users);
 
-    // Store password hash (simulated — localStorage)
-    const passwords = JSON.parse(localStorage.getItem('agilestest_passwords') || '{}');
+    // Store password hash (simulated — memoryStore)
+    const passwords = JSON.parse(memoryStore.getItem('agilestest_passwords') || '{}');
     passwords[invites[idx].email.toLowerCase()] = password;
-    localStorage.setItem('agilestest_passwords', JSON.stringify(passwords));
+    memoryStore.setItem('agilestest_passwords', JSON.stringify(passwords));
 
     // Add project membership if specified
     if (invites[idx].project_id && invites[idx].project_role && uIdx !== -1) {

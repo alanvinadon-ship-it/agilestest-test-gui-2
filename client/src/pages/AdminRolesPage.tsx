@@ -16,6 +16,7 @@ import {
   Crown, Eye,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { memoryStore } from '../api/memoryStore';
 import {
   PermissionKey,
   PERMISSION_GROUPS,
@@ -41,8 +42,8 @@ export default function AdminRolesPage() {
   const roleCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     try {
-      const usersRaw = localStorage.getItem('agilestest_admin_users');
-      const membershipsRaw = localStorage.getItem('agilestest_memberships');
+      const usersRaw = memoryStore.getItem('agilestest_admin_users');
+      const membershipsRaw = memoryStore.getItem('agilestest_memberships');
       const users = usersRaw ? JSON.parse(usersRaw) as Array<{ role: string }> : [];
       const memberships = membershipsRaw ? JSON.parse(membershipsRaw) as Array<{ project_role: string }> : [];
 

@@ -1,33 +1,31 @@
+/**
+ * API Client — Legacy axios client.
+ *
+ * MIGRATION NOTE:
+ * - Auth is now handled by Manus OAuth session cookies (httpOnly).
+ * - No more localStorage tokens. The tRPC client in lib/trpc.ts
+ *   sends credentials: "include" automatically.
+ * - This client is kept for legacy endpoints that haven't been
+ *   migrated to tRPC yet. New code should use tRPC hooks.
+ */
 import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 3000, // 3s timeout pour basculer rapidement sur le localStore
+  timeout: 3000,
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Send session cookies
 });
 
-// Interceptor : injecter le token JWT depuis localStorage
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// Interceptor : gérer les 401 (token expiré)
+// Interceptor: handle 401 (session expired) → redirect to login
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Ne pas rediriger sur 401 si c'est un timeout ou une erreur réseau
-    // (l'API n'est pas disponible, le fallback localStorage prendra le relais)
     if (error.response?.status === 401 && !error.code?.includes('ECONNABORTED')) {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('user');
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';
       }
