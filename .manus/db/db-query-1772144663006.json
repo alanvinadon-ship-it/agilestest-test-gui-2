@@ -1,0 +1,38 @@
+{
+  "query": "SHOW CREATE TABLE test_scenarios;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute SHOW CREATE TABLE test_scenarios;",
+  "rows": [
+    {
+      "Table": "test_scenarios",
+      "Create Table": "CREATE TABLE `test_scenarios` ("
+    }
+  ],
+  "messages": [
+    "  `id` int(11) NOT NULL AUTO_INCREMENT,",
+    "  `uid` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `scenario_code` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `project_id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `profile_id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `description` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `test_type` enum('VABF','VSR','VABE') COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `status` enum('DRAFT','FINAL','DEPRECATED') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'DRAFT',",
+    "  `version` int(11) DEFAULT '1',",
+    "  `steps` json DEFAULT NULL,",
+    "  `required_dataset_types` json DEFAULT NULL,",
+    "  `artifact_policy` json DEFAULT NULL,",
+    "  `kpi_thresholds` json DEFAULT NULL,",
+    "  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+    "  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,",
+    "  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,",
+    "  UNIQUE KEY `test_scenarios_uid_unique` (`uid`),",
+    "  KEY `idx_scenarios_project` (`project_id`),",
+    "  KEY `idx_scenarios_profile` (`profile_id`),",
+    "  KEY `idx_scenarios_status` (`status`),",
+    "  KEY `idx_scenarios_created` (`created_at`)",
+    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=90001"
+  ],
+  "stdout": "Table\tCreate Table\ntest_scenarios\tCREATE TABLE `test_scenarios` (\n  `id` int(11) NOT NULL AUTO_INCREMENT,\n  `uid` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `scenario_code` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `project_id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `profile_id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `description` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `test_type` enum('VABF','VSR','VABE') COLLATE utf8mb4_unicode_ci NOT NULL,\n  `status` enum('DRAFT','FINAL','DEPRECATED') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'DRAFT',\n  `version` int(11) DEFAULT '1',\n  `steps` json DEFAULT NULL,\n  `required_dataset_types` json DEFAULT NULL,\n  `artifact_policy` json DEFAULT NULL,\n  `kpi_thresholds` json DEFAULT NULL,\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,\n  UNIQUE KEY `test_scenarios_uid_unique` (`uid`),\n  KEY `idx_scenarios_project` (`project_id`),\n  KEY `idx_scenarios_profile` (`profile_id`),\n  KEY `idx_scenarios_status` (`status`),\n  KEY `idx_scenarios_created` (`created_at`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=90001\n",
+  "stderr": "",
+  "execution_time_ms": 56
+}

@@ -9,6 +9,7 @@ import { getDb } from "./db";
 import { probes, probeAlertState } from "../drizzle/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { notifyOwner } from "./_core/notification";
+import { dispatchWebhookEvent } from "./routers/webhooks";
 
 // ── Config (overridable via env) ──────────────────────────────────────────
 const HEALTH_GREEN_SEC = Number(process.env.PROBE_HEALTH_GREEN_SEC ?? 60);
@@ -148,6 +149,23 @@ export async function evaluateProbesHealthAndAlert(): Promise<{
     } catch (err: any) {
       errors.push(`Notification failed for probe ${probe.id}: ${err.message}`);
     }
+
+    // Dispatch webhook event
+    try {
+      await dispatchWebhookEvent(
+        "", // probes table has no projectId; dispatch globally
+        "probe.alert.red",
+        {
+          probeId: probe.id,
+          probeName: probe.name,
+          probeType: probe.probeType,
+          host: probe.host,
+          status: probe.status,
+          redSinceMinutes: Math.round(redDurationMs / 60000),
+          timestamp: new Date(now).toISOString(),
+        }
+      );
+    } catch (_) { /* best-effort */ }
 
     // Update alert state
     await db

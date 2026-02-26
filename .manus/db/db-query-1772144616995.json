@@ -1,0 +1,45 @@
+{
+  "query": "SHOW CREATE TABLE probes;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute SHOW CREATE TABLE probes;",
+  "rows": [
+    {
+      "Table": "probes",
+      "Create Table": "CREATE TABLE `probes` ("
+    }
+  ],
+  "messages": [
+    "  `id` int(11) NOT NULL AUTO_INCREMENT,",
+    "  `uid` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `site` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `zone` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `type` enum('LINUX_EDGE','K8S_CLUSTER','NETWORK_TAP') COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `capabilities` json DEFAULT NULL,",
+    "  `status` enum('ONLINE','OFFLINE','DEGRADED') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'OFFLINE',",
+    "  `auth_token_hash` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `last_seen_at` timestamp NULL DEFAULT NULL,",
+    "  `metadata` json DEFAULT NULL,",
+    "  `version` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `uptime_seconds` int(11) DEFAULT NULL,",
+    "  `cpu_percent` float DEFAULT NULL,",
+    "  `disk_free_mb` int(11) DEFAULT NULL,",
+    "  `interfaces` json DEFAULT NULL,",
+    "  `active_sessions` int(11) DEFAULT NULL,",
+    "  `total_captures` int(11) DEFAULT NULL,",
+    "  `last_error` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `health_status` enum('healthy','degraded','unhealthy') COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `heartbeat_interval_sec` int(11) DEFAULT '30',",
+    "  `allowlist_cidrs` json DEFAULT NULL,",
+    "  `tls_enabled` tinyint(1) DEFAULT '0',",
+    "  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+    "  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,",
+    "  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,",
+    "  UNIQUE KEY `probes_uid_unique` (`uid`),",
+    "  KEY `idx_probes_status` (`status`),",
+    "  KEY `idx_probes_site` (`site`),",
+    "  KEY `idx_probes_created` (`created_at`)",
+    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=90001"
+  ],
+  "stdout": "Table\tCreate Table\nprobes\tCREATE TABLE `probes` (\n  `id` int(11) NOT NULL AUTO_INCREMENT,\n  `uid` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `site` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `zone` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `type` enum('LINUX_EDGE','K8S_CLUSTER','NETWORK_TAP') COLLATE utf8mb4_unicode_ci NOT NULL,\n  `capabilities` json DEFAULT NULL,\n  `status` enum('ONLINE','OFFLINE','DEGRADED') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'OFFLINE',\n  `auth_token_hash` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `last_seen_at` timestamp NULL DEFAULT NULL,\n  `metadata` json DEFAULT NULL,\n  `version` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `uptime_seconds` int(11) DEFAULT NULL,\n  `cpu_percent` float DEFAULT NULL,\n  `disk_free_mb` int(11) DEFAULT NULL,\n  `interfaces` json DEFAULT NULL,\n  `active_sessions` int(11) DEFAULT NULL,\n  `total_captures` int(11) DEFAULT NULL,\n  `last_error` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `health_status` enum('healthy','degraded','unhealthy') COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `heartbeat_interval_sec` int(11) DEFAULT '30',\n  `allowlist_cidrs` json DEFAULT NULL,\n  `tls_enabled` tinyint(1) DEFAULT '0',\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,\n  UNIQUE KEY `probes_uid_unique` (`uid`),\n  KEY `idx_probes_status` (`status`),\n  KEY `idx_probes_site` (`site`),\n  KEY `idx_probes_created` (`created_at`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=90001\n",
+  "stderr": "",
+  "execution_time_ms": 59
+}

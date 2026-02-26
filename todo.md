@@ -167,3 +167,23 @@
 - [x] Étape 3: Backend — notifyOwner avec probe name/type/host/status + durée RED
 - [x] Étape 3: Frontend — badge redProbes dans sidebar + polling rapide 10s quand RED > 0
 - [x] Étape 3: Tests — 27 tests probe-alerts.test.ts (health calc, anti-spam, notification, integration, sidebar badge)
+- [x] Étape 1: Backend — routeur analytics.dashboard (period week/month, from/to, orgId scope)
+- [x] Étape 1: Backend — agrégats SQL execSeries (PASSED/FAILED/ABORTED par semaine/mois)
+- [x] Étape 1: Backend — agrégats SQL incidentSeries (critical/high/med/low par semaine/mois)
+- [x] Étape 1: Backend — agrégats SQL probesSeries (GREEN/ORANGE/RED par semaine/mois)
+- [x] Étape 1: Backend — KPIs (totalRuns, successRate, openIncidents, redProbes)
+- [x] Étape 1: Frontend — DashboardPage Chart.js (3 graphiques + KPI cards + selector période)
+- [x] Étape 1: Tests — 15 tests analytics-dashboard.test.ts
+- [x] Étape 2: Backend — tables outbound_webhooks + webhook_deliveries
+- [x] Étape 2: Backend — routeur webhooks CRUD (list/create/update/delete/rotateSecret/test)
+- [x] Étape 2: Backend — signature HMAC-SHA256 (X-AgilesTest-Signature/Event/Timestamp)
+- [x] Étape 2: Backend — job deliverWebhook avec retries exponentiels + processWebhookDeliveries poller 15s
+- [x] Étape 2: Backend — émettre event probe.alert.red dans probeAlertService
+- [x] Étape 2: Frontend — page WebhooksPage admin (CRUD + delivery logs + secret copy + test)
+- [x] Étape 2: Tests — 17 tests webhooks.test.ts
+- [x] Étape 2: Docs — (intégré dans les tests et le code)
+- [x] Étape 3: Backend — scenarios.export (scenarioId → JSON versionné agilestest-scenario-v1)
+- [x] Étape 3: Backend — scenarios.import (projectId + JSON → profile + datasets + scenario DRAFT)
+- [x] Étape 3: Frontend — bouton Export par scénario + bouton Importer JSON + ImportScenarioModal
+- [x] Étape 3: Tests — 18 tests scenario-import-export.test.ts (roundtrip, validation, portability)
+- [x] Étape 3: Docs — (intégré dans les tests et le code)

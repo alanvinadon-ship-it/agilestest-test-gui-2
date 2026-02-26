@@ -1,0 +1,42 @@
+{
+  "query": "SHOW CREATE TABLE executions;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute SHOW CREATE TABLE executions;",
+  "rows": [
+    {
+      "Table": "executions",
+      "Create Table": "CREATE TABLE `executions` ("
+    }
+  ],
+  "messages": [
+    "  `id` int(11) NOT NULL AUTO_INCREMENT,",
+    "  `uid` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `project_id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `profile_id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `scenario_id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `status` enum('PENDING','RUNNING','PASSED','FAILED','ERROR','CANCELLED') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'PENDING',",
+    "  `runner_type` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `script_id` varchar(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `script_version` int(11) DEFAULT NULL,",
+    "  `dataset_bundle_id` varchar(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `target_env` enum('DEV','PREPROD','PILOT_ORANGE','PROD') COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `runner_id` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `ai_repair_from_execution_id` varchar(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `started_at` timestamp NULL DEFAULT NULL,",
+    "  `finished_at` timestamp NULL DEFAULT NULL,",
+    "  `duration_ms` int(11) DEFAULT NULL,",
+    "  `artifacts_count` int(11) DEFAULT '0',",
+    "  `incidents_count` int(11) DEFAULT '0',",
+    "  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+    "  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,",
+    "  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,",
+    "  UNIQUE KEY `executions_uid_unique` (`uid`),",
+    "  KEY `idx_exec_project` (`project_id`),",
+    "  KEY `idx_exec_status` (`status`),",
+    "  KEY `idx_exec_scenario` (`scenario_id`),",
+    "  KEY `idx_exec_created` (`created_at`)",
+    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=90001"
+  ],
+  "stdout": "Table\tCreate Table\nexecutions\tCREATE TABLE `executions` (\n  `id` int(11) NOT NULL AUTO_INCREMENT,\n  `uid` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `project_id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `profile_id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `scenario_id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `status` enum('PENDING','RUNNING','PASSED','FAILED','ERROR','CANCELLED') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'PENDING',\n  `runner_type` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `script_id` varchar(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `script_version` int(11) DEFAULT NULL,\n  `dataset_bundle_id` varchar(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `target_env` enum('DEV','PREPROD','PILOT_ORANGE','PROD') COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `runner_id` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `ai_repair_from_execution_id` varchar(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `started_at` timestamp NULL DEFAULT NULL,\n  `finished_at` timestamp NULL DEFAULT NULL,\n  `duration_ms` int(11) DEFAULT NULL,\n  `artifacts_count` int(11) DEFAULT '0',\n  `incidents_count` int(11) DEFAULT '0',\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,\n  UNIQUE KEY `executions_uid_unique` (`uid`),\n  KEY `idx_exec_project` (`project_id`),\n  KEY `idx_exec_status` (`status`),\n  KEY `idx_exec_scenario` (`scenario_id`),\n  KEY `idx_exec_created` (`created_at`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=90001\n",
+  "stderr": "",
+  "execution_time_ms": 58
+}

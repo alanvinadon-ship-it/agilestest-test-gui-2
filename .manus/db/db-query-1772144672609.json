@@ -1,0 +1,36 @@
+{
+  "query": "SHOW CREATE TABLE test_profiles;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute SHOW CREATE TABLE test_profiles;",
+  "rows": [
+    {
+      "Table": "test_profiles",
+      "Create Table": "CREATE TABLE `test_profiles` ("
+    }
+  ],
+  "messages": [
+    "  `id` int(11) NOT NULL AUTO_INCREMENT,",
+    "  `uid` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `project_id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `description` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `protocol` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT 'CUSTOM',",
+    "  `test_type` enum('VABF','VSR','VABE') COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `domain` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `profile_type` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `target_host` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `target_port` int(11) DEFAULT '0',",
+    "  `parameters` json DEFAULT NULL,",
+    "  `config` json DEFAULT NULL,",
+    "  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+    "  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,",
+    "  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,",
+    "  UNIQUE KEY `test_profiles_uid_unique` (`uid`),",
+    "  KEY `idx_profiles_project` (`project_id`),",
+    "  KEY `idx_profiles_test_type` (`test_type`),",
+    "  KEY `idx_profiles_created` (`created_at`)",
+    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=90001"
+  ],
+  "stdout": "Table\tCreate Table\ntest_profiles\tCREATE TABLE `test_profiles` (\n  `id` int(11) NOT NULL AUTO_INCREMENT,\n  `uid` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `project_id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `description` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `protocol` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT 'CUSTOM',\n  `test_type` enum('VABF','VSR','VABE') COLLATE utf8mb4_unicode_ci NOT NULL,\n  `domain` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `profile_type` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `target_host` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `target_port` int(11) DEFAULT '0',\n  `parameters` json DEFAULT NULL,\n  `config` json DEFAULT NULL,\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,\n  UNIQUE KEY `test_profiles_uid_unique` (`uid`),\n  KEY `idx_profiles_project` (`project_id`),\n  KEY `idx_profiles_test_type` (`test_type`),\n  KEY `idx_profiles_created` (`created_at`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=90001\n",
+  "stderr": "",
+  "execution_time_ms": 51
+}

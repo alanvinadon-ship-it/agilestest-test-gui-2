@@ -149,6 +149,151 @@ export const scenariosRouter = router({
     await writeAuditLog({ userId: ctx.user!.id, action: "SCENARIO_DELETED", entity: "test_scenario", entityId: String(input.scenarioId) });
     return { success: true };
   }),
+
+  // ── Export scenario as portable JSON ──────────────────────────────────
+  export: protectedProcedure.input(z.object({ scenarioId: z.number() })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const [scenario] = await db.select().from(testScenarios).where(eq(testScenarios.id, input.scenarioId)).limit(1);
+    if (!scenario) throw new TRPCError({ code: "NOT_FOUND", message: "Scénario introuvable" });
+
+    // Fetch linked profile if any
+    let profile: Record<string, unknown> | null = null;
+    if (scenario.profileId) {
+      const [p] = await db.select().from(testProfiles).where(eq(testProfiles.id, scenario.profileId)).limit(1);
+      if (p) {
+        profile = {
+          name: p.name,
+          description: p.description,
+          profileType: p.profileType,
+          config: p.config,
+        };
+      }
+    }
+
+    // Fetch datasets for same project (no direct FK, export all project datasets)
+    const projectDatasets = await db.select().from(datasets).where(eq(datasets.projectId, scenario.projectId)).limit(100);
+
+    const exportPayload = {
+      _format: "agilestest-scenario-v1" as const,
+      exportedAt: new Date().toISOString(),
+      scenario: {
+        name: scenario.name,
+        description: scenario.description,
+        testType: scenario.testType,
+        status: scenario.status,
+        priority: scenario.priority,
+        steps: scenario.steps,
+      },
+      profile,
+      datasets: projectDatasets.map(d => ({
+        name: d.name,
+        description: d.description,
+        datasetType: d.datasetType,
+        data: d.data,
+      })),
+    };
+    return exportPayload;
+  }),
+
+  // ── Import scenario from portable JSON ────────────────────────────────
+  import: protectedProcedure.input(z.object({
+    projectId: z.number(),
+    payload: z.object({
+      _format: z.literal("agilestest-scenario-v1"),
+      scenario: z.object({
+        name: z.string().min(1),
+        description: z.string().nullable().optional(),
+        testType: z.enum(["VABF", "VSR", "VABE"]).default("VABF"),
+        status: z.enum(["DRAFT", "FINAL", "DEPRECATED"]).default("DRAFT"),
+        priority: z.enum(["P0", "P1", "P2"]).default("P1"),
+        steps: z.any().optional(),
+      }),
+      profile: z.object({
+        name: z.string(),
+        description: z.string().nullable().optional(),
+        profileType: z.string().default("WEB"),
+        config: z.any().optional(),
+      }).nullable().optional(),
+      datasets: z.array(z.object({
+        name: z.string(),
+        description: z.string().nullable().optional(),
+        datasetType: z.string(),
+        data: z.any().optional(),
+      })).optional(),
+    }),
+    importProfile: z.boolean().default(true),
+    importDatasets: z.boolean().default(true),
+  })).mutation(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const { projectId, payload, importProfile, importDatasets } = input;
+    const userId = ctx.user!.id;
+
+    let profileId: number | null = null;
+    const importedDatasetIds: number[] = [];
+    const warnings: string[] = [];
+
+    // Import profile if requested and present
+    if (importProfile && payload.profile) {
+      try {
+        const res = await db.insert(testProfiles).values({
+          projectId,
+          name: payload.profile.name,
+          description: payload.profile.description ?? null,
+          profileType: payload.profile.profileType ?? "WEB",
+          config: payload.profile.config ?? null,
+          createdBy: userId,
+        });
+        profileId = Number(res[0].insertId);
+      } catch (err: any) {
+        warnings.push(`Profil non importé: ${err.message}`);
+      }
+    }
+
+    // Import datasets if requested
+    if (importDatasets && payload.datasets && payload.datasets.length > 0) {
+      for (const ds of payload.datasets) {
+        try {
+          const res = await db.insert(datasets).values({
+            projectId,
+            name: ds.name,
+            description: ds.description ?? null,
+            datasetType: ds.datasetType,
+            data: ds.data ?? null,
+            createdBy: userId,
+          });
+          importedDatasetIds.push(Number(res[0].insertId));
+        } catch (err: any) {
+          warnings.push(`Dataset "${ds.name}" non importé: ${err.message}`);
+        }
+      }
+    }
+
+    // Import scenario
+    const scenarioRes = await db.insert(testScenarios).values({
+      projectId,
+      name: payload.scenario.name,
+      description: payload.scenario.description ?? null,
+      testType: payload.scenario.testType ?? "VABF",
+      status: "DRAFT", // Always import as DRAFT
+      priority: payload.scenario.priority ?? "P1",
+      steps: payload.scenario.steps ?? null,
+      profileId,
+      createdBy: userId,
+    });
+    const scenarioId = Number(scenarioRes[0].insertId);
+
+    await writeAuditLog({ userId, action: "SCENARIO_IMPORTED", entity: "test_scenario", entityId: String(scenarioId) });
+
+    return {
+      success: true,
+      scenarioId,
+      profileId,
+      importedDatasets: importedDatasetIds.length,
+      warnings,
+    };
+  }),
 });
 
 // ─── Datasets ───────────────────────────────────────────────────────────────

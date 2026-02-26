@@ -1,0 +1,32 @@
+{
+  "query": "SHOW CREATE TABLE incidents;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute SHOW CREATE TABLE incidents;",
+  "rows": [
+    {
+      "Table": "incidents",
+      "Create Table": "CREATE TABLE `incidents` ("
+    }
+  ],
+  "messages": [
+    "  `id` int(11) NOT NULL AUTO_INCREMENT,",
+    "  `uid` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `execution_id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `project_id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `title` varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `description` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `severity` enum('CRITICAL','MAJOR','MINOR','INFO') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'INFO',",
+    "  `step_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `expected_result` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `actual_result` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `detected_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+    "  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,",
+    "  UNIQUE KEY `incidents_uid_unique` (`uid`),",
+    "  KEY `idx_inc_execution` (`execution_id`),",
+    "  KEY `idx_inc_project` (`project_id`),",
+    "  KEY `idx_inc_severity` (`severity`)",
+    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+  ],
+  "stdout": "Table\tCreate Table\nincidents\tCREATE TABLE `incidents` (\n  `id` int(11) NOT NULL AUTO_INCREMENT,\n  `uid` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `execution_id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `project_id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `title` varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `description` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `severity` enum('CRITICAL','MAJOR','MINOR','INFO') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'INFO',\n  `step_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `expected_result` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `actual_result` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `detected_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,\n  UNIQUE KEY `incidents_uid_unique` (`uid`),\n  KEY `idx_inc_execution` (`execution_id`),\n  KEY `idx_inc_project` (`project_id`),\n  KEY `idx_inc_severity` (`severity`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci\n",
+  "stderr": "",
+  "execution_time_ms": 58
+}

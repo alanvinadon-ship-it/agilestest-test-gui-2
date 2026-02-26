@@ -28,6 +28,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Activity,
+  Webhook,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -71,6 +72,7 @@ const baseNavSections: NavSection[] = [
     flat: true,
     items: [
       { href: "/", icon: LayoutDashboard, label: "Dashboard" },
+      { href: "/dashboard", icon: BarChart3, label: "Analytique" },
       { href: "/projects", icon: FolderKanban, label: "Projets" },
       { href: "/settings", icon: Settings2, label: "Paramètres Projet" },
     ],
@@ -95,6 +97,7 @@ const baseNavSections: NavSection[] = [
       { href: "/captures", icon: Network, label: "Captures" },
       { href: "/probes", icon: Radio, label: "Sondes" },
       { href: "/probes/monitoring", icon: Activity, label: "Monitoring" },
+      { href: "/webhooks", icon: Webhook, label: "Webhooks" },
     ],
   },
   {

@@ -9,6 +9,7 @@ import { eq, and, lte, sql, inArray } from "drizzle-orm";
 import { ENV } from "./_core/env";
 import { deleteArtifact } from "./artifactStorage";
 import { evaluateProbesHealthAndAlert } from "./probeAlertService";
+import { processWebhookDeliveries } from "./routers/webhooks";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -145,6 +146,7 @@ export async function pollAndProcess(): Promise<number> {
 }
 
 let _probeAlertInterval: ReturnType<typeof setInterval> | null = null;
+let _webhookDeliveryInterval: ReturnType<typeof setInterval> | null = null;
 
 export function startPolling(intervalMs = 5000) {
   if (_polling) return;
@@ -175,6 +177,17 @@ export function startPolling(intervalMs = 5000) {
     }
   }, probeAlertIntervalMs);
   console.log(`[ProbeAlert] Health evaluation started (interval: ${probeAlertIntervalMs}ms)`);
+
+  // Start webhook delivery processor every 15s
+  const webhookIntervalMs = Number(process.env.WEBHOOK_DELIVERY_POLL_MS ?? 15000);
+  _webhookDeliveryInterval = setInterval(async () => {
+    try {
+      await processWebhookDeliveries();
+    } catch (err) {
+      console.error("[WebhookDelivery] Processing error:", err);
+    }
+  }, webhookIntervalMs);
+  console.log(`[WebhookDelivery] Delivery processor started (interval: ${webhookIntervalMs}ms)`);
 }
 
 export function stopPolling() {
@@ -185,6 +198,10 @@ export function stopPolling() {
   if (_probeAlertInterval) {
     clearInterval(_probeAlertInterval);
     _probeAlertInterval = null;
+  }
+  if (_webhookDeliveryInterval) {
+    clearInterval(_webhookDeliveryInterval);
+    _webhookDeliveryInterval = null;
   }
   _polling = false;
   console.log("[JobQueue] Polling stopped");

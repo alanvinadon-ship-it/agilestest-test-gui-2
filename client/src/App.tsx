@@ -36,6 +36,8 @@ import DriveCampaignsPage from "./pages/DriveCampaignsPage";
 import DriveReportingPage from "./pages/DriveReportingPage";
 import DriveIncidentReportPage from "./pages/DriveIncidentReportPage";
 import ProjectSettingsPage from "./pages/ProjectSettingsPage";
+import DashboardPage from "./pages/DashboardPage";
+import WebhooksPage from "./pages/WebhooksPage";
 
 // ─── Auth Guards ────────────────────────────────────────────────────────────
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -97,6 +99,7 @@ function AppRouter() {
           <DashboardLayout>
             <Switch>
               <Route path="/" component={Home} />
+              <Route path="/dashboard" component={DashboardPage} />
               <Route path="/projects" component={ProjectsPage} />
 
               {/* Project-scoped pages (membership required) */}
@@ -129,6 +132,9 @@ function AppRouter() {
               </Route>
               <Route path="/probes">
                 <ProjectScoped><ProbesPage /></ProjectScoped>
+              </Route>
+              <Route path="/webhooks">
+                <ProjectScoped><WebhooksPage /></ProjectScoped>
               </Route>
               <Route path="/probes/monitoring">
                 <ProjectScoped><ProbesMonitoringPage /></ProjectScoped>

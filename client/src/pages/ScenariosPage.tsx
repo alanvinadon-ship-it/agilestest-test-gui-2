@@ -10,7 +10,7 @@ import {
   Plus, FileText, Loader2, Trash2, X, AlertCircle, Search,
   ChevronDown, GripVertical, ClipboardCheck, Shield, Gauge, Filter, Edit2,
   Sparkles, Database, CheckCircle2, Lock, Archive, AlertTriangle, GitBranch, Hash,
-  Code2, MessageSquare,
+  Code2, MessageSquare, Download, Upload,
 } from 'lucide-react';
 import GeneratePromptModal from '../components/GeneratePromptModal';
 import GenerateScriptModal from '../components/GenerateScriptModal';
@@ -20,6 +20,8 @@ import ScenarioDatasetSection from '../components/ScenarioDatasetSection';
 import { CapturePolicyEditor } from '../capture';
 import type { CapturePolicy } from '../capture/types';
 import { localCapturePolicies } from '../api/localStore';
+import { trpc } from '@/lib/trpc';
+import { toast } from 'sonner';
 import {
   type ProfileDomain, DOMAIN_META, PROFILE_TYPE_META, type ProfileType,
 } from '../config/profileDomains';
@@ -514,6 +516,9 @@ export default function ScenariosPage() {
   const [editingScenario, setEditingScenario] = useState<TestScenario | null>(null);
   const [finalizingScenario, setFinalizingScenario] = useState<TestScenario | null>(null);
   const [suggestProfile, setSuggestProfile] = useState<TestProfile | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [exportingId, setExportingId] = useState<number | null>(null);
+  const trpcUtils = trpc.useUtils();
   const [promptScenario, setPromptScenario] = useState<{ scenario: TestScenario; profile: TestProfile } | null>(null);
   const [scriptScenario, setScriptScenario] = useState<{ scenario: TestScenario; profile: TestProfile } | null>(null);
   const [search, setSearch] = useState('');
@@ -586,12 +591,18 @@ export default function ScenariosPage() {
             Workflow : <span className="font-mono text-xs">DRAFT → FINAL → DEPRECATED</span>
           </p>
         </div>
-        {canCreateScenario && profiles.length > 0 && (
-          <button onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
-            <Plus className="w-4 h-4" /> Nouveau scénario
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowImportModal(true)}
+            className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors">
+            <Upload className="w-4 h-4" /> Importer JSON
           </button>
-        )}
+          {canCreateScenario && profiles.length > 0 && (
+            <button onClick={() => setShowCreate(true)}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
+              <Plus className="w-4 h-4" /> Nouveau scénario
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -765,6 +776,24 @@ export default function ScenariosPage() {
                                       {isFinal ? <GitBranch className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
                                     </button>
                                   )}
+                                  <button onClick={async () => {
+                                    setExportingId(Number(scenario.id));
+                                    try {
+                                      const data = await trpcUtils.scenarios.export.fetch({ scenarioId: Number(scenario.id) });
+                                      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                                      const url = URL.createObjectURL(blob);
+                                      const a = document.createElement('a');
+                                      a.href = url;
+                                      a.download = `scenario-${scenario.name?.replace(/[^a-zA-Z0-9]/g, '_')}.json`;
+                                      a.click();
+                                      URL.revokeObjectURL(url);
+                                      toast.success('Scénario exporté');
+                                    } catch { toast.error('Erreur export'); }
+                                    setExportingId(null);
+                                  }}
+                                    className="text-muted-foreground hover:text-blue-400 p-1.5 rounded hover:bg-blue-500/10 transition-colors" title="Exporter JSON">
+                                    {exportingId === Number(scenario.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                                  </button>
                                   {canDeleteScenario && isDraft && (
                                     <button onClick={() => deleteMutation.mutate(scenario.id)}
                                       className="text-muted-foreground hover:text-destructive p-1.5 rounded hover:bg-destructive/10 transition-colors" title="Supprimer">
@@ -827,6 +856,135 @@ export default function ScenariosPage() {
           onImported={() => queryClient.invalidateQueries({ queryKey: ['scenarios'] })}
         />
       )}
+      {showImportModal && (
+        <ImportScenarioModal
+          projectId={Number(currentProject.id)}
+          onClose={() => setShowImportModal(false)}
+          onImported={() => {
+            queryClient.invalidateQueries({ queryKey: ['scenarios'] });
+            queryClient.invalidateQueries({ queryKey: ['profiles'] });
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Import Scenario Modal ──────────────────────────────────────────────────
+function ImportScenarioModal({ projectId, onClose, onImported }: {
+  projectId: number;
+  onClose: () => void;
+  onImported: () => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [payload, setPayload] = useState<any>(null);
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [importProfile, setImportProfile] = useState(true);
+  const [importDatasets, setImportDatasets] = useState(true);
+  const importMutation = trpc.scenarios.import.useMutation({
+    onSuccess: (result) => {
+      const msgs: string[] = [`Sc\u00e9nario import\u00e9 (ID: ${result.scenarioId})`];
+      if (result.profileId) msgs.push(`Profil cr\u00e9\u00e9 (ID: ${result.profileId})`);
+      if (result.importedDatasets > 0) msgs.push(`${result.importedDatasets} dataset(s) import\u00e9(s)`);
+      if (result.warnings.length) msgs.push(`\u26a0 ${result.warnings.join(', ')}`);
+      toast.success(msgs.join(' \u2014 '));
+      onImported();
+      onClose();
+    },
+    onError: (err) => toast.error(`Erreur import: ${err.message}`),
+  });
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f);
+    setParseError(null);
+    try {
+      const text = await f.text();
+      const json = JSON.parse(text);
+      if (json._format !== 'agilestest-scenario-v1') {
+        setParseError('Format invalide: le fichier doit avoir _format = "agilestest-scenario-v1"');
+        setPayload(null);
+        return;
+      }
+      if (!json.scenario?.name) {
+        setParseError('Le sc\u00e9nario doit avoir un nom (scenario.name)');
+        setPayload(null);
+        return;
+      }
+      setPayload(json);
+    } catch {
+      setParseError('Fichier JSON invalide');
+      setPayload(null);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-lg shadow-xl w-full max-w-lg p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-heading font-bold text-foreground">Importer un sc\u00e9nario</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-1">Fichier JSON</label>
+          <input type="file" accept=".json" onChange={handleFileChange}
+            className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-medium file:bg-primary/10 file:text-primary hover:file:bg-primary/20" />
+        </div>
+
+        {parseError && (
+          <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded p-3">
+            <AlertCircle className="w-4 h-4 shrink-0" /> {parseError}
+          </div>
+        )}
+
+        {payload && (
+          <div className="space-y-3">
+            <div className="bg-muted/30 rounded p-3 text-sm space-y-1">
+              <p><strong>Sc\u00e9nario :</strong> {payload.scenario.name} ({payload.scenario.testType || 'VABF'})</p>
+              {payload.profile && <p><strong>Profil :</strong> {payload.profile.name} ({payload.profile.profileType})</p>}
+              {payload.datasets?.length > 0 && <p><strong>Datasets :</strong> {payload.datasets.length} jeu(x) de donn\u00e9es</p>}
+              <p className="text-xs text-muted-foreground">Export\u00e9 le {payload.exportedAt ? new Date(payload.exportedAt).toLocaleString() : 'N/A'}</p>
+            </div>
+
+            <div className="space-y-2">
+              {payload.profile && (
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={importProfile} onChange={e => setImportProfile(e.target.checked)}
+                    className="rounded border-border" />
+                  Importer le profil associ\u00e9
+                </label>
+              )}
+              {payload.datasets?.length > 0 && (
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={importDatasets} onChange={e => setImportDatasets(e.target.checked)}
+                    className="rounded border-border" />
+                  Importer les {payload.datasets.length} dataset(s)
+                </label>
+              )}
+            </div>
+
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded p-3 text-sm text-amber-400">
+              <AlertTriangle className="w-4 h-4 inline mr-1" />
+              Le sc\u00e9nario sera import\u00e9 en statut <strong>DRAFT</strong> quel que soit son statut d'origine.
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button onClick={onClose}
+            className="px-4 py-2 text-sm rounded border border-border text-foreground hover:bg-accent transition-colors">
+            Annuler
+          </button>
+          <button onClick={() => importMutation.mutate({ projectId, payload, importProfile, importDatasets })}
+            disabled={!payload || importMutation.isPending}
+            className="px-4 py-2 text-sm rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors inline-flex items-center gap-2">
+            {importMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            Importer
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
