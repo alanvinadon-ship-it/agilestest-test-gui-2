@@ -18,6 +18,7 @@ import { TRPCError } from "@trpc/server";
 import { initTRPC } from "@trpc/server";
 import superjson from "superjson";
 import type { TrpcContext } from "../_core/context";
+import { ENV } from "../_core/env";
 import * as adminDb from "../db/admin";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -108,7 +109,12 @@ export async function resolveAppRoles(userId: string, dbRole?: string): Promise<
     // DB not available — fall through to fallback
   }
 
-  // Fallback: users.role === 'admin' → ORG_ADMIN
+  // Fallback 1: App owner (OWNER_OPEN_ID) is always ORG_ADMIN
+  if (ENV.ownerOpenId && userId === ENV.ownerOpenId && !appRoles.includes("ORG_ADMIN")) {
+    appRoles.push("ORG_ADMIN");
+  }
+
+  // Fallback 2: users.role === 'admin' → ORG_ADMIN
   if (dbRole === "admin" && !appRoles.includes("ORG_ADMIN")) {
     appRoles.push("ORG_ADMIN");
   }

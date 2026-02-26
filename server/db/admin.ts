@@ -7,6 +7,7 @@ import {
 import { v4 as uuid } from "uuid";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
+import { ENV } from "../_core/env";
 
 // ══════════════════════════════════════════════════════════════════════════
 // INVITES
@@ -425,6 +426,16 @@ export async function listUsers(filters?: {
     _invitedBy: inv.invitedByName,
     _expiresAt: inv.expiresAt,
   }));
+
+  // Ensure OWNER is always shown as admin
+  const ownerOpenId = ENV.ownerOpenId;
+  if (ownerOpenId) {
+    for (const u of userResults) {
+      if (u.openId === ownerOpenId && u.role !== "admin") {
+        u.role = "admin";
+      }
+    }
+  }
 
   // Merge: real users first, then invited users
   let combined = [...userResults, ...inviteAsUsers];

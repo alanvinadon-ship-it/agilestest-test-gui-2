@@ -1,0 +1,34 @@
+{
+  "query": "SELECT id, name, email, role, status, \"openId\" FROM users WHERE email LIKE '%adon%' OR email LIKE '%lanvin%' OR name LIKE '%ADON%' OR name LIKE '%Lanvin%';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute SELECT id, name, email, role, status, \"openId\" FROM users WHERE email LIKE '%adon%' OR email LIKE '%lanvin%' OR name LIKE '%ADON%' OR name LIKE '%Lanvin%';",
+  "rows": [
+    {
+      "id": "90279",
+      "name": "Lanvin ADON Admin",
+      "email": "lanvin.adon@agilestelecoms.com",
+      "role": "admin",
+      "status": "ACTIVE",
+      "openId": "openId"
+    },
+    {
+      "id": "90448",
+      "name": "ADON ATSE LANVIN",
+      "email": "alanvin.adon@gmail.com",
+      "role": "admin",
+      "status": "ACTIVE",
+      "openId": "openId"
+    },
+    {
+      "id": "90465",
+      "name": "lanvin.adon",
+      "email": "lanvin.adon@agilestelecoms.com",
+      "role": "user",
+      "status": "ACTIVE",
+      "openId": "openId"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\temail\trole\tstatus\topenId\n90279\tLanvin ADON Admin\tlanvin.adon@agilestelecoms.com\tadmin\tACTIVE\topenId\n90448\tADON ATSE LANVIN\talanvin.adon@gmail.com\tadmin\tACTIVE\topenId\n90465\tlanvin.adon\tlanvin.adon@agilestelecoms.com\tuser\tACTIVE\topenId\n",
+  "stderr": "",
+  "execution_time_ms": 54
+}

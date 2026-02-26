@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { publicProcedure, router } from "../_core/trpc";
 import {
   viewerProcedure, qaManagerProcedure, orgAdminProcedure,
-  auditMutation,
+  auditMutation, invalidateRoleCache,
 } from "../rbac/middleware";
 import * as adminDb from "../db/admin";
 import { paginationInput, paginate, paginateInMemory, dateRangeFilter } from "../pagination";
@@ -299,9 +299,14 @@ export const adminRouter = router({
       email: z.string().email().optional(),
       role: z.enum(["ADMIN", "MANAGER", "VIEWER"]).optional(),
     }))
-    .mutation(({ input }) => {
+    .mutation(async ({ input }) => {
       const { id, ...data } = input;
-      return adminDb.updateUser(id, data);
+      const result = await adminDb.updateUser(id, data);
+      // Invalidate RBAC cache so role changes take effect immediately
+      if (data.role && result?.openId) {
+        invalidateRoleCache(result.openId);
+      }
+      return result;
     }),
 
   disableUser: orgAdminProcedure

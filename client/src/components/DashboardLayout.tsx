@@ -186,7 +186,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-foreground truncate">{user.full_name}</p>
                 <div className="flex items-center gap-1">
-                  <p className="text-[10px] text-muted-foreground font-mono">{user.role}</p>
+                  <p className="text-[10px] text-muted-foreground font-mono">
+                    {isAdmin ? 'ADMIN' : user.role}
+                  </p>
                   {isAdmin && (
                     <ShieldCheck className="w-2.5 h-2.5 text-red-400" />
                   )}
