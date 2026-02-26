@@ -55,3 +55,5 @@
 - [x] PR1: Socle backend — 32 tests Vitest passent (21 nouveaux + 10 emailService + 1 auth.logout)
 - [x] Bug: Le bouton de recherche dans la page Documentation a disparu — corrigé : restauré DocSearchDialog.tsx, Kbd.tsx et le bouton 'Recherche globale' (⌘K) dans DocsPage.tsx
 - [x] Feature: Réorganiser le menu sidebar en menus déroulants (accordéons) par catégories — NavSectionAccordion avec chevron, auto-expand de la section active, animation CSS, sections flat pour Général/Aide
+- [x] Bug: AdminUsersPage affiche des données fictives du memoryStore au lieu des vrais utilisateurs de la DB Postgres — corrigé : réécriture complète avec hooks tRPC admin.listUsers/updateUser/deleteUser/createInvite/listInvites/revokeInvite
+- [x] Bug: Configuration email des notifications perdue après migration localStorage → memoryStore — corrigé : memoryStore persiste les clés agilestest_notif_* et agilestest_audit_* dans localStorage
