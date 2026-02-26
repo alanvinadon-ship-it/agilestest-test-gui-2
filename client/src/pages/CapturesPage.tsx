@@ -10,7 +10,7 @@ import type { CaptureStatus, CaptureTargetType, CaptureType } from '../types';
 import {
   Network, Loader2, X, AlertCircle, Plus, Search,
   CheckCircle2, XCircle, Clock, Ban, Play, StopCircle,
-  Trash2,
+  Trash2, Radio,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -31,7 +31,15 @@ function CreateCaptureModal({ isOpen, onClose, projectId }: {
   const [executionId, setExecutionId] = useState<string>('');
   const [targetType, setTargetType] = useState<CaptureTargetType>('K8S');
   const [captureType, setCaptureType] = useState<CaptureType>('PCAP');
+  const [probeId, setProbeId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+
+  // Fetch active probes for PROBE target type
+  const { data: probesData, isLoading: probesLoading } = trpc.probes.listLite.useQuery(
+    { status: 'ONLINE' },
+    { enabled: isOpen && targetType === 'PROBE' },
+  );
+  const availableProbes = probesData ?? [];
 
   // Fetch executions for the project to link capture
   const { data: execData } = trpc.executions.list.useQuery(
@@ -55,6 +63,7 @@ function CreateCaptureModal({ isOpen, onClose, projectId }: {
     e.preventDefault();
     setError(null);
     if (!name.trim()) { setError('Nom requis.'); return; }
+    if (targetType === 'PROBE' && !probeId) { setError('Sonde requise quand la cible est PROBE.'); return; }
 
     createMutation.mutate({
       projectId,
@@ -62,6 +71,7 @@ function CreateCaptureModal({ isOpen, onClose, projectId }: {
       executionId: executionId ? Number(executionId) : undefined,
       captureType,
       targetType,
+      ...(targetType === 'PROBE' && probeId ? { probeId: Number(probeId) } : {}),
     });
   };
 
@@ -103,7 +113,7 @@ function CreateCaptureModal({ isOpen, onClose, projectId }: {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">Type de cible</label>
-              <select value={targetType} onChange={(e) => setTargetType(e.target.value as CaptureTargetType)}
+              <select value={targetType} onChange={(e) => { setTargetType(e.target.value as CaptureTargetType); if (e.target.value !== 'PROBE') setProbeId(''); }}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30">
                 <option value="K8S">Kubernetes</option>
                 <option value="SSH">SSH</option>
@@ -119,6 +129,33 @@ function CreateCaptureModal({ isOpen, onClose, projectId }: {
               </select>
             </div>
           </div>
+          {/* Probe selector — visible only when targetType=PROBE */}
+          {targetType === 'PROBE' && (
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">
+                <Radio className="w-3.5 h-3.5 inline mr-1" />Sonde *
+              </label>
+              {probesLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Chargement des sondes...
+                </div>
+              ) : availableProbes.length === 0 ? (
+                <div className="flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/20 rounded-md p-2.5">
+                  <AlertCircle className="w-4 h-4 text-yellow-400 shrink-0" />
+                  <p className="text-xs text-yellow-400">Aucune sonde en ligne. Mettez une sonde en ligne depuis la page Sondes.</p>
+                </div>
+              ) : (
+                <select value={probeId} onChange={(e) => setProbeId(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30">
+                  <option value="">Sélectionner une sonde...</option>
+                  {availableProbes.map((p: any) => (
+                    <option key={p.id} value={p.id}>{p.name} ({p.probeType}) — {p.status}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose}
               className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors">

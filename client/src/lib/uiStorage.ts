@@ -29,6 +29,7 @@ const UI_KEYS = {
   tablePageSize: z.number().int().min(5).max(100),
   lastProjectId: z.number().int().nullable(),
   dashboardLayout: z.enum(["grid", "list"]),
+  probesMonitorView: z.enum(["grid", "compact"]),
   sidebarAccordions: sidebarAccordionsSchema,
 } as const;
 
@@ -47,6 +48,7 @@ const DEFAULTS: { [K in UIKeyName]: UIKeyValue<K> } = {
   tablePageSize: 20,
   lastProjectId: null,
   dashboardLayout: "grid",
+  probesMonitorView: "grid",
   sidebarAccordions: {
     configuration: false,
     execution: false,

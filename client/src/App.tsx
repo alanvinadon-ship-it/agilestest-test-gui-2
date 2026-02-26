@@ -20,6 +20,7 @@ import ExecutionsPage from "./pages/ExecutionsPage";
 import ExecutionDetailPage from "./pages/ExecutionDetailPage";
 import CapturesPage from "./pages/CapturesPage";
 import ProbesPage from "./pages/ProbesPage";
+import ProbesMonitoringPage from "./pages/ProbesMonitoringPage";
 import DatasetTypesPage from "./pages/DatasetTypesPage";
 import BundlesPage from "./pages/BundlesPage";
 import GeneratedScriptsPage from "./pages/GeneratedScriptsPage";
@@ -128,6 +129,9 @@ function AppRouter() {
               </Route>
               <Route path="/probes">
                 <ProjectScoped><ProbesPage /></ProjectScoped>
+              </Route>
+              <Route path="/probes/monitoring">
+                <ProjectScoped><ProbesMonitoringPage /></ProjectScoped>
               </Route>
 
               {/* Project settings */}

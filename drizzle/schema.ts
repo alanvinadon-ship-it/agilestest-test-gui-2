@@ -276,3 +276,22 @@ export const aiAnalyses = mysqlTable("ai_analyses", {
 
 export type AiAnalysis = typeof aiAnalyses.$inferSelect;
 export type InsertAiAnalysis = typeof aiAnalyses.$inferInsert;
+
+// ─── Reports (PDF exports) ──────────────────────────────────────────────────
+export const reports = mysqlTable("reports", {
+  id: int("id").autoincrement().primaryKey(),
+  executionId: int("executionId").notNull(),
+  projectId: int("projectId").notNull(),
+  status: mysqlEnum("status", ["PENDING", "GENERATING", "DONE", "FAILED"]).default("PENDING").notNull(),
+  storagePath: varchar("storagePath", { length: 512 }),
+  downloadUrl: text("downloadUrl"),
+  filename: varchar("filename", { length: 255 }),
+  sizeBytes: int("sizeBytes"),
+  error: text("error"),
+  requestedBy: int("requestedBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Report = typeof reports.$inferSelect;
+export type InsertReport = typeof reports.$inferInsert;

@@ -27,6 +27,7 @@ import {
   Bell,
   PanelLeftClose,
   PanelLeftOpen,
+  Activity,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -93,6 +94,7 @@ const baseNavSections: NavSection[] = [
       { href: "/executions", icon: Play, label: "Exécutions" },
       { href: "/captures", icon: Network, label: "Captures" },
       { href: "/probes", icon: Radio, label: "Sondes" },
+      { href: "/probes/monitoring", icon: Activity, label: "Monitoring" },
     ],
   },
   {

@@ -298,14 +298,32 @@ export const capturesRouter = router({
     projectId: z.number(), name: z.string().min(1), executionId: z.number().optional(),
     captureType: z.enum(["LOGS", "PCAP"]).default("PCAP"),
     targetType: z.enum(["K8S", "SSH", "PROBE"]).default("SSH"),
+    probeId: z.number().optional(),
     config: z.any().optional(),
   })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    // Validate probeId when targetType is PROBE
+    if (input.targetType === "PROBE") {
+      if (!input.probeId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "probeId requis quand targetType=PROBE" });
+      }
+      // Verify probe exists and is ONLINE
+      const [probe] = await db.select().from(probes).where(eq(probes.id, input.probeId)).limit(1);
+      if (!probe) throw new TRPCError({ code: "NOT_FOUND", message: "Sonde introuvable" });
+    }
+    // Build config: merge probeId into config JSON when targetType=PROBE
+    let configValue = typeof input.config === 'object' && input.config ? { ...input.config } : {};
+    if (input.targetType === "PROBE" && input.probeId) {
+      configValue = { ...configValue, probeId: input.probeId };
+    } else {
+      // Strip probeId from config if not PROBE target
+      delete (configValue as any).probeId;
+    }
     const res = await db.insert(captures).values({
       projectId: input.projectId, name: input.name, executionId: input.executionId ?? null,
       captureType: input.captureType, targetType: input.targetType,
-      config: input.config ?? null, status: "QUEUED", createdBy: ctx.user!.id,
+      config: Object.keys(configValue).length ? configValue : null, status: "QUEUED", createdBy: ctx.user!.id,
     });
     return { success: true, captureId: Number(res[0].insertId) };
   }),
@@ -319,6 +337,56 @@ export const capturesRouter = router({
 
 // ─── Probes ─────────────────────────────────────────────────────────────────
 export const probesRouter = router({
+  /** Lightweight list for dropdowns (id, name, type, status) */
+  listLite: protectedProcedure.input(z.object({
+    q: z.string().optional(),
+    status: z.enum(["ONLINE", "OFFLINE", "DEGRADED"]).optional(),
+  }).optional()).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const conditions: SQL[] = [];
+    if (input?.status) conditions.push(eq(probes.status, input.status));
+    if (input?.q) conditions.push(like(probes.name, `%${input.q}%`));
+    const where = conditions.length ? and(...conditions) : undefined;
+    const rows = await db.select({
+      id: probes.id, name: probes.name, probeType: probes.probeType, status: probes.status,
+    }).from(probes).where(where).orderBy(probes.name).limit(200);
+    return rows;
+  }),
+  /** Monitoring endpoint with server-side health calculation */
+  monitoring: protectedProcedure.input(z.object({
+    q: z.string().optional(),
+    probeType: z.enum(["LINUX_EDGE", "K8S_CLUSTER", "NETWORK_TAP"]).optional(),
+    status: z.enum(["ONLINE", "OFFLINE", "DEGRADED"]).optional(),
+  }).optional()).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const conditions: SQL[] = [];
+    if (input?.status) conditions.push(eq(probes.status, input.status));
+    if (input?.probeType) conditions.push(eq(probes.probeType, input.probeType));
+    if (input?.q) conditions.push(like(probes.name, `%${input.q}%`));
+    const where = conditions.length ? and(...conditions) : undefined;
+    const rows = await db.select().from(probes).where(where).orderBy(probes.name).limit(500);
+    // Server-side health calculation
+    const HEALTH_GREEN_SEC = Number(process.env.PROBE_HEALTH_GREEN_SEC ?? 60);
+    const HEALTH_ORANGE_SEC = Number(process.env.PROBE_HEALTH_ORANGE_SEC ?? 300);
+    const now = Date.now();
+    const items = rows.map(p => {
+      let health: "GREEN" | "ORANGE" | "RED" = "RED";
+      if (p.status === "ONLINE" && p.lastSeenAt) {
+        const ageSec = (now - new Date(p.lastSeenAt).getTime()) / 1000;
+        if (ageSec <= HEALTH_GREEN_SEC) health = "GREEN";
+        else if (ageSec <= HEALTH_ORANGE_SEC) health = "ORANGE";
+        else health = "RED";
+      } else if (p.status === "ONLINE") {
+        health = "ORANGE"; // ONLINE but no heartbeat
+      } else if (p.status === "DEGRADED") {
+        health = "ORANGE";
+      }
+      return { ...p, health };
+    });
+    return { items, total: items.length };
+  }),
   list: protectedProcedure.input(z.object({
     ...paginationInput.shape,
     status: z.enum(["ONLINE", "OFFLINE", "DEGRADED"]).optional(),

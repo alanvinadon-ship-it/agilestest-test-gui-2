@@ -143,3 +143,13 @@
 - [x] Étape 3: Frontend — intégration captures liées dans ProbeCard (expanded view)
 - [x] Étape 3: Tests — 25 tests probes-trpc.test.ts (CRUD, input validation, frontend migration)
 - [x] Étape 3: Docs — (intégré dans les tests et le code)
+- [x] Étape 1: Backend — sélecteur sonde dans captures (probeId dans config, validation Zod, probes.listLite)
+- [x] Étape 1: Frontend — dropdown sonde dans CreateCaptureModal (visible si targetType=PROBE)
+- [x] Étape 1: Tests — 20 tests capture-probe-selector.test.ts
+- [x] Étape 2: Backend — endpoint probes.monitoring + calcul health server-side (GREEN/ORANGE/RED)
+- [x] Étape 2: Frontend — page ProbesMonitoringPage (grille/compact, auto-refresh 15s, filtres status/type/search)
+- [x] Étape 2: Tests — 21 tests probes-monitoring.test.ts (health calc + route + sidebar)
+- [x] Étape 3: Backend — job generateExecutionPdf (pdfkit) + upload S3 + reportsRouter (requestPdf/getReport/listByExecution)
+- [x] Étape 3: Frontend — ExportPdfButton dans ExecutionDetailPage (polling + auto-download + retry)
+- [x] Étape 3: Tests — 14 tests reports-pdf.test.ts (router + schema + job handler + frontend)
+- [x] Étape 3: Docs — (intégré dans les tests et le code)

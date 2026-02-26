@@ -18,7 +18,7 @@ import {
   Ban, Download, FileText, Image, Video, FileCode, File,
   AlertCircle, Activity, Wrench, Sparkles, Play, RotateCcw,
   Code2, Globe, Package, Server, Brain,
-  Eye, Shield, Beaker, Tag, Hash,
+  Eye, Shield, Beaker, Tag, Hash, FileDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -168,6 +168,79 @@ function ExecutionDetailActions({ executionId, status }: { executionId: number; 
         Parser JMeter
       </button>
     </div>
+  );
+}// ─── Export PDF Button ───────────────────────────────────────────────────────
+function ExportPdfButton({ executionId }: { executionId: number }) {
+  const [reportId, setReportId] = useState<number | null>(null);
+
+  const requestPdf = trpc.reports.requestPdf.useMutation({
+    onSuccess: (data) => {
+      setReportId(data.reportId);
+      toast.success(data.message);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  // Poll report status when we have a reportId
+  const { data: report } = trpc.reports.getReport.useQuery(
+    { reportId: reportId! },
+    {
+      enabled: !!reportId,
+      refetchInterval: (query) => {
+        const r = query.state.data;
+        if (!r) return 2000;
+        if (r.status === 'PENDING' || r.status === 'GENERATING') return 2000;
+        return false;
+      },
+    },
+  );
+
+  // Auto-download when done
+  const downloadTriggered = useMemo(() => {
+    if (report?.status === 'DONE' && report.downloadUrl) {
+      window.open(report.downloadUrl, '_blank');
+      return true;
+    }
+    return false;
+  }, [report?.status, report?.downloadUrl]);
+
+  const isPending = requestPdf.isPending || (reportId && report && ['PENDING', 'GENERATING'].includes(report.status));
+
+  if (report?.status === 'FAILED') {
+    return (
+      <button
+        onClick={() => { setReportId(null); requestPdf.mutate({ executionId }); }}
+        className="inline-flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 px-3 py-1.5 rounded-md border border-red-500/20 transition-colors"
+      >
+        <AlertTriangle className="w-3 h-3" />
+        Réessayer PDF
+      </button>
+    );
+  }
+
+  if (report?.status === 'DONE' && report.downloadUrl) {
+    return (
+      <a
+        href={report.downloadUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 text-xs text-green-400 hover:text-green-300 bg-green-500/10 hover:bg-green-500/20 px-3 py-1.5 rounded-md border border-green-500/20 transition-colors"
+      >
+        <FileDown className="w-3 h-3" />
+        Télécharger PDF
+      </a>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => requestPdf.mutate({ executionId })}
+      disabled={!!isPending}
+      className="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-1.5 rounded-md border border-emerald-500/20 transition-colors disabled:opacity-50"
+    >
+      {isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileDown className="w-3 h-3" />}
+      {isPending ? 'Génération...' : 'Export PDF'}
+    </button>
   );
 }
 
@@ -319,6 +392,7 @@ export default function ExecutionDetailPage() {
           </div>
           <div className="flex items-center gap-2">
             <ExecutionDetailActions executionId={executionId} status={execData.status} />
+            <ExportPdfButton executionId={executionId} />
             {canRerunExecution && ['PASSED', 'FAILED', 'ERROR'].includes(execData.status) && (
               <button
                 onClick={handleRerun}

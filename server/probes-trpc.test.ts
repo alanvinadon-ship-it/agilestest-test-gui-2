@@ -22,7 +22,9 @@ describe("tRPC router: probes CRUD complet", () => {
     expect(procedures).toContain("update");
     expect(procedures).toContain("updateStatus");
     expect(procedures).toContain("delete");
-    expect(procedures.length).toBe(6);
+    expect(procedures).toContain("listLite");
+    expect(procedures).toContain("monitoring");
+    expect(procedures.length).toBe(8);
   });
 });
 

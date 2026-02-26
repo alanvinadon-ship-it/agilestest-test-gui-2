@@ -4,7 +4,7 @@
 // ============================================================================
 
 import { getDb } from "./db";
-import { jobs, executions, artifacts, aiAnalyses } from "../drizzle/schema";
+import { jobs, executions, artifacts, aiAnalyses, reports, testScenarios, testProfiles, incidents } from "../drizzle/schema";
 import { eq, and, lte, sql, inArray } from "drizzle-orm";
 import { ENV } from "./_core/env";
 import { deleteArtifact } from "./artifactStorage";
@@ -14,12 +14,14 @@ import { deleteArtifact } from "./artifactStorage";
 export type JobName =
   | "parseJmeterJtl"
   | "aiAnalyzeRun"
-  | "retentionPurge";
+  | "retentionPurge"
+  | "generateExecutionPdf";
 
 export interface JobPayload {
   parseJmeterJtl: { runId: number; artifactId: number };
   aiAnalyzeRun: { runId: number };
   retentionPurge: { dryRun?: boolean };
+  generateExecutionPdf: { executionId: number; reportId: number; projectId: number };
 }
 
 type JobHandler<T extends JobName> = (
@@ -325,6 +327,162 @@ registerHandler("retentionPurge", async (payload) => {
   }
 
   return stats;
+});
+
+/**
+ * Generate Execution PDF Report
+ * Builds a professional PDF with execution details, incidents, artifacts, AI analyses.
+ * Uploads to S3 and updates the reports table.
+ */
+registerHandler("generateExecutionPdf", async (payload) => {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+
+  const { executionId, reportId, projectId } = payload;
+
+  // Mark report as generating
+  await db.update(reports).set({ status: "GENERATING" }).where(eq(reports.id, reportId));
+
+  try {
+    // Fetch execution data
+    const [execution] = await db.select().from(executions).where(eq(executions.id, executionId)).limit(1);
+    if (!execution) throw new Error(`Execution ${executionId} not found`);
+
+    // Fetch related data in parallel
+    const [scenarioRows, profileRows, artifactRows, incidentRows, analysisRows] = await Promise.all([
+      execution.scenarioId ? db.select().from(testScenarios).where(eq(testScenarios.id, execution.scenarioId)).limit(1) : Promise.resolve([]),
+      execution.profileId ? db.select().from(testProfiles).where(eq(testProfiles.id, execution.profileId)).limit(1) : Promise.resolve([]),
+      db.select().from(artifacts).where(eq(artifacts.executionId, executionId)),
+      db.select().from(incidents).where(eq(incidents.executionId, executionId)),
+      db.select().from(aiAnalyses).where(eq(aiAnalyses.executionId, executionId)),
+    ]);
+
+    const scenario = scenarioRows[0] ?? null;
+    const profile = profileRows[0] ?? null;
+
+    // Build PDF with pdfkit
+    const PDFDocument = (await import("pdfkit")).default;
+    const doc = new PDFDocument({ size: "A4", margin: 50 });
+
+    // Collect buffer
+    const chunks: Buffer[] = [];
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    const pdfDone = new Promise<Buffer>((resolve, reject) => {
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
+      doc.on("error", reject);
+    });
+
+    // ── Title page ──
+    doc.fontSize(24).font("Helvetica-Bold").text("Rapport d'Exécution", { align: "center" });
+    doc.moveDown(0.5);
+    doc.fontSize(14).font("Helvetica").fillColor("#666666").text(`Exécution #${executionId}`, { align: "center" });
+    doc.moveDown(0.3);
+    doc.fontSize(10).text(`Généré le ${new Date().toLocaleString("fr-FR")}`, { align: "center" });
+    doc.moveDown(2);
+
+    // ── Execution summary ──
+    doc.fillColor("#000000").fontSize(16).font("Helvetica-Bold").text("Résumé de l'exécution");
+    doc.moveDown(0.5);
+    doc.fontSize(10).font("Helvetica");
+    const summaryData = [
+      ["ID", `#${execution.id}`],
+      ["Statut", execution.status],
+      ["Scénario", scenario?.name ?? "—"],
+      ["Profil", profile?.name ?? "—"],
+      ["Créé le", execution.createdAt ? new Date(execution.createdAt).toLocaleString("fr-FR") : "—"],
+      ["Démarré le", execution.startedAt ? new Date(execution.startedAt).toLocaleString("fr-FR") : "—"],
+      ["Terminé le", execution.finishedAt ? new Date(execution.finishedAt).toLocaleString("fr-FR") : "—"],
+    ];
+    for (const [label, value] of summaryData) {
+      doc.font("Helvetica-Bold").text(`${label}: `, { continued: true });
+      doc.font("Helvetica").text(String(value ?? "—"));
+    }
+
+    // ── Incidents ──
+    if (incidentRows.length > 0) {
+      doc.addPage();
+      doc.fontSize(16).font("Helvetica-Bold").text(`Incidents (${incidentRows.length})`);
+      doc.moveDown(0.5);
+      for (const inc of incidentRows) {
+        doc.fontSize(10).font("Helvetica-Bold").text(`[${(inc as any).severity ?? "INFO"}] ${(inc as any).title ?? "Incident #" + inc.id}`);
+        if ((inc as any).description) {
+          doc.font("Helvetica").text(String((inc as any).description).substring(0, 500));
+        }
+        doc.moveDown(0.3);
+      }
+    }
+
+    // ── Artifacts ──
+    if (artifactRows.length > 0) {
+      doc.addPage();
+      doc.fontSize(16).font("Helvetica-Bold").text(`Artefacts (${artifactRows.length})`);
+      doc.moveDown(0.5);
+      for (const art of artifactRows) {
+        doc.fontSize(10).font("Helvetica-Bold").text(art.filename);
+        doc.font("Helvetica").text(`Type: ${art.type} | Taille: ${art.sizeBytes ? Math.round(art.sizeBytes / 1024) + " Ko" : "—"}`);
+        doc.moveDown(0.2);
+      }
+    }
+
+    // ── AI Analyses ──
+    if (analysisRows.length > 0) {
+      doc.addPage();
+      doc.fontSize(16).font("Helvetica-Bold").text("Analyses IA");
+      doc.moveDown(0.5);
+      for (const analysis of analysisRows) {
+        doc.fontSize(10).font("Helvetica-Bold").text(`Analyse #${analysis.id} — ${analysis.status}`);
+        if (analysis.summary) {
+          doc.font("Helvetica").text(String(analysis.summary).substring(0, 1000));
+        }
+        if (analysis.recommendations) {
+          try {
+            const recs = JSON.parse(String(analysis.recommendations));
+            if (Array.isArray(recs)) {
+              doc.moveDown(0.2);
+              doc.font("Helvetica-Bold").text("Recommandations :");
+              for (const rec of recs) {
+                doc.font("Helvetica").text(`  • ${rec}`);
+              }
+            }
+          } catch { /* skip */ }
+        }
+        doc.moveDown(0.3);
+      }
+    }
+
+    // ── Footer ──
+    doc.addPage();
+    doc.fontSize(12).font("Helvetica").fillColor("#999999").text(
+      "Ce rapport a été généré automatiquement par AgilesTest Cloud.",
+      { align: "center" }
+    );
+
+    doc.end();
+    const pdfBuffer = await pdfDone;
+
+    // Upload to S3
+    const { storagePut } = await import("./storage");
+    const filename = `rapport-execution-${executionId}-${Date.now()}.pdf`;
+    const key = `reports/project-${projectId}/${filename}`;
+    const { url } = await storagePut(key, pdfBuffer, "application/pdf");
+
+    // Update report record
+    await db.update(reports).set({
+      status: "DONE",
+      storagePath: key,
+      downloadUrl: url,
+      filename,
+      sizeBytes: pdfBuffer.length,
+    }).where(eq(reports.id, reportId));
+
+    return { reportId, filename, sizeBytes: pdfBuffer.length, url };
+  } catch (err: any) {
+    await db.update(reports).set({
+      status: "FAILED",
+      error: String(err?.message ?? err).substring(0, 2000),
+    }).where(eq(reports.id, reportId));
+    throw err;
+  }
 });
 
 // ── Job status query ───────────────────────────────────────────────────────
