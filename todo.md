@@ -121,3 +121,12 @@
 - [x] Docker: Tester MinIO (upload OK, download OK, list OK, presigned URL OK via boto3)
 - [x] Docker: Smoke test (healthz + readyz + metrics + frontend HTML + security headers)
 - [x] Docker: Documenter dans docs/INSTALL_DOCKER.md
+- [x] UI: Supprimer memoryStore des pages Exécutions et Captures
+- [x] UI: Brancher ExecutionsPage sur tRPC executions.list/get
+- [x] UI: Brancher CapturesPage sur tRPC captures.list/get
+- [x] Backend: Endpoints jobs.enqueueAiAnalysis + jobs.enqueueParseJtl (déjà existants)
+- [x] Backend: Endpoint jobs.status + jobs.listByRun (déjà existants)
+- [x] Backend: RBAC enqueue jobs (protectedProcedure)
+- [x] UI: Bouton Analyser IA + Parser JMeter avec statut job (badge QUEUED/RUNNING/COMPLETED/FAILED)
+- [x] UI: Invalidation cache après enqueue (invalidate executions.list + jobs.listByRun)
+- [x] Tests: 25 tests ciblés (router structure, input validation, status values, schema tables, no memoryStore)

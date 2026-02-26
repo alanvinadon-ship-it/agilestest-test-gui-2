@@ -1,74 +1,68 @@
+/**
+ * CapturesPage — Captures réseau PCAP et collecte de logs
+ * Données réelles via tRPC (MySQL) — branchement direct sur le backend.
+ */
 import { useState } from 'react';
 import { useProject } from '../state/projectStore';
-import { useAuth } from '../auth/AuthContext';
 import { usePermission, PermissionKey } from '../security';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { collectorApi } from '../api/collectorApi';
-import { repositoryApi } from '../api/repositoryApi';
-import type { CaptureJob, CaptureStatus, Execution, CreateCaptureRequest, CaptureTargetType, CaptureType } from '../types';
+import { trpc } from '@/lib/trpc';
+import type { CaptureStatus, CaptureTargetType, CaptureType } from '../types';
 import {
   Network, Loader2, X, AlertCircle, Plus, Search,
   CheckCircle2, XCircle, Clock, Ban, Play, StopCircle,
-  Eye
+  Trash2,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
-const captureStatusConfig: Record<CaptureStatus, { label: string; cls: string }> = {
-  QUEUED: { label: 'En file', cls: 'text-yellow-400' },
-  RUNNING: { label: 'En cours', cls: 'text-blue-400' },
-  COMPLETED: { label: 'Terminé', cls: 'text-green-400' },
-  FAILED: { label: 'Échoué', cls: 'text-red-400' },
-  CANCELLED: { label: 'Annulé', cls: 'text-gray-400' },
+const captureStatusConfig: Record<CaptureStatus, { icon: typeof CheckCircle2; label: string; cls: string }> = {
+  QUEUED:    { icon: Clock,        label: 'En file',   cls: 'text-yellow-400' },
+  RUNNING:   { icon: Loader2,      label: 'En cours',  cls: 'text-blue-400' },
+  COMPLETED: { icon: CheckCircle2, label: 'Terminé',   cls: 'text-green-400' },
+  FAILED:    { icon: XCircle,      label: 'Échoué',    cls: 'text-red-400' },
+  CANCELLED: { icon: Ban,          label: 'Annulé',    cls: 'text-gray-400' },
 };
 
+// ─── Create Capture Modal ────────────────────────────────────────────────
 function CreateCaptureModal({ isOpen, onClose, projectId }: {
-  isOpen: boolean; onClose: () => void; projectId: string;
+  isOpen: boolean; onClose: () => void; projectId: number;
 }) {
-  const queryClient = useQueryClient();
-  const [executionId, setExecutionId] = useState('');
+  const utils = trpc.useUtils();
+  const [name, setName] = useState('');
+  const [executionId, setExecutionId] = useState<string>('');
   const [targetType, setTargetType] = useState<CaptureTargetType>('K8S');
   const [captureType, setCaptureType] = useState<CaptureType>('PCAP');
-  const [duration, setDuration] = useState('60');
-  const [maxSize, setMaxSize] = useState('100');
-  const [namespace, setNamespace] = useState('');
-  const [podSelector, setPodSelector] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const { data: execData } = useQuery({
-    queryKey: ['executions', projectId],
-    queryFn: () => repositoryApi.listExecutions(projectId, { limit: 20 }),
-    enabled: isOpen,
-  });
-  const executions = (execData?.data || []) as Execution[];
+  // Fetch executions for the project to link capture
+  const { data: execData } = trpc.executions.list.useQuery(
+    { projectId, page: 1, pageSize: 20 },
+    { enabled: isOpen },
+  );
+  const executions = execData?.data ?? [];
 
-  const mutation = useMutation({
-    mutationFn: (data: CreateCaptureRequest) => collectorApi.createCapture(data),
+  const createMutation = trpc.captures.create.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['captures'] });
+      toast.success('Capture créée');
+      utils.captures.list.invalidate();
       onClose();
     },
-    onError: (err: unknown) => {
-      const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
-      setError(axiosErr?.response?.data?.error?.message || 'Erreur lors de la création.');
+    onError: (err) => {
+      setError(err.message);
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!executionId) { setError('Sélectionnez une exécution.'); return; }
+    if (!name.trim()) { setError('Nom requis.'); return; }
 
-    const payload: CreateCaptureRequest = {
-      execution_id: executionId,
-      project_id: projectId,
-      target_type: targetType,
-      capture_type: captureType,
-      duration_seconds: parseInt(duration) || 60,
-      max_size_mb: parseInt(maxSize) || 100,
-      sources: targetType === 'K8S'
-        ? [{ namespace: namespace || 'default', pod_selector: podSelector || 'app=test' }]
-        : [{ host: '127.0.0.1', ssh_user: 'root', ssh_port: 22, log_paths: ['/var/log/syslog'] }],
-    };
-    mutation.mutate(payload);
+    createMutation.mutate({
+      projectId,
+      name: name.trim(),
+      executionId: executionId ? Number(executionId) : undefined,
+      captureType,
+      targetType,
+    });
   };
 
   if (!isOpen) return null;
@@ -91,12 +85,18 @@ function CreateCaptureModal({ isOpen, onClose, projectId }: {
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Exécution associée *</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Nom de la capture *</label>
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+              placeholder="Capture PCAP IMS..."
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">Exécution associée</label>
             <select value={executionId} onChange={(e) => setExecutionId(e.target.value)}
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30">
-              <option value="">Sélectionner une exécution</option>
-              {executions.map(ex => (
-                <option key={ex.id} value={ex.id}>{ex.id.slice(0, 8)}... — {ex.status}</option>
+              <option value="">Aucune (capture indépendante)</option>
+              {executions.map((ex: any) => (
+                <option key={ex.id} value={ex.id}>#{ex.id} — {ex.status} — {ex.targetEnv || 'N/A'}</option>
               ))}
             </select>
           </div>
@@ -119,42 +119,14 @@ function CreateCaptureModal({ isOpen, onClose, projectId }: {
               </select>
             </div>
           </div>
-          {targetType === 'K8S' && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Namespace</label>
-                <input type="text" value={namespace} onChange={(e) => setNamespace(e.target.value)}
-                  placeholder="default"
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Pod Selector</label>
-                <input type="text" value={podSelector} onChange={(e) => setPodSelector(e.target.value)}
-                  placeholder="app=my-service"
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
-              </div>
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Durée (sec)</label>
-              <input type="number" value={duration} onChange={(e) => setDuration(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Taille max (MB)</label>
-              <input type="number" value={maxSize} onChange={(e) => setMaxSize(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
-            </div>
-          </div>
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose}
               className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors">
               Annuler
             </button>
-            <button type="submit" disabled={mutation.isPending}
+            <button type="submit" disabled={createMutation.isPending}
               className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
-              {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+              {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
               Lancer la capture
             </button>
           </div>
@@ -164,39 +136,53 @@ function CreateCaptureModal({ isOpen, onClose, projectId }: {
   );
 }
 
+// ─── Main Page ────────────────────────────────────────────────────────────
+
 export default function CapturesPage() {
   const { currentProject } = useProject();
-  const { canWrite } = useAuth();
   const { can } = usePermission();
   const canCreateCapture = can(PermissionKey.EXECUTIONS_RUN);
   const [showCreate, setShowCreate] = useState(false);
-  const queryClient = useQueryClient();
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const pageSize = 25;
 
-  // We need an execution to list captures — list all executions then fetch captures for each
-  const { data: execData, isLoading: loadingExec } = useQuery({
-    queryKey: ['executions', currentProject?.id],
-    queryFn: () => repositoryApi.listExecutions(currentProject!.id, { limit: 50 }),
-    enabled: !!currentProject,
+  const utils = trpc.useUtils();
+
+  const { data, isLoading } = trpc.captures.list.useQuery(
+    {
+      projectId: Number(currentProject?.id) || 0,
+      page,
+      pageSize,
+      ...(statusFilter ? { status: statusFilter as CaptureStatus } : {}),
+    },
+    {
+      enabled: !!currentProject,
+      refetchInterval: 10000,
+    },
+  );
+
+  const captures = data?.data ?? [];
+  const pagination = data?.pagination;
+
+  const deleteMutation = trpc.captures.delete.useMutation({
+    onSuccess: () => {
+      toast.success('Capture supprimée');
+      utils.captures.list.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
   });
 
-  const executions = (execData?.data || []) as Execution[];
-  const latestExecId = executions[0]?.id || '';
-
-  const { data: capturesData, isLoading: loadingCaptures } = useQuery({
-    queryKey: ['captures', latestExecId],
-    queryFn: () => collectorApi.listCaptures(latestExecId),
-    enabled: !!latestExecId,
-    refetchInterval: 10000,
+  const filteredCaptures = captures.filter((cap: any) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      String(cap.id).includes(q) ||
+      (cap.name || '').toLowerCase().includes(q) ||
+      (cap.captureType || '').toLowerCase().includes(q)
+    );
   });
-
-  const captures = (capturesData?.data || []) as CaptureJob[];
-
-  const cancelMutation = useMutation({
-    mutationFn: (captureId: string) => collectorApi.cancelCapture(captureId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['captures'] }),
-  });
-
-  const isLoading = loadingExec || loadingCaptures;
 
   if (!currentProject) {
     return (
@@ -212,7 +198,10 @@ export default function CapturesPage() {
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-heading font-bold text-foreground">Captures</h1>
+          <h1 className="text-2xl font-heading font-bold text-foreground flex items-center gap-2">
+            <Network className="w-6 h-6 text-primary" />
+            Captures
+          </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Captures réseau PCAP et collecte de logs pour <strong className="text-foreground">{currentProject.name}</strong>.
           </p>
@@ -225,56 +214,135 @@ export default function CapturesPage() {
         )}
       </div>
 
+      {/* Filters */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher (ID, nom, type)..."
+            className="w-full rounded-md border border-input bg-background pl-10 pr-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
+        </div>
+        <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+          className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30">
+          <option value="">Tous les statuts</option>
+          <option value="QUEUED">En file</option>
+          <option value="RUNNING">En cours</option>
+          <option value="COMPLETED">Terminé</option>
+          <option value="FAILED">Échoué</option>
+          <option value="CANCELLED">Annulé</option>
+        </select>
+      </div>
+
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
           <Loader2 className="w-6 h-6 text-primary animate-spin" />
         </div>
-      ) : captures.length === 0 ? (
+      ) : filteredCaptures.length === 0 ? (
         <div className="text-center py-16 bg-card border border-border rounded-lg">
           <Network className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
           <h3 className="text-base font-heading font-semibold text-foreground mb-1">Aucune capture</h3>
           <p className="text-sm text-muted-foreground mb-4">
-            {executions.length === 0
-              ? 'Lancez d\'abord une exécution avant de créer une capture.'
-              : 'Créez une capture PCAP ou Logs pour collecter des données.'}
+            Créez une capture PCAP ou Logs pour collecter des données réseau.
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {captures.map((cap) => {
-            const status = captureStatusConfig[cap.status];
-            return (
-              <div key={cap.capture_id} className="flex items-center justify-between bg-card border border-border rounded-lg px-5 py-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
-                    <Network className="w-5 h-5 text-primary" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-xs font-mono px-2 py-0.5 rounded bg-primary/10 text-primary">{cap.capture_type}</span>
-                      <span className="text-xs font-mono px-2 py-0.5 rounded bg-secondary text-muted-foreground">{cap.target_type}</span>
-                      <span className={`text-xs font-medium ${status.cls}`}>{status.label}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground font-mono">
-                      {cap.capture_id.slice(0, 12)}... — {cap.duration_seconds}s max — {cap.max_size_mb}MB max
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {(cap.status === 'QUEUED' || cap.status === 'RUNNING') && (
-                    <button onClick={() => cancelMutation.mutate(cap.capture_id)}
-                      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive transition-colors">
-                      <StopCircle className="w-3.5 h-3.5" /> Annuler
-                    </button>
-                  )}
-                </div>
+        <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="text-left px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Statut</th>
+                <th className="text-left px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Nom</th>
+                <th className="text-left px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Type</th>
+                <th className="text-left px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Cible</th>
+                <th className="text-left px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Exécution</th>
+                <th className="text-left px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Date</th>
+                <th className="text-right px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredCaptures.map((cap: any) => {
+                const statusCfg = captureStatusConfig[cap.status as CaptureStatus];
+                const StatusIcon = statusCfg?.icon || Clock;
+
+                return (
+                  <tr key={cap.id} className="border-b border-border last:border-0 hover:bg-secondary/20 transition-colors">
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${statusCfg?.cls || 'text-gray-400'}`}>
+                        <StatusIcon className={`w-3.5 h-3.5 ${cap.status === 'RUNNING' ? 'animate-spin' : ''}`} />
+                        {statusCfg?.label || cap.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-sm font-medium text-foreground">{cap.name}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs font-mono px-2 py-0.5 rounded bg-primary/10 text-primary">{cap.captureType}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs font-mono px-2 py-0.5 rounded bg-secondary text-muted-foreground">{cap.targetType}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {cap.executionId ? (
+                        <span className="text-xs font-mono text-foreground">#{cap.executionId}</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      {cap.createdAt ? new Date(cap.createdAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        {['QUEUED', 'COMPLETED', 'FAILED', 'CANCELLED'].includes(cap.status) && (
+                          <button
+                            onClick={() => deleteMutation.mutate({ captureId: cap.id })}
+                            disabled={deleteMutation.isPending}
+                            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Supprimer
+                          </button>
+                        )}
+                        {cap.status === 'RUNNING' && (
+                          <span className="inline-flex items-center gap-1 text-xs text-blue-400">
+                            <StopCircle className="w-3.5 h-3.5" /> En cours...
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          {/* Pagination */}
+          {pagination && pagination.totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+              <p className="text-xs text-muted-foreground">
+                Page {pagination.page} / {pagination.totalPages} — {pagination.total} capture(s)
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="rounded-md border border-border px-3 py-1 text-xs text-foreground hover:bg-secondary disabled:opacity-50 transition-colors"
+                >
+                  Précédent
+                </button>
+                <button
+                  onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
+                  disabled={page >= pagination.totalPages}
+                  className="rounded-md border border-border px-3 py-1 text-xs text-foreground hover:bg-secondary disabled:opacity-50 transition-colors"
+                >
+                  Suivant
+                </button>
               </div>
-            );
-          })}
+            </div>
+          )}
         </div>
       )}
 
-      <CreateCaptureModal isOpen={showCreate} onClose={() => setShowCreate(false)} projectId={currentProject.id} />
+      <CreateCaptureModal isOpen={showCreate} onClose={() => setShowCreate(false)} projectId={Number(currentProject.id)} />
     </div>
   );
 }
