@@ -1,21 +1,30 @@
 import { z } from "zod";
-import { router, protectedProcedure } from "../_core/trpc";
+import { router } from "../_core/trpc";
+import {
+  viewerProcedure, qaManagerProcedure, orgAdminProcedure,
+  auditMutation, requireProjectAccess,
+} from "../rbac/middleware";
 import * as profilesDb from "../db/profiles";
 
 export const profilesRouter = router({
-  list: protectedProcedure
+  // ── READ — any authenticated user with project access ──
+  list: viewerProcedure
+    .use(requireProjectAccess("PROJECT_VIEWER"))
     .input(z.object({ projectId: z.string() }))
     .query(async ({ input }) => {
       return profilesDb.listProfiles(input.projectId);
     }),
 
-  getByUid: protectedProcedure
+  getByUid: viewerProcedure
     .input(z.object({ uid: z.string() }))
     .query(async ({ input }) => {
       return profilesDb.getProfileByUid(input.uid);
     }),
 
-  create: protectedProcedure
+  // ── CREATE — QA_MANAGER+ with project editor access ──
+  create: qaManagerProcedure
+    .use(requireProjectAccess("PROJECT_EDITOR"))
+    .use(auditMutation("CREATE", "profile"))
     .input(z.object({
       projectId: z.string(),
       name: z.string().min(1),
@@ -33,7 +42,9 @@ export const profilesRouter = router({
       return profilesDb.createProfile(input);
     }),
 
-  update: protectedProcedure
+  // ── UPDATE — QA_MANAGER+ with project editor access ──
+  update: qaManagerProcedure
+    .use(auditMutation("UPDATE", "profile"))
     .input(z.object({
       uid: z.string(),
       name: z.string().optional(),
@@ -52,7 +63,9 @@ export const profilesRouter = router({
       return profilesDb.updateProfile(uid, data);
     }),
 
-  delete: protectedProcedure
+  // ── DELETE — ORG_ADMIN only ──
+  delete: orgAdminProcedure
+    .use(auditMutation("DELETE", "profile"))
     .input(z.object({ uid: z.string() }))
     .mutation(async ({ input }) => {
       return profilesDb.deleteProfile(input.uid);

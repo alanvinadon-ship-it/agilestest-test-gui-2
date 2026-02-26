@@ -1,18 +1,25 @@
 import { z } from "zod";
-import { router, protectedProcedure } from "../_core/trpc";
+import { router } from "../_core/trpc";
+import {
+  viewerProcedure, testEngineerProcedure, qaManagerProcedure, orgAdminProcedure,
+  auditMutation, requireProjectAccess,
+} from "../rbac/middleware";
 import * as driveDb from "../db/drivetest";
 
 export const drivetestRouter = router({
-  // Campaigns
-  listCampaigns: protectedProcedure
+  // ── Campaigns — READ: VIEWER, CREATE: QA_MANAGER+, DELETE: ORG_ADMIN ──
+  listCampaigns: viewerProcedure
+    .use(requireProjectAccess("PROJECT_VIEWER"))
     .input(z.object({ projectId: z.string() }))
     .query(({ input }) => driveDb.listCampaigns(input.projectId)),
 
-  getCampaign: protectedProcedure
+  getCampaign: viewerProcedure
     .input(z.object({ uid: z.string() }))
     .query(({ input }) => driveDb.getCampaignByUid(input.uid)),
 
-  createCampaign: protectedProcedure
+  createCampaign: qaManagerProcedure
+    .use(requireProjectAccess("PROJECT_EDITOR"))
+    .use(auditMutation("CREATE", "drive_campaign"))
     .input(z.object({
       projectId: z.string(), name: z.string().min(1), description: z.string().optional(),
       targetEnv: z.enum(["DEV", "PREPROD", "PILOT_ORANGE", "PROD"]).optional(),
@@ -21,7 +28,8 @@ export const drivetestRouter = router({
     }))
     .mutation(({ input }) => driveDb.createCampaign(input)),
 
-  updateCampaign: protectedProcedure
+  updateCampaign: qaManagerProcedure
+    .use(auditMutation("UPDATE", "drive_campaign"))
     .input(z.object({
       uid: z.string(), name: z.string().optional(), description: z.string().optional(),
       status: z.enum(["DRAFT", "ACTIVE", "COMPLETED", "CANCELLED"]).optional(),
@@ -31,16 +39,18 @@ export const drivetestRouter = router({
     }))
     .mutation(({ input }) => { const { uid, ...d } = input; return driveDb.updateCampaign(uid, d); }),
 
-  deleteCampaign: protectedProcedure
+  deleteCampaign: orgAdminProcedure
+    .use(auditMutation("DELETE", "drive_campaign"))
     .input(z.object({ uid: z.string() }))
     .mutation(({ input }) => driveDb.deleteCampaign(input.uid)),
 
-  // Routes
-  listRoutes: protectedProcedure
+  // ── Routes — READ: VIEWER, WRITE: QA_MANAGER+, DELETE: ORG_ADMIN ──
+  listRoutes: viewerProcedure
     .input(z.object({ campaignId: z.string() }))
     .query(({ input }) => driveDb.listRoutes(input.campaignId)),
 
-  createRoute: protectedProcedure
+  createRoute: qaManagerProcedure
+    .use(auditMutation("CREATE", "drive_route"))
     .input(z.object({
       campaignId: z.string(), name: z.string().min(1),
       routeGeojson: z.unknown().optional(), checkpointsGeojson: z.unknown().optional(),
@@ -48,16 +58,20 @@ export const drivetestRouter = router({
     }))
     .mutation(({ input }) => driveDb.createRoute(input)),
 
-  deleteRoute: protectedProcedure
+  deleteRoute: orgAdminProcedure
+    .use(auditMutation("DELETE", "drive_route"))
     .input(z.object({ uid: z.string() }))
     .mutation(({ input }) => driveDb.deleteRoute(input.uid)),
 
-  // Devices
-  listDevices: protectedProcedure
+  // ── Devices — READ: VIEWER, WRITE: QA_MANAGER+, DELETE: ORG_ADMIN ──
+  listDevices: viewerProcedure
+    .use(requireProjectAccess("PROJECT_VIEWER"))
     .input(z.object({ projectId: z.string() }))
     .query(({ input }) => driveDb.listDevices(input.projectId)),
 
-  createDevice: protectedProcedure
+  createDevice: qaManagerProcedure
+    .use(requireProjectAccess("PROJECT_EDITOR"))
+    .use(auditMutation("CREATE", "drive_device"))
     .input(z.object({
       projectId: z.string(), type: z.string(), model: z.string(),
       osVersion: z.string().optional(), diagCapable: z.boolean().optional(),
@@ -65,16 +79,20 @@ export const drivetestRouter = router({
     }))
     .mutation(({ input }) => driveDb.createDevice(input)),
 
-  deleteDevice: protectedProcedure
+  deleteDevice: orgAdminProcedure
+    .use(auditMutation("DELETE", "drive_device"))
     .input(z.object({ uid: z.string() }))
     .mutation(({ input }) => driveDb.deleteDevice(input.uid)),
 
-  // Probe Configs
-  listProbeConfigs: protectedProcedure
+  // ── Probe Configs — READ: VIEWER, WRITE: QA_MANAGER+, DELETE: ORG_ADMIN ──
+  listProbeConfigs: viewerProcedure
+    .use(requireProjectAccess("PROJECT_VIEWER"))
     .input(z.object({ projectId: z.string() }))
     .query(({ input }) => driveDb.listProbeConfigs(input.projectId)),
 
-  createProbeConfig: protectedProcedure
+  createProbeConfig: qaManagerProcedure
+    .use(requireProjectAccess("PROJECT_EDITOR"))
+    .use(auditMutation("CREATE", "drive_probe_config"))
     .input(z.object({
       projectId: z.string(), name: z.string().min(1),
       location: z.object({ lat: z.number(), lon: z.number(), label: z.string() }).optional(),
@@ -84,20 +102,22 @@ export const drivetestRouter = router({
     }))
     .mutation(({ input }) => driveDb.createProbeConfig(input)),
 
-  deleteProbeConfig: protectedProcedure
+  deleteProbeConfig: orgAdminProcedure
+    .use(auditMutation("DELETE", "drive_probe_config"))
     .input(z.object({ uid: z.string() }))
     .mutation(({ input }) => driveDb.deleteProbeConfig(input.uid)),
 
-  // Drive Jobs
-  listJobs: protectedProcedure
+  // ── Drive Jobs — READ: VIEWER, CREATE: TEST_ENGINEER+, UPDATE: TEST_ENGINEER+ ──
+  listJobs: viewerProcedure
     .input(z.object({ campaignId: z.string() }))
     .query(({ input }) => driveDb.listDriveJobs(input.campaignId)),
 
-  getJob: protectedProcedure
+  getJob: viewerProcedure
     .input(z.object({ uid: z.string() }))
     .query(({ input }) => driveDb.getDriveJobByUid(input.uid)),
 
-  createJob: protectedProcedure
+  createJob: testEngineerProcedure
+    .use(auditMutation("CREATE", "drive_job"))
     .input(z.object({
       campaignId: z.string(), routeId: z.string(), deviceId: z.string(),
       targetEnv: z.enum(["DEV", "PREPROD", "PILOT_ORANGE", "PROD"]).optional(),
@@ -105,7 +125,8 @@ export const drivetestRouter = router({
     }))
     .mutation(({ input }) => driveDb.createDriveJob(input)),
 
-  updateJob: protectedProcedure
+  updateJob: testEngineerProcedure
+    .use(auditMutation("UPDATE", "drive_job"))
     .input(z.object({
       uid: z.string(),
       status: z.enum(["PENDING", "RUNNING", "DONE", "FAILED"]).optional(),
@@ -118,12 +139,13 @@ export const drivetestRouter = router({
     }))
     .mutation(({ input }) => { const { uid, ...d } = input; return driveDb.updateDriveJob(uid, d); }),
 
-  // KPI Samples
-  listKpiSamples: protectedProcedure
+  // ── KPI Samples — READ: VIEWER, WRITE: TEST_ENGINEER+ ──
+  listKpiSamples: viewerProcedure
     .input(z.object({ driveJobId: z.string() }))
     .query(({ input }) => driveDb.listKpiSamples(input.driveJobId)),
 
-  insertKpiSamples: protectedProcedure
+  insertKpiSamples: testEngineerProcedure
+    .use(auditMutation("INSERT_BATCH", "kpi_sample"))
     .input(z.object({
       samples: z.array(z.object({
         driveJobId: z.string(), campaignId: z.string(), routeId: z.string(),
@@ -134,12 +156,13 @@ export const drivetestRouter = router({
     }))
     .mutation(({ input }) => driveDb.insertKpiSamples(input.samples)),
 
-  // Run Summaries
-  getRunSummary: protectedProcedure
+  // ── Run Summaries — READ: VIEWER, WRITE: TEST_ENGINEER+ ──
+  getRunSummary: viewerProcedure
     .input(z.object({ driveJobId: z.string() }))
     .query(({ input }) => driveDb.getRunSummary(input.driveJobId)),
 
-  upsertRunSummary: protectedProcedure
+  upsertRunSummary: testEngineerProcedure
+    .use(auditMutation("UPSERT", "run_summary"))
     .input(z.object({
       driveJobId: z.string(), campaignId: z.string(),
       totalSamples: z.number().optional(), durationSec: z.number().optional(),
@@ -155,12 +178,13 @@ export const drivetestRouter = router({
     }))
     .mutation(({ input }) => driveDb.upsertRunSummary(input)),
 
-  // Imports
-  listImports: protectedProcedure
+  // ── Imports — READ: VIEWER, WRITE: TEST_ENGINEER+ ──
+  listImports: viewerProcedure
     .input(z.object({ campaignId: z.string() }))
     .query(({ input }) => driveDb.listImports(input.campaignId)),
 
-  createImport: protectedProcedure
+  createImport: testEngineerProcedure
+    .use(auditMutation("CREATE", "drive_import"))
     .input(z.object({
       campaignId: z.string(), sourceFilename: z.string(),
       sourceFormat: z.enum(["CSV", "JSON", "GPX", "GEOJSON", "IPERF3"]),

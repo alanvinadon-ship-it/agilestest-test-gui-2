@@ -6,6 +6,44 @@ Toutes les dates sont au format ISO 8601. Les entrées sont classées par versio
 
 ---
 
+## v0.3.0 — 2026-02-26 — RBAC Enforcement serveur
+
+Cette version implémente le contrôle d’accès RBAC (Role-Based Access Control) strict côté serveur sur toutes les procédures tRPC. Chaque requête est interceptée par des middlewares composables qui vérifient l’authentification, le rôle applicatif, les permissions granulaires et l’appartenance aux projets.
+
+### Ajouts
+
+**Middleware RBAC** — Le fichier `server/rbac/middleware.ts` (500+ lignes) fournit cinq middlewares composables : `requireAuth` (authentification obligatoire avec résolution des rôles), `requireRole` (vérification du rôle applicatif parmi ORG_ADMIN, QA_MANAGER, TEST_ENGINEER, SECURITY_ANALYST, VIEWER), `requirePermission` (vérification des permissions granulaires module.action), `requireProjectAccess` (isolation multi-tenant par projet) et `auditMutation` (journalisation automatique des mutations).
+
+**5 rôles applicatifs** — La hiérarchie de rôles est cumulative vers le haut : ORG_ADMIN (niveau 4, accès complet), QA_MANAGER (niveau 3, configuration), TEST_ENGINEER (niveau 1, exécution), SECURITY_ANALYST (niveau 2, analyse sécurité), VIEWER (niveau 0, lecture seule). Un cache en mémoire (TTL 60s) évite les requêtes DB répétitives.
+
+**3 rôles projet** — PROJECT_ADMIN, PROJECT_EDITOR, PROJECT_VIEWER pour l’isolation multi-tenant via `project_memberships`. Les ORG_ADMIN contournent automatiquement les vérifications de membership.
+
+**Procédures pré-composées** — Six procédures exportées simplifient l’utilisation : `authedProcedure`, `orgAdminProcedure`, `qaManagerProcedure`, `testEngineerProcedure`, `securityAnalystProcedure`, `viewerProcedure`.
+
+**Audit automatique** — Toutes les mutations sont loguées dans `audit_logs` via `auditMutation(action, entityType)`. Les tentatives d’accès refusées sont loguées avec `action: "ACCESS_DENIED"` via `logAccessDenied`.
+
+**31 tests Vitest RBAC** — Le fichier `server/rbac.test.ts` couvre 8 suites : accès non authentifié (3 tests), VIEWER lecture seule (6 tests), TEST_ENGINEER restrictions (5 tests), SECURITY_ANALYST restrictions (3 tests), QA_MANAGER permissions (6 tests), ORG_ADMIN accès complet (4 tests), prévention d’escalade de privilèges (3 tests), audit logging (1 test).
+
+**Documentation** — Le fichier `docs/RBAC_SERVER.md` fournit la matrice complète rôles × actions pour les 9 modules (projects, profiles, scenarios, executions, datasets, captures, probes, drivetest, admin), le guide d’implémentation et la référence des codes d’erreur.
+
+### Modifications
+
+**9 routeurs tRPC réécrits** — Les routeurs projects, profiles, scenarios, executions, datasets, captures, probes, drivetest et admin ont été réécrits pour utiliser les procédures RBAC au lieu de `protectedProcedure` générique. Chaque endpoint est protégé par le rôle minimum requis.
+
+**Tests existants adaptés** — Le fichier `routers.test.ts` utilise désormais `role: "admin"` (résolu en ORG_ADMIN) au lieu de `role: "user"` pour que les tests CRUD fonctionnent avec le RBAC actif.
+
+### Codes d’erreur
+
+| Code | Message | Signification |
+|------|---------|---------------|
+| 10001 | Authentication required | Utilisateur non authentifié |
+| 10002 | Insufficient role | Rôle applicatif insuffisant |
+| 10003 | Missing permissions | Permissions granulaires manquantes |
+| 10004 | Access denied to project | Pas de membership pour ce projet |
+| 10005 | Insufficient project role | Rôle projet insuffisant |
+
+---
+
 ## v0.2.0 — 2026-02-26 — Backend complet avec base de données
 
 Cette version majeure remplace le stockage localStorage par une base de données relationnelle MySQL/TiDB avec des procédures tRPC typées de bout en bout.

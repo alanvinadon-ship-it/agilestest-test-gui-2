@@ -1,22 +1,27 @@
 import { z } from "zod";
-import { router, protectedProcedure } from "../_core/trpc";
+import { router } from "../_core/trpc";
+import {
+  viewerProcedure, testEngineerProcedure, qaManagerProcedure, orgAdminProcedure,
+  auditMutation, requireProjectAccess,
+} from "../rbac/middleware";
 import * as probesDb from "../db/probes";
 
 export const probesRouter = router({
-  // Probes
-  list: protectedProcedure
+  // ── Probes — READ: VIEWER, WRITE: QA_MANAGER+ ──
+  list: viewerProcedure
     .input(z.object({ site: z.string().optional() }))
     .query(async ({ input }) => {
       return probesDb.listProbes(input.site);
     }),
 
-  getByUid: protectedProcedure
+  getByUid: viewerProcedure
     .input(z.object({ uid: z.string() }))
     .query(async ({ input }) => {
       return probesDb.getProbeByUid(input.uid);
     }),
 
-  create: protectedProcedure
+  create: qaManagerProcedure
+    .use(auditMutation("CREATE", "probe"))
     .input(z.object({
       site: z.string(),
       zone: z.string(),
@@ -35,7 +40,8 @@ export const probesRouter = router({
       return probesDb.createProbe(input);
     }),
 
-  update: protectedProcedure
+  update: testEngineerProcedure
+    .use(auditMutation("UPDATE", "probe"))
     .input(z.object({
       uid: z.string(),
       status: z.enum(["ONLINE", "OFFLINE", "DEGRADED"]).optional(),
@@ -57,20 +63,22 @@ export const probesRouter = router({
       return probesDb.updateProbe(uid, data);
     }),
 
-  delete: protectedProcedure
+  delete: orgAdminProcedure
+    .use(auditMutation("DELETE", "probe"))
     .input(z.object({ uid: z.string() }))
     .mutation(async ({ input }) => {
       return probesDb.deleteProbe(input.uid);
     }),
 
-  // Probe Policies
-  listPolicies: protectedProcedure
+  // ── Probe Policies — READ: VIEWER, WRITE: QA_MANAGER+ ──
+  listPolicies: viewerProcedure
     .input(z.object({ probeId: z.string() }))
     .query(async ({ input }) => {
       return probesDb.listProbePolicies(input.probeId);
     }),
 
-  createPolicy: protectedProcedure
+  createPolicy: qaManagerProcedure
+    .use(auditMutation("CREATE", "probe_policy"))
     .input(z.object({
       probeId: z.string(),
       maxCaptureDurationSec: z.number().optional(),
@@ -88,20 +96,24 @@ export const probesRouter = router({
       return probesDb.createProbePolicy(input);
     }),
 
-  deletePolicy: protectedProcedure
+  deletePolicy: orgAdminProcedure
+    .use(auditMutation("DELETE", "probe_policy"))
     .input(z.object({ uid: z.string() }))
     .mutation(async ({ input }) => {
       return probesDb.deleteProbePolicy(input.uid);
     }),
 
-  // Capture Policies
-  listCapturePolicies: protectedProcedure
+  // ── Capture Policies — READ: VIEWER, WRITE: QA_MANAGER+ ──
+  listCapturePolicies: viewerProcedure
+    .use(requireProjectAccess("PROJECT_VIEWER"))
     .input(z.object({ projectId: z.string() }))
     .query(async ({ input }) => {
       return probesDb.listCapturePolicies(input.projectId);
     }),
 
-  createCapturePolicy: protectedProcedure
+  createCapturePolicy: qaManagerProcedure
+    .use(requireProjectAccess("PROJECT_EDITOR"))
+    .use(auditMutation("CREATE", "capture_policy"))
     .input(z.object({
       projectId: z.string(),
       name: z.string().min(1),
@@ -119,7 +131,8 @@ export const probesRouter = router({
       return probesDb.createCapturePolicy(input);
     }),
 
-  updateCapturePolicy: protectedProcedure
+  updateCapturePolicy: qaManagerProcedure
+    .use(auditMutation("UPDATE", "capture_policy"))
     .input(z.object({
       uid: z.string(),
       name: z.string().optional(),
@@ -138,7 +151,8 @@ export const probesRouter = router({
       return probesDb.updateCapturePolicy(uid, data);
     }),
 
-  deleteCapturePolicy: protectedProcedure
+  deleteCapturePolicy: orgAdminProcedure
+    .use(auditMutation("DELETE", "capture_policy"))
     .input(z.object({ uid: z.string() }))
     .mutation(async ({ input }) => {
       return probesDb.deleteCapturePolicy(input.uid);

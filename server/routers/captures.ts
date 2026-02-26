@@ -1,22 +1,29 @@
 import { z } from "zod";
-import { router, protectedProcedure } from "../_core/trpc";
+import { router } from "../_core/trpc";
+import {
+  viewerProcedure, testEngineerProcedure, orgAdminProcedure,
+  auditMutation, requireProjectAccess,
+} from "../rbac/middleware";
 import * as capturesDb from "../db/captures";
 
 export const capturesRouter = router({
-  // Capture Jobs
-  listJobs: protectedProcedure
+  // ── Capture Jobs — READ: VIEWER, WRITE: TEST_ENGINEER+ ──
+  listJobs: viewerProcedure
+    .use(requireProjectAccess("PROJECT_VIEWER"))
     .input(z.object({ projectId: z.string() }))
     .query(async ({ input }) => {
       return capturesDb.listCaptureJobs(input.projectId);
     }),
 
-  getJobByUid: protectedProcedure
+  getJobByUid: viewerProcedure
     .input(z.object({ uid: z.string() }))
     .query(async ({ input }) => {
       return capturesDb.getCaptureJobByUid(input.uid);
     }),
 
-  createJob: protectedProcedure
+  createJob: testEngineerProcedure
+    .use(requireProjectAccess("PROJECT_EDITOR"))
+    .use(auditMutation("CREATE", "capture_job"))
     .input(z.object({
       executionId: z.string(),
       projectId: z.string(),
@@ -33,7 +40,8 @@ export const capturesRouter = router({
       return capturesDb.createCaptureJob(input);
     }),
 
-  updateJob: protectedProcedure
+  updateJob: testEngineerProcedure
+    .use(auditMutation("UPDATE", "capture_job"))
     .input(z.object({
       uid: z.string(),
       status: z.enum(["QUEUED", "RUNNING", "COMPLETED", "FAILED", "CANCELLED"]).optional(),
@@ -46,14 +54,15 @@ export const capturesRouter = router({
       return capturesDb.updateCaptureJob(uid, data);
     }),
 
-  // Capture Sources
-  listSources: protectedProcedure
+  // ── Capture Sources — READ: VIEWER, WRITE: TEST_ENGINEER+ ──
+  listSources: viewerProcedure
     .input(z.object({ captureId: z.string() }))
     .query(async ({ input }) => {
       return capturesDb.listCaptureSources(input.captureId);
     }),
 
-  createSource: protectedProcedure
+  createSource: testEngineerProcedure
+    .use(auditMutation("CREATE", "capture_source"))
     .input(z.object({
       captureId: z.string(),
       namespace: z.string().optional(),
@@ -68,20 +77,22 @@ export const capturesRouter = router({
       return capturesDb.createCaptureSource(input);
     }),
 
-  deleteSource: protectedProcedure
+  deleteSource: orgAdminProcedure
+    .use(auditMutation("DELETE", "capture_source"))
     .input(z.object({ uid: z.string() }))
     .mutation(async ({ input }) => {
       return capturesDb.deleteCaptureSource(input.uid);
     }),
 
-  // Capture Artifacts
-  listArtifacts: protectedProcedure
+  // ── Capture Artifacts — READ: VIEWER, WRITE: TEST_ENGINEER+ ──
+  listArtifacts: viewerProcedure
     .input(z.object({ captureJobId: z.string() }))
     .query(async ({ input }) => {
       return capturesDb.listCaptureArtifacts(input.captureJobId);
     }),
 
-  createArtifact: protectedProcedure
+  createArtifact: testEngineerProcedure
+    .use(auditMutation("CREATE", "capture_artifact"))
     .input(z.object({
       executionId: z.string(),
       type: z.string(),
@@ -98,20 +109,21 @@ export const capturesRouter = router({
       return capturesDb.createCaptureArtifact(input);
     }),
 
-  // Capture Sessions
-  listSessions: protectedProcedure
+  // ── Capture Sessions — READ: VIEWER, WRITE: TEST_ENGINEER+ ──
+  listSessions: viewerProcedure
     .input(z.object({ policyId: z.string() }))
     .query(async ({ input }) => {
       return capturesDb.listCaptureSessions(input.policyId);
     }),
 
-  listSessionsByExecution: protectedProcedure
+  listSessionsByExecution: viewerProcedure
     .input(z.object({ executionId: z.string() }))
     .query(async ({ input }) => {
       return capturesDb.listCaptureSessionsByExecution(input.executionId);
     }),
 
-  createSession: protectedProcedure
+  createSession: testEngineerProcedure
+    .use(auditMutation("CREATE", "capture_session"))
     .input(z.object({
       policyId: z.string(),
       executionId: z.string().optional(),

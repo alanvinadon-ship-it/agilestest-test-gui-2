@@ -1,19 +1,26 @@
 import { z } from "zod";
-import { router, protectedProcedure } from "../_core/trpc";
+import { router } from "../_core/trpc";
+import {
+  viewerProcedure, qaManagerProcedure, orgAdminProcedure,
+  auditMutation, requireProjectAccess,
+} from "../rbac/middleware";
 import * as projectsDb from "../db/projects";
 
 export const projectsRouter = router({
-  list: protectedProcedure.query(async () => {
+  // ── READ — any authenticated user ──
+  list: viewerProcedure.query(async () => {
     return projectsDb.listProjects();
   }),
 
-  getByUid: protectedProcedure
+  getByUid: viewerProcedure
     .input(z.object({ uid: z.string() }))
     .query(async ({ input }) => {
       return projectsDb.getProjectByUid(input.uid);
     }),
 
-  create: protectedProcedure
+  // ── CREATE — QA_MANAGER+ ──
+  create: qaManagerProcedure
+    .use(auditMutation("CREATE", "project"))
     .input(z.object({
       name: z.string().min(1).max(255),
       domain: z.string().min(1),
@@ -28,7 +35,9 @@ export const projectsRouter = router({
       });
     }),
 
-  update: protectedProcedure
+  // ── UPDATE — QA_MANAGER+ ──
+  update: qaManagerProcedure
+    .use(auditMutation("UPDATE", "project"))
     .input(z.object({
       uid: z.string(),
       name: z.string().optional(),
@@ -42,7 +51,9 @@ export const projectsRouter = router({
       return projectsDb.updateProject(uid, data);
     }),
 
-  delete: protectedProcedure
+  // ── DELETE — ORG_ADMIN only ──
+  delete: orgAdminProcedure
+    .use(auditMutation("DELETE", "project"))
     .input(z.object({ uid: z.string() }))
     .mutation(async ({ input }) => {
       return projectsDb.deleteProject(input.uid);

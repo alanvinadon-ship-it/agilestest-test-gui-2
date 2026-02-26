@@ -1,21 +1,30 @@
 import { z } from "zod";
-import { router, protectedProcedure } from "../_core/trpc";
+import { router } from "../_core/trpc";
+import {
+  viewerProcedure, testEngineerProcedure, qaManagerProcedure, orgAdminProcedure,
+  auditMutation, requireProjectAccess,
+} from "../rbac/middleware";
 import * as execDb from "../db/executions";
 
 export const executionsRouter = router({
-  list: protectedProcedure
+  // ── READ — any authenticated user ──
+  list: viewerProcedure
+    .use(requireProjectAccess("PROJECT_VIEWER"))
     .input(z.object({ projectId: z.string() }))
     .query(async ({ input }) => {
       return execDb.listExecutions(input.projectId);
     }),
 
-  getByUid: protectedProcedure
+  getByUid: viewerProcedure
     .input(z.object({ uid: z.string() }))
     .query(async ({ input }) => {
       return execDb.getExecutionByUid(input.uid);
     }),
 
-  create: protectedProcedure
+  // ── CREATE — TEST_ENGINEER+ (launch executions) ──
+  create: testEngineerProcedure
+    .use(requireProjectAccess("PROJECT_EDITOR"))
+    .use(auditMutation("CREATE", "execution"))
     .input(z.object({
       projectId: z.string(),
       profileId: z.string(),
@@ -32,7 +41,9 @@ export const executionsRouter = router({
       return execDb.createExecution(input);
     }),
 
-  updateStatus: protectedProcedure
+  // ── UPDATE STATUS — TEST_ENGINEER+ (push results) ──
+  updateStatus: testEngineerProcedure
+    .use(auditMutation("UPDATE_STATUS", "execution"))
     .input(z.object({
       uid: z.string(),
       status: z.enum(["PENDING", "RUNNING", "PASSED", "FAILED", "ERROR", "CANCELLED"]).optional(),
@@ -48,20 +59,23 @@ export const executionsRouter = router({
       return execDb.updateExecution(uid, data);
     }),
 
-  delete: protectedProcedure
+  // ── DELETE — ORG_ADMIN only ──
+  delete: orgAdminProcedure
+    .use(auditMutation("DELETE", "execution"))
     .input(z.object({ uid: z.string() }))
     .mutation(async ({ input }) => {
       return execDb.deleteExecution(input.uid);
     }),
 
-  // Runner Jobs
-  listJobs: protectedProcedure
+  // ── Runner Jobs — TEST_ENGINEER+ ──
+  listJobs: viewerProcedure
     .input(z.object({ executionId: z.string() }))
     .query(async ({ input }) => {
       return execDb.listRunnerJobs(input.executionId);
     }),
 
-  createJob: protectedProcedure
+  createJob: testEngineerProcedure
+    .use(auditMutation("CREATE", "runner_job"))
     .input(z.object({
       executionId: z.string(),
       projectId: z.string(),
@@ -77,7 +91,8 @@ export const executionsRouter = router({
       return execDb.createRunnerJob(input);
     }),
 
-  updateJob: protectedProcedure
+  updateJob: testEngineerProcedure
+    .use(auditMutation("UPDATE", "runner_job"))
     .input(z.object({
       uid: z.string(),
       status: z.enum(["PENDING", "RUNNING", "DONE", "FAILED"]).optional(),
@@ -92,14 +107,15 @@ export const executionsRouter = router({
       return execDb.updateRunnerJob(uid, data);
     }),
 
-  // Artifacts
-  listArtifacts: protectedProcedure
+  // ── Artifacts — TEST_ENGINEER+ can add, VIEWER can read ──
+  listArtifacts: viewerProcedure
     .input(z.object({ executionId: z.string() }))
     .query(async ({ input }) => {
       return execDb.listArtifacts(input.executionId);
     }),
 
-  createArtifact: protectedProcedure
+  createArtifact: testEngineerProcedure
+    .use(auditMutation("CREATE", "artifact"))
     .input(z.object({
       executionId: z.string(),
       type: z.string(),
@@ -119,26 +135,29 @@ export const executionsRouter = router({
       return execDb.createArtifact(input);
     }),
 
-  // Incidents
-  listIncidents: protectedProcedure
+  // ── Incidents — TEST_ENGINEER+ can create, VIEWER can read ──
+  listIncidents: viewerProcedure
+    .use(requireProjectAccess("PROJECT_VIEWER"))
     .input(z.object({ projectId: z.string() }))
     .query(async ({ input }) => {
       return execDb.listIncidents(input.projectId);
     }),
 
-  listIncidentsByExecution: protectedProcedure
+  listIncidentsByExecution: viewerProcedure
     .input(z.object({ executionId: z.string() }))
     .query(async ({ input }) => {
       return execDb.listIncidentsByExecution(input.executionId);
     }),
 
-  getIncidentByUid: protectedProcedure
+  getIncidentByUid: viewerProcedure
     .input(z.object({ uid: z.string() }))
     .query(async ({ input }) => {
       return execDb.getIncidentByUid(input.uid);
     }),
 
-  createIncident: protectedProcedure
+  createIncident: testEngineerProcedure
+    .use(requireProjectAccess("PROJECT_EDITOR"))
+    .use(auditMutation("CREATE", "incident"))
     .input(z.object({
       executionId: z.string(),
       projectId: z.string(),
@@ -153,14 +172,15 @@ export const executionsRouter = router({
       return execDb.createIncident(input);
     }),
 
-  // Analyses
-  getAnalysisByIncident: protectedProcedure
+  // ── Analyses — SECURITY_ANALYST+ or QA_MANAGER+ ──
+  getAnalysisByIncident: viewerProcedure
     .input(z.object({ incidentId: z.string() }))
     .query(async ({ input }) => {
       return execDb.getAnalysisByIncident(input.incidentId);
     }),
 
-  createAnalysis: protectedProcedure
+  createAnalysis: testEngineerProcedure
+    .use(auditMutation("CREATE", "analysis"))
     .input(z.object({
       incidentId: z.string(),
       observation: z.string().optional(),

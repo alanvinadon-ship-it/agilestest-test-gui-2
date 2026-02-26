@@ -55,3 +55,26 @@
 - [x] Documentation de la migration frontend (localStorage → tRPC) → docs/BACKEND_ARCHITECTURE.md §6
 - [x] Documentation des corrections et bugfixes → CHANGELOG.md
 - [x] Changelog / historique des versions → CHANGELOG.md
+- [x] RBAC-ENFORCEMENT: Middleware tRPC RBAC serveur strict
+- [x] Middleware requireAuth() — authentification obligatoire
+- [x] Middleware requireRole(...roles) — vérification rôle utilisateur
+- [x] Middleware requirePermission(...perms) — vérification permissions granulaires
+- [x] Middleware requireProjectAccess — multi-tenant strict, filtrage par projet
+- [x] Appliquer RBAC sur routeur admin (19 endpoints) → ORG_ADMIN strict
+- [x] Appliquer RBAC sur routeur projects (5 endpoints) → VIEWER read, QA_MANAGER write, ORG_ADMIN delete
+- [x] Appliquer RBAC sur routeur profiles (5 endpoints) → VIEWER read, QA_MANAGER write, ORG_ADMIN delete
+- [x] Appliquer RBAC sur routeur scenarios (5 endpoints) → VIEWER read, QA_MANAGER write, ORG_ADMIN delete
+- [x] Appliquer RBAC sur routeur executions (8 endpoints) → VIEWER read, TEST_ENGINEER write, ORG_ADMIN delete
+- [x] Appliquer RBAC sur routeur datasets (12 endpoints) → VIEWER read, QA_MANAGER write, ORG_ADMIN delete
+- [x] Appliquer RBAC sur routeur captures (8 endpoints) → VIEWER read, TEST_ENGINEER create, ORG_ADMIN delete
+- [x] Appliquer RBAC sur routeur probes (7 endpoints) → VIEWER read, QA_MANAGER write, ORG_ADMIN delete
+- [x] Appliquer RBAC sur routeur drivetest (20 endpoints) → VIEWER read, TEST_ENGINEER jobs, QA_MANAGER config, ORG_ADMIN delete
+- [x] Audit automatique des mutations dans audit_logs (via auditMutation middleware)
+- [x] Audit des tentatives refusées (ACCESS_DENIED) dans audit_logs (via logAccessDenied)
+- [x] Tests Vitest RBAC: VIEWER ne peut pas delete project ✅
+- [x] Tests Vitest RBAC: TEST_ENGINEER ne peut pas gérer users ✅
+- [x] Tests Vitest RBAC: SECURITY_ANALYST ne peut pas supprimer org ✅
+- [x] Tests Vitest RBAC: Privilege escalation prevention (3 tests) ✅
+- [x] Tests Vitest RBAC: 31 tests couvrant 10+ procédures critiques ✅
+- [x] Documentation docs/RBAC_SERVER.md avec matrice rôles x actions (9 modules)
+- [x] Aucune régression: 63 tests passent (32 existants + 31 RBAC)

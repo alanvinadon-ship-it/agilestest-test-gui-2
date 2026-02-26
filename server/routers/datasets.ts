@@ -1,22 +1,27 @@
 import { z } from "zod";
-import { router, protectedProcedure } from "../_core/trpc";
+import { router } from "../_core/trpc";
+import {
+  viewerProcedure, qaManagerProcedure, orgAdminProcedure,
+  auditMutation, requireProjectAccess,
+} from "../rbac/middleware";
 import * as datasetsDb from "../db/datasets";
 
 export const datasetsRouter = router({
-  // Dataset Types
-  listTypes: protectedProcedure
+  // ── Dataset Types — READ: VIEWER, WRITE: QA_MANAGER+ ──
+  listTypes: viewerProcedure
     .input(z.object({ domain: z.string().optional() }))
     .query(async ({ input }) => {
       return datasetsDb.listDatasetTypes(input.domain);
     }),
 
-  getTypeByUid: protectedProcedure
+  getTypeByUid: viewerProcedure
     .input(z.object({ uid: z.string() }))
     .query(async ({ input }) => {
       return datasetsDb.getDatasetTypeByUid(input.uid);
     }),
 
-  createType: protectedProcedure
+  createType: orgAdminProcedure
+    .use(auditMutation("CREATE", "dataset_type"))
     .input(z.object({
       datasetTypeId: z.string(),
       domain: z.string(),
@@ -31,20 +36,23 @@ export const datasetsRouter = router({
       return datasetsDb.createDatasetType(input);
     }),
 
-  // Datasets
-  listDatasets: protectedProcedure
+  // ── Datasets — READ: VIEWER, WRITE: QA_MANAGER+ ──
+  listDatasets: viewerProcedure
+    .use(requireProjectAccess("PROJECT_VIEWER"))
     .input(z.object({ projectId: z.string() }))
     .query(async ({ input }) => {
       return datasetsDb.listDatasets(input.projectId);
     }),
 
-  getDatasetByUid: protectedProcedure
+  getDatasetByUid: viewerProcedure
     .input(z.object({ uid: z.string() }))
     .query(async ({ input }) => {
       return datasetsDb.getDatasetByUid(input.uid);
     }),
 
-  createDataset: protectedProcedure
+  createDataset: qaManagerProcedure
+    .use(requireProjectAccess("PROJECT_EDITOR"))
+    .use(auditMutation("CREATE", "dataset"))
     .input(z.object({
       projectId: z.string(),
       datasetTypeId: z.string(),
@@ -58,26 +66,30 @@ export const datasetsRouter = router({
       return datasetsDb.createDataset(input);
     }),
 
-  deleteDataset: protectedProcedure
+  deleteDataset: orgAdminProcedure
+    .use(auditMutation("DELETE", "dataset"))
     .input(z.object({ uid: z.string() }))
     .mutation(async ({ input }) => {
       return datasetsDb.deleteDataset(input.uid);
     }),
 
-  // Dataset Instances
-  listInstances: protectedProcedure
+  // ── Dataset Instances — READ: VIEWER, WRITE: QA_MANAGER+ ──
+  listInstances: viewerProcedure
+    .use(requireProjectAccess("PROJECT_VIEWER"))
     .input(z.object({ projectId: z.string() }))
     .query(async ({ input }) => {
       return datasetsDb.listDatasetInstances(input.projectId);
     }),
 
-  getInstanceByUid: protectedProcedure
+  getInstanceByUid: viewerProcedure
     .input(z.object({ uid: z.string() }))
     .query(async ({ input }) => {
       return datasetsDb.getDatasetInstanceByUid(input.uid);
     }),
 
-  createInstance: protectedProcedure
+  createInstance: qaManagerProcedure
+    .use(requireProjectAccess("PROJECT_EDITOR"))
+    .use(auditMutation("CREATE", "dataset_instance"))
     .input(z.object({
       projectId: z.string(),
       datasetTypeId: z.string(),
@@ -90,7 +102,8 @@ export const datasetsRouter = router({
       return datasetsDb.createDatasetInstance(input);
     }),
 
-  updateInstance: protectedProcedure
+  updateInstance: qaManagerProcedure
+    .use(auditMutation("UPDATE", "dataset_instance"))
     .input(z.object({
       uid: z.string(),
       env: z.enum(["DEV", "PREPROD", "PILOT_ORANGE", "PROD"]).optional(),
@@ -104,26 +117,30 @@ export const datasetsRouter = router({
       return datasetsDb.updateDatasetInstance(uid, data);
     }),
 
-  deleteInstance: protectedProcedure
+  deleteInstance: orgAdminProcedure
+    .use(auditMutation("DELETE", "dataset_instance"))
     .input(z.object({ uid: z.string() }))
     .mutation(async ({ input }) => {
       return datasetsDb.deleteDatasetInstance(input.uid);
     }),
 
-  // Bundles
-  listBundles: protectedProcedure
+  // ── Bundles — READ: VIEWER, WRITE: QA_MANAGER+ ──
+  listBundles: viewerProcedure
+    .use(requireProjectAccess("PROJECT_VIEWER"))
     .input(z.object({ projectId: z.string() }))
     .query(async ({ input }) => {
       return datasetsDb.listBundles(input.projectId);
     }),
 
-  getBundleByUid: protectedProcedure
+  getBundleByUid: viewerProcedure
     .input(z.object({ uid: z.string() }))
     .query(async ({ input }) => {
       return datasetsDb.getBundleByUid(input.uid);
     }),
 
-  createBundle: protectedProcedure
+  createBundle: qaManagerProcedure
+    .use(requireProjectAccess("PROJECT_EDITOR"))
+    .use(auditMutation("CREATE", "bundle"))
     .input(z.object({
       projectId: z.string(),
       name: z.string().min(1),
@@ -135,20 +152,22 @@ export const datasetsRouter = router({
       return datasetsDb.createBundle(input);
     }),
 
-  deleteBundle: protectedProcedure
+  deleteBundle: orgAdminProcedure
+    .use(auditMutation("DELETE", "bundle"))
     .input(z.object({ uid: z.string() }))
     .mutation(async ({ input }) => {
       return datasetsDb.deleteBundle(input.uid);
     }),
 
-  // Bundle Items
-  listBundleItems: protectedProcedure
+  // ── Bundle Items — READ: VIEWER, WRITE: QA_MANAGER+ ──
+  listBundleItems: viewerProcedure
     .input(z.object({ bundleId: z.string() }))
     .query(async ({ input }) => {
       return datasetsDb.listBundleItems(input.bundleId);
     }),
 
-  addBundleItem: protectedProcedure
+  addBundleItem: qaManagerProcedure
+    .use(auditMutation("ADD_ITEM", "bundle"))
     .input(z.object({
       bundleId: z.string(),
       datasetId: z.string(),
@@ -157,14 +176,15 @@ export const datasetsRouter = router({
       return datasetsDb.addBundleItem(input.bundleId, input.datasetId);
     }),
 
-  // Dataset Secrets
-  listSecrets: protectedProcedure
+  // ── Dataset Secrets — QA_MANAGER+ ──
+  listSecrets: qaManagerProcedure
     .input(z.object({ datasetId: z.string() }))
     .query(async ({ input }) => {
       return datasetsDb.listDatasetSecrets(input.datasetId);
     }),
 
-  setSecret: protectedProcedure
+  setSecret: qaManagerProcedure
+    .use(auditMutation("SET_SECRET", "dataset"))
     .input(z.object({
       datasetId: z.string(),
       keyPath: z.string(),

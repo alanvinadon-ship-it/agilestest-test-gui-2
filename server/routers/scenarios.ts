@@ -1,21 +1,30 @@
 import { z } from "zod";
-import { router, protectedProcedure } from "../_core/trpc";
+import { router } from "../_core/trpc";
+import {
+  viewerProcedure, qaManagerProcedure, orgAdminProcedure,
+  auditMutation, requireProjectAccess,
+} from "../rbac/middleware";
 import * as scenariosDb from "../db/scenarios";
 
 export const scenariosRouter = router({
-  list: protectedProcedure
+  // ── READ — any authenticated user ──
+  list: viewerProcedure
+    .use(requireProjectAccess("PROJECT_VIEWER"))
     .input(z.object({ projectId: z.string() }))
     .query(async ({ input }) => {
       return scenariosDb.listScenarios(input.projectId);
     }),
 
-  getByUid: protectedProcedure
+  getByUid: viewerProcedure
     .input(z.object({ uid: z.string() }))
     .query(async ({ input }) => {
       return scenariosDb.getScenarioByUid(input.uid);
     }),
 
-  create: protectedProcedure
+  // ── CREATE — QA_MANAGER+ (create/edit test plans) ──
+  create: qaManagerProcedure
+    .use(requireProjectAccess("PROJECT_EDITOR"))
+    .use(auditMutation("CREATE", "scenario"))
     .input(z.object({
       projectId: z.string(),
       profileId: z.string(),
@@ -32,7 +41,9 @@ export const scenariosRouter = router({
       return scenariosDb.createScenario(input);
     }),
 
-  update: protectedProcedure
+  // ── UPDATE — QA_MANAGER+ ──
+  update: qaManagerProcedure
+    .use(auditMutation("UPDATE", "scenario"))
     .input(z.object({
       uid: z.string(),
       name: z.string().optional(),
@@ -51,7 +62,9 @@ export const scenariosRouter = router({
       return scenariosDb.updateScenario(uid, data);
     }),
 
-  delete: protectedProcedure
+  // ── DELETE — ORG_ADMIN only ──
+  delete: orgAdminProcedure
+    .use(auditMutation("DELETE", "scenario"))
     .input(z.object({ uid: z.string() }))
     .mutation(async ({ input }) => {
       return scenariosDb.deleteScenario(input.uid);
