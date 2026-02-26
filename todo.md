@@ -39,3 +39,12 @@
 - [x] Fix: Missing key prop in AdminRolesPage tbody rendering (ajouté clés uniques pour roles et permissions)
 - [x] Fix: tbody nested error in AdminNotificationsPage (vérifié - non reproductible, probablement corrigé par les fixes de clés)
 - [x] Fix: Login ne persistait pas (localStorage stockait "undefined" - ajouté validation réponse API avant fallback local)
+- [ ] BACKEND-DB-COMPLETE: Schéma Drizzle complet pour toute la plateforme
+- [ ] Tables: users, projects, profiles, scenarios, datasets, executions, captures, probes, campaigns
+- [ ] Tables: notifications (settings, templates, rules, delivery_logs)
+- [ ] Tables: rbac (roles, permissions, user_roles, project_access)
+- [ ] Tables: audit_logs, bundles, dataset_templates, scripts
+- [ ] Helpers DB (server/db.ts) pour tous les modules
+- [ ] Routeurs tRPC pour tous les modules métier
+- [ ] Migration frontend localStorage vers tRPC/DB
+- [ ] Tests Vitest pour les procédures critiques
