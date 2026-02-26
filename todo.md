@@ -54,3 +54,4 @@
 - [x] PR1: Socle backend — Schéma Drizzle étendu (14 tables) + migrations DB synchronisées
 - [x] PR1: Socle backend — 32 tests Vitest passent (21 nouveaux + 10 emailService + 1 auth.logout)
 - [x] Bug: Le bouton de recherche dans la page Documentation a disparu — corrigé : restauré DocSearchDialog.tsx, Kbd.tsx et le bouton 'Recherche globale' (⌘K) dans DocsPage.tsx
+- [x] Feature: Réorganiser le menu sidebar en menus déroulants (accordéons) par catégories — NavSectionAccordion avec chevron, auto-expand de la section active, animation CSS, sections flat pour Général/Aide
