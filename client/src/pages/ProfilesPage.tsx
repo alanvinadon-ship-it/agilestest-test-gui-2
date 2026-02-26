@@ -3,7 +3,7 @@ import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
 import { usePermission, PermissionKey } from '../security';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { repositoryApi } from '../api/repositoryApiTrpc';
+import { repositoryApi } from '../api/repositoryApi';
 import type { TestProfile, TestType } from '../types';
 import {
   Plus, Settings2, Loader2, Trash2, X, AlertCircle, Search,

@@ -2,7 +2,7 @@
  * AdminProjectAccessPage — /admin/project-access
  * Gestion des membres par projet, ajout/retrait, rôles projet
  */
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import {
   FolderKanban, Plus, Search, UserPlus, Edit2, Trash2, X,
   Shield, AlertTriangle, Users,
@@ -10,7 +10,7 @@ import {
 import { toast } from 'sonner';
 import { useAuth } from '../auth/AuthContext';
 import { useProject } from '../state/projectStore';
-import { localProjects } from '../api/localStoreTrpc';
+import { localProjects } from '../api/localStore';
 import type { Project } from '../types';
 import { adminMemberships, adminUsers } from '../admin/adminStore';
 import {
@@ -23,10 +23,7 @@ import type { ProjectMembership, ProjectRole, AdminUser } from '../admin/types';
 export default function AdminProjectAccessPage() {
   const { user: currentUser } = useAuth();
   const { currentProject } = useProject();
-  const [allProjects, setAllProjects] = useState<any[]>([]);
-  useEffect(() => {
-    localProjects.list().then(result => setAllProjects(result?.data || []));
-  }, []);
+  const allProjects = useMemo(() => localProjects.list().data, []);
   const actor = currentUser
     ? { id: currentUser.id, name: currentUser.full_name, email: currentUser.email }
     : { id: '', name: '', email: '' };

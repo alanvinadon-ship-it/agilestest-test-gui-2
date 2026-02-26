@@ -37,96 +37,19 @@
 - [x] Bug: Menu Administration absent pour l'Admin Principal après connexion (normalisé rôle case-insensitive)
 - [x] Fix: Missing key prop in AdminRbacPage list rendering (ajouté clés uniques pour roles, groups, permissions)
 - [x] Fix: Missing key prop in AdminRolesPage tbody rendering (ajouté clés uniques pour roles et permissions)
-- [x] Fix: tbody nested error in AdminNotificationsPage (vérifié - non reproductible, probablement corrigé par les fixes de clés)
-- [x] Fix: Login ne persistait pas (localStorage stockait "undefined" - ajouté validation réponse API avant fallback local)
-- [x] BACKEND-DB-COMPLETE: Schéma Drizzle complet pour toute la plateforme
-- [x] Tables: users, projects, profiles, scenarios, datasets, executions, captures, probes, campaigns
-- [x] Tables: notifications (settings, templates, rules, delivery_logs)
-- [x] Tables: rbac (roles, permissions, user_roles, project_access)
-- [x] Tables: audit_logs, bundles, dataset_templates, scripts
-- [x] Helpers DB (server/db.ts) pour tous les modules
-- [x] Routeurs tRPC pour tous les modules métier
-- [x] Migration frontend localStorage vers tRPC/DB
-- [x] Tests Vitest pour les procédures critiques (32 tests, 3 fichiers, 100% pass)
-- [x] DOC-BACKEND-UPDATE: Mettre à jour la documentation pour les opérations backend et les corrections
-- [x] Documentation du schéma de base de données (42 tables Drizzle) → docs/BACKEND_ARCHITECTURE.md §3
-- [x] Documentation des routeurs tRPC (11 modules, 141 endpoints) → docs/BACKEND_ARCHITECTURE.md §4
-- [x] Documentation des helpers DB (server/db/) → docs/BACKEND_ARCHITECTURE.md §5
-- [x] Documentation de la migration frontend (localStorage → tRPC) → docs/BACKEND_ARCHITECTURE.md §6
-- [x] Documentation des corrections et bugfixes → CHANGELOG.md
-- [x] Changelog / historique des versions → CHANGELOG.md
-- [x] RBAC-ENFORCEMENT: Middleware tRPC RBAC serveur strict
-- [x] Middleware requireAuth() — authentification obligatoire
-- [x] Middleware requireRole(...roles) — vérification rôle utilisateur
-- [x] Middleware requirePermission(...perms) — vérification permissions granulaires
-- [x] Middleware requireProjectAccess — multi-tenant strict, filtrage par projet
-- [x] Appliquer RBAC sur routeur admin (19 endpoints) → ORG_ADMIN strict
-- [x] Appliquer RBAC sur routeur projects (5 endpoints) → VIEWER read, QA_MANAGER write, ORG_ADMIN delete
-- [x] Appliquer RBAC sur routeur profiles (5 endpoints) → VIEWER read, QA_MANAGER write, ORG_ADMIN delete
-- [x] Appliquer RBAC sur routeur scenarios (5 endpoints) → VIEWER read, QA_MANAGER write, ORG_ADMIN delete
-- [x] Appliquer RBAC sur routeur executions (8 endpoints) → VIEWER read, TEST_ENGINEER write, ORG_ADMIN delete
-- [x] Appliquer RBAC sur routeur datasets (12 endpoints) → VIEWER read, QA_MANAGER write, ORG_ADMIN delete
-- [x] Appliquer RBAC sur routeur captures (8 endpoints) → VIEWER read, TEST_ENGINEER create, ORG_ADMIN delete
-- [x] Appliquer RBAC sur routeur probes (7 endpoints) → VIEWER read, QA_MANAGER write, ORG_ADMIN delete
-- [x] Appliquer RBAC sur routeur drivetest (20 endpoints) → VIEWER read, TEST_ENGINEER jobs, QA_MANAGER config, ORG_ADMIN delete
-- [x] Audit automatique des mutations dans audit_logs (via auditMutation middleware)
-- [x] Audit des tentatives refusées (ACCESS_DENIED) dans audit_logs (via logAccessDenied)
-- [x] Tests Vitest RBAC: VIEWER ne peut pas delete project ✅
-- [x] Tests Vitest RBAC: TEST_ENGINEER ne peut pas gérer users ✅
-- [x] Tests Vitest RBAC: SECURITY_ANALYST ne peut pas supprimer org ✅
-- [x] Tests Vitest RBAC: Privilege escalation prevention (3 tests) ✅
-- [x] Tests Vitest RBAC: 31 tests couvrant 10+ procédures critiques ✅
-- [x] Documentation docs/RBAC_SERVER.md avec matrice rôles x actions (9 modules)
-- [x] Aucune régression: 63 tests passent (32 existants + 31 RBAC)
-- [x] AUTH-SERVER-PERSISTENT: Migration auth serveur persistante
-- [x] Audit OAuth Manus existant (server/_core/oauth.ts, context.ts, cookies.ts)
-- [x] authRouter tRPC complet: auth.me enrichi (RBAC fields), auth.logout (cookie clear)
-- [x] Session cookie HTTPOnly (SameSite=Lax, Secure en prod, app_session_id)
-- [x] ctx.user hydraté automatiquement à chaque requête (via sdk.authenticateRequest)
-- [x] Frontend: AuthContext réécrit pour utiliser trpc.auth.me au lieu de localStorage
-- [x] Frontend: 0 usage de localStorage pour auth (access_token, user supprimés)
-- [x] Frontend: AuthProvider compatible (user, isLoading, isAuthed, logout, isAdmin, canWrite, hasRole)
-- [x] Sécurité: tokens jamais dans localStorage, cookie HTTPOnly uniquement
-- [x] Sécurité: CSRF protection (SameSite=Lax) + credentials: include
-- [x] Tests: auth.me renvoie user enrichi quand authed (14 tests)
-- [x] Tests: auth.me retourne null quand non authed
-- [x] Tests: logout invalide session (clearCookie + maxAge: -1)
-- [x] Documentation docs/AUTH.md (flux OAuth, stockage session, variables ENV)
-- [x] Aucune régression: 77 tests passent (5 fichiers, 0 échec)
-- [x] PAGINATION-STANDARD: Pagination standardisée sur les endpoints list
-- [x] Helper commun: paginationInput + paginate() + paginateInMemory() (server/pagination.ts)
-- [x] Pagination sur executions.list + listJobs + listArtifacts + listIncidents
-- [x] Pagination sur captures.listPolicies + listJobs + listSessions + listSources + listArtifacts
-- [x] Pagination sur drivetest.listCampaigns + listJobs + listKpiSamples + listRoutes + listImports + listRunSummaries
-- [x] Pagination sur admin.listAuditLogs + listInvites + listMemberships
-- [x] Pagination sur probes.list + probes.listPolicies
-- [x] Pagination sur scenarios.list + profiles.list + datasets.listTypes + listInstances + listBundles
-- [x] Pagination sur projects.list
-- [x] Index DB ajoutés: createdAt sur 9 tables volumineuses (migration 0002)
-- [x] Hooks frontend migrés: 8 hooks + 3 adapters (extractItems pattern)
-- [x] Tests Vitest: 24 tests pagination (schema, paginateInMemory, intégration routeurs)
-- [x] Tous les 101 tests passent (6 fichiers, 0 échec)
-- [x] Documentation docs/PAGINATION.md (standard, contrat, helpers, endpoints, index, tests)
-- [x] DOCS-SEARCH: Bouton de recherche globale dans la documentation (DocSearchDialog + Ctrl+K / ⌘K)
-- [x] PAGINATION-UI-SQL-FILTERS: Pagination prod-grade (UI + SQL natif + filtres serveur)
-- [x] Composant <Pagination /> réutilisable (prev/next + numéros + ellipsis + sélecteur taille)
-- [x] Backend: migré paginateInMemory → paginate() SQL natif (executions, captures, audit_logs, invites)
-- [x] Backend: standard input page/pageSize (+ legacy limit/offset supporté)
-- [x] Backend: standard output { items, total, page, pageSize }
-- [x] Filtres avancés executions: status, dateFrom, dateTo
-- [x] Filtres avancés captures: status, dateFrom, dateTo
-- [x] Filtres avancés audit_logs: action, entityType, actorId, dateFrom, dateTo
-- [x] Whitelist sortBy (colonnes indexées uniquement, anti SQL-injection)
-- [x] Intégration <Pagination /> sur page Exécutions
-- [x] Intégration <Pagination /> sur page Captures
-- [x] Intégration <Pagination /> sur page Audit Logs
-- [x] Hooks tRPC mis à jour: page/pageSize + filters
-- [x] Tests vitest: 28 tests pagination (schema, paginateInMemory, intégration routeurs)
-- [x] Documentation docs/PAGINATION.md v2 (standard, contrat, helpers, endpoints, UI, index, tests)
-- [x] 0 erreur TypeScript, 105 tests passent (6 fichiers)
-- [x] Bug: Liens d'invitation invalides — migré vers tRPC backend (validateInviteToken + acceptInvite publics, DB au lieu de localStorage)
-- [x] Bug: AdminUsersPage migrée vers tRPC/DB — CRUD complet (listUsers, createUser, updateUser, disableUser, enableUser, resetPassword) + invitations via DB
-- [x] Bug: Les invités apparaissent maintenant dans la liste Utilisateurs — invites PENDING fusionnées comme utilisateurs virtuels dans listUsers (22 utilisateurs affichés)
-- [x] Feature: Bouton Supprimer utilisateur dans les actions de chaque ligne (AdminUsersPage) — backend deleteUser + frontend bouton Trash2 + modale confirmation + cascade (memberships, invites, auditLogs)
-- [x] Bug: Erreur "Utilisateur introuvable" lors de la suppression d'un invité PENDING — corrigé : deleteUser détecte les IDs négatifs (invités virtuels) et supprime l'invitation dans la table invites
-- [x] Bug: Utilisateur affiché comme Administrateur se connecte en tant que Viewer — corrigé : OWNER (OWNER_OPEN_ID) est désormais automatiquement ORG_ADMIN dans resolveAppRoles + listUsers enrichit le rôle du OWNER + invalidation du cache RBAC après updateUser
+- [ ] Mission: Audit complet localStorage/sessionStorage dans le frontend
+- [ ] Mission: Créer wrapper uiStorage type-safe (Zod whitelist, prefix agilestest.ui.*)
+- [ ] Mission: Migrer données métier et auth hors localStorage vers tRPC/DB
+- [ ] Mission: Ajouter ESLint rules interdisant localStorage/sessionStorage direct
+- [ ] Mission: Ajouter script pnpm audit:storage + CI gate
+- [ ] Mission: Tests Vitest pour uiStorage + audit-storage + pages critiques
+- [ ] Mission: Produire docs/FRONTEND_STORAGE_AUDIT.md
+- [x] PR1: Socle backend — RBAC middleware (adminProcedure + OWNER support) dans trpc.ts
+- [x] PR1: Socle backend — Helper pagination SQL natif (normalizePagination + countRows) dans server/lib/pagination.ts
+- [x] PR1: Socle backend — Types partagés pagination (shared/pagination.ts)
+- [x] PR1: Socle backend — Helper audit log (server/lib/auditLog.ts)
+- [x] PR1: Socle backend — Routeur admin (users CRUD, invites CRUD, audit logs) dans server/routers/admin.ts
+- [x] PR1: Socle backend — Routeur projects (list, get, create, update, delete) dans server/routers/projects.ts
+- [x] PR1: Socle backend — Routeurs testing (profiles, scenarios, datasets, executions, captures, probes, scripts) dans server/routers/testing.ts
+- [x] PR1: Socle backend — Schéma Drizzle étendu (14 tables) + migrations DB synchronisées
+- [x] PR1: Socle backend — 32 tests Vitest passent (21 nouveaux + 10 emailService + 1 auth.logout)

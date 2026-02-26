@@ -528,9 +528,24 @@ export function saveCustomRole(role: RoleDefinition): RoleDefinition {
 
 export function deleteCustomRole(roleId: string): void {
   // Check if role is in use
-  // NOTE: Role usage validation (memberships, user assignments) is now enforced
-  // server-side via RBAC middleware. The admin.deleteRole tRPC endpoint checks
-  // for active assignments before allowing deletion.
+  try {
+    const memberships = localStorage.getItem('agilestest_memberships');
+    if (memberships) {
+      const all = JSON.parse(memberships) as Array<{ project_role: string }>;
+      if (all.some(m => m.project_role === roleId)) {
+        throw new Error('Impossible de supprimer un rôle utilisé par des memberships (409).');
+      }
+    }
+    const users = localStorage.getItem('agilestest_admin_users');
+    if (users) {
+      const all = JSON.parse(users) as Array<{ role: string }>;
+      if (all.some(u => u.role === roleId)) {
+        throw new Error('Impossible de supprimer un rôle attribué à des utilisateurs (409).');
+      }
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.includes('409')) throw e;
+  }
 
   const roles = getCustomRoles();
   const idx = roles.findIndex(r => r.role_id === roleId);

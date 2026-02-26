@@ -110,7 +110,7 @@ function ProbeHealthPanel({ probeId }: { probeId: string }) {
       <div>
         <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">Interfaces réseau</p>
         <div className="flex flex-wrap gap-1.5">
-          {health.interfaces.map((iface: any) => (
+          {health.interfaces.map((iface) => (
             <span key={iface.name}
               className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border ${
                 iface.up
@@ -147,7 +147,7 @@ function TestCaptureButton({ probeId, interfaces }: { probeId: string; interface
 
   const handleTest = () => {
     testMutation.mutate({ probeId, iface }, {
-      onSuccess: (result: any) => {
+      onSuccess: (result) => {
         if (result.success) {
           toast.success(`Test capture réussi : ${result.packets_captured} paquets, ${formatBytes(result.bytes_captured)} en ${result.duration_sec}s`);
         } else {

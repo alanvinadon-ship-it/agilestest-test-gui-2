@@ -1,334 +1,274 @@
 import { z } from "zod";
-import { eq } from "drizzle-orm";
-import { publicProcedure, router } from "../_core/trpc";
-import {
-  viewerProcedure, qaManagerProcedure, orgAdminProcedure,
-  auditMutation, invalidateRoleCache,
-} from "../rbac/middleware";
-import * as adminDb from "../db/admin";
-import { paginationInput, paginate, paginateInMemory, dateRangeFilter } from "../pagination";
+import { eq, desc, and, like, sql, or, SQL } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
+import crypto from "crypto";
+import { router, adminProcedure } from "../_core/trpc";
 import { getDb } from "../db";
-import { auditLogs, invites } from "../../drizzle/schema";
+import {
+  users, invites, auditLogs, projectMemberships,
+  type User,
+} from "../../drizzle/schema";
+import { paginationInput } from "../../shared/pagination";
+import { normalizePagination, countRows } from "../lib/pagination";
+import { writeAuditLog } from "../lib/auditLog";
+import { ENV } from "../_core/env";
 
-// ─── Allowed sort fields ─────────────────────────────────────────────────
-const AUDIT_SORT_FIELDS = ["timestamp", "action", "entityType", "actorName"];
-const INVITE_SORT_FIELDS = ["createdAt", "email", "status"];
+// ─── Input schemas ──────────────────────────────────────────────────────────
+
+const listUsersInput = z.object({
+  ...paginationInput.shape,
+  search: z.string().optional(),
+  role: z.enum(["user", "admin"]).optional(),
+});
+
+const updateUserInput = z.object({
+  userId: z.number(),
+  name: z.string().optional(),
+  email: z.string().email().optional(),
+  role: z.enum(["user", "admin"]).optional(),
+});
+
+const deleteUserInput = z.object({ userId: z.number() });
+
+const createInviteInput = z.object({
+  email: z.string().email(),
+  role: z.enum(["ADMIN", "MANAGER", "VIEWER"]).default("VIEWER"),
+});
+
+const listInvitesInput = z.object({
+  ...paginationInput.shape,
+  status: z.enum(["PENDING", "ACCEPTED", "EXPIRED", "REVOKED"]).optional(),
+});
+
+const revokeInviteInput = z.object({ inviteId: z.number() });
+
+const listAuditLogsInput = z.object({
+  ...paginationInput.shape,
+  action: z.string().optional(),
+  entity: z.string().optional(),
+  userId: z.number().optional(),
+});
+
+// ─── Router ─────────────────────────────────────────────────────────────────
 
 export const adminRouter = router({
-  // ══════════════════════════════════════════════════
-  //  Invites — SQL-native pagination, ORG_ADMIN only
-  // ══════════════════════════════════════════════════
-  listInvites: orgAdminProcedure
-    .input(z.object({
-      status: z.enum(["PENDING", "ACCEPTED", "REVOKED", "EXPIRED"]).optional(),
-    }).merge(paginationInput))
-    .query(async ({ input }) => {
-      const db = await getDb();
-      if (!db) return { items: [], total: 0, page: input.page, pageSize: input.pageSize };
+  // ── Users ───────────────────────────────────────────────────────────────
+  listUsers: adminProcedure.input(listUsersInput).query(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-      const where: any[] = [];
-      if (input.status) where.push(eq(invites.status, input.status));
+    const { page, pageSize, offset } = normalizePagination(input);
+    const conditions: SQL[] = [];
 
-      return paginate(
-        db.select().from(invites).$dynamic(),
-        invites,
-        input,
-        {
-          allowedSortFields: INVITE_SORT_FIELDS,
-          defaultSort: { by: "createdAt", dir: "desc" },
-          where: where.length > 0 ? where : undefined,
-        },
-      );
-    }),
+    if (input.search) {
+      const pattern = `%${input.search}%`;
+      conditions.push(or(like(users.name, pattern), like(users.email, pattern))!);
+    }
+    if (input.role) {
+      conditions.push(eq(users.role, input.role));
+    }
 
-  getInviteByToken: viewerProcedure
-    .input(z.object({ token: z.string() }))
-    .query(({ input }) => adminDb.getInviteByToken(input.token)),
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+    const baseQuery = where
+      ? db.select().from(users).where(where)
+      : db.select().from(users);
 
-  // ── Public endpoints for invitation acceptance (no auth required) ──
-  validateInviteToken: publicProcedure
-    .input(z.object({ token: z.string().min(1) }))
-    .query(async ({ input }) => {
-      const invite = await adminDb.getInviteByToken(input.token);
-      if (!invite) return { valid: false, reason: "invalid" as const, invite: null };
-      if (invite.status === "ACCEPTED") return { valid: false, reason: "already" as const, invite: { email: invite.email, role: invite.role, invitedByName: invite.invitedByName } };
-      if (invite.status === "REVOKED") return { valid: false, reason: "revoked" as const, invite: null };
-      if (invite.status === "EXPIRED" || (invite.expiresAt && new Date(invite.expiresAt).getTime() < Date.now())) {
-        return { valid: false, reason: "expired" as const, invite: { email: invite.email, invitedByName: invite.invitedByName, expiresAt: invite.expiresAt } };
-      }
-      return {
-        valid: true,
-        reason: "ok" as const,
-        invite: { email: invite.email, role: invite.role, invitedByName: invite.invitedByName, expiresAt: invite.expiresAt },
-      };
-    }),
+    const [data, countResult] = await Promise.all([
+      baseQuery.orderBy(desc(users.createdAt)).limit(pageSize).offset(offset),
+      countRows(db, users, where),
+    ]);
 
-  acceptInvite: publicProcedure
-    .input(z.object({
-      token: z.string().min(1),
-      fullName: z.string().min(2, "Le nom doit contenir au moins 2 caractères"),
-      password: z.string().min(8, "Le mot de passe doit contenir au moins 8 caractères"),
-    }))
-    .mutation(({ input }) => adminDb.acceptInvite(input.token, input.fullName, input.password)),
+    const total = countResult[0]?.count ?? 0;
 
-  createInvite: orgAdminProcedure
-    .use(auditMutation("CREATE", "invite"))
-    .input(z.object({
-      email: z.string().email(),
-      role: z.enum(["ADMIN", "MANAGER", "VIEWER"]).optional(),
-      invitedBy: z.string().optional(),
-      invitedByName: z.string().optional(),
-      expiresAt: z.coerce.date(),
-    }))
-    .mutation(({ input }) => adminDb.createInvite(input)),
+    const enrichedData = data.map((u: User) => ({
+      ...u,
+      role: u.openId === ENV.ownerOpenId ? ("admin" as const) : u.role,
+      isOwner: u.openId === ENV.ownerOpenId,
+    }));
 
-  updateInviteStatus: orgAdminProcedure
-    .use(auditMutation("UPDATE_STATUS", "invite"))
-    .input(z.object({
-      uid: z.string(),
-      status: z.enum(["PENDING", "ACCEPTED", "REVOKED", "EXPIRED"]),
-      acceptedAt: z.coerce.date().optional(),
-    }))
-    .mutation(({ input }) => adminDb.updateInviteStatus(input.uid, input.status, input.acceptedAt)),
+    return {
+      data: enrichedData,
+      pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) },
+    };
+  }),
 
-  revokeInvite: orgAdminProcedure
-    .use(auditMutation("REVOKE", "invite"))
-    .input(z.object({ uid: z.string() }))
-    .mutation(({ input }) => adminDb.revokeInvite(input.uid)),
+  getUser: adminProcedure.input(z.object({ userId: z.number() })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    const result = await db.select().from(users).where(eq(users.id, input.userId)).limit(1);
+    if (result.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Utilisateur introuvable" });
+    return result[0];
+  }),
 
-  // ══════════════════════════════════════════════════
-  //  Project Memberships — paginated
-  // ══════════════════════════════════════════════════
-  listProjectMemberships: qaManagerProcedure
-    .input(z.object({ projectId: z.string() }).merge(paginationInput))
-    .query(async ({ input }) => {
-      const all = await adminDb.listProjectMemberships(input.projectId);
-      return paginateInMemory(all, input);
-    }),
+  updateUser: adminProcedure.input(updateUserInput).mutation(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-  listUserMemberships: qaManagerProcedure
-    .input(z.object({ userId: z.string() }).merge(paginationInput))
-    .query(async ({ input }) => {
-      const all = await adminDb.listUserMemberships(input.userId);
-      return paginateInMemory(all, input);
-    }),
+    const existing = await db.select().from(users).where(eq(users.id, input.userId)).limit(1);
+    if (existing.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Utilisateur introuvable" });
 
-  createMembership: orgAdminProcedure
-    .use(auditMutation("CREATE", "project_membership"))
-    .input(z.object({
-      projectId: z.string(), userId: z.string(),
-      projectName: z.string().optional(), userEmail: z.string().optional(),
-      userName: z.string().optional(),
-      projectRole: z.enum(["PROJECT_ADMIN", "PROJECT_EDITOR", "PROJECT_VIEWER"]).optional(),
-      addedBy: z.string().optional(),
-    }))
-    .mutation(({ input }) => adminDb.createMembership(input)),
+    if (existing[0].openId === ENV.ownerOpenId && input.role && input.role !== "admin") {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Impossible de modifier le rôle du propriétaire" });
+    }
 
-  updateMembership: orgAdminProcedure
-    .use(auditMutation("UPDATE", "project_membership"))
-    .input(z.object({
-      uid: z.string(),
-      projectRole: z.enum(["PROJECT_ADMIN", "PROJECT_EDITOR", "PROJECT_VIEWER"]).optional(),
-    }))
-    .mutation(({ input }) => { const { uid, ...d } = input; return adminDb.updateMembership(uid, d); }),
+    const updateSet: Record<string, unknown> = {};
+    if (input.name !== undefined) updateSet.name = input.name;
+    if (input.email !== undefined) updateSet.email = input.email;
+    if (input.role !== undefined) updateSet.role = input.role;
 
-  deleteMembership: orgAdminProcedure
-    .use(auditMutation("DELETE", "project_membership"))
-    .input(z.object({ uid: z.string() }))
-    .mutation(({ input }) => adminDb.deleteMembership(input.uid)),
+    if (Object.keys(updateSet).length > 0) {
+      await db.update(users).set(updateSet).where(eq(users.id, input.userId));
+    }
 
-  // ══════════════════════════════════════════════════
-  //  Roles (RBAC) — ORG_ADMIN only
-  // ══════════════════════════════════════════════════
-  listRoles: qaManagerProcedure.query(() => adminDb.listRoles()),
+    await writeAuditLog({
+      userId: ctx.user!.id,
+      action: "USER_UPDATED",
+      entity: "user",
+      entityId: String(input.userId),
+      details: { changes: updateSet },
+    });
 
-  getRole: qaManagerProcedure
-    .input(z.object({ uid: z.string() }))
-    .query(({ input }) => adminDb.getRoleByUid(input.uid)),
+    return { success: true };
+  }),
 
-  createRole: orgAdminProcedure
-    .use(auditMutation("CREATE", "role"))
-    .input(z.object({
-      name: z.string().min(1), description: z.string().optional(),
-      scope: z.enum(["GLOBAL", "PROJECT"]).optional(),
-      isSystem: z.boolean().optional(),
-    }))
-    .mutation(({ input }) => adminDb.createRole(input)),
+  deleteUser: adminProcedure.input(deleteUserInput).mutation(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-  updateRole: orgAdminProcedure
-    .use(auditMutation("UPDATE", "role"))
-    .input(z.object({
-      uid: z.string(), name: z.string().optional(),
-      description: z.string().optional(),
-      scope: z.enum(["GLOBAL", "PROJECT"]).optional(),
-    }))
-    .mutation(({ input }) => { const { uid, ...d } = input; return adminDb.updateRole(uid, d); }),
+    const existing = await db.select().from(users).where(eq(users.id, input.userId)).limit(1);
+    if (existing.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Utilisateur introuvable" });
 
-  deleteRole: orgAdminProcedure
-    .use(auditMutation("DELETE", "role"))
-    .input(z.object({ uid: z.string() }))
-    .mutation(({ input }) => adminDb.deleteRole(input.uid)),
+    if (existing[0].openId === ENV.ownerOpenId) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Impossible de supprimer le propriétaire" });
+    }
 
-  // ══════════════════════════════════════════════════
-  //  Permissions — ORG_ADMIN only
-  // ══════════════════════════════════════════════════
-  listPermissions: qaManagerProcedure.query(() => adminDb.listPermissions()),
+    if (existing[0].email) {
+      await db.delete(invites).where(eq(invites.email, existing[0].email));
+    }
+    await db.delete(projectMemberships).where(eq(projectMemberships.userId, input.userId));
+    await db.delete(auditLogs).where(eq(auditLogs.userId, input.userId));
+    await db.delete(users).where(eq(users.id, input.userId));
 
-  createPermission: orgAdminProcedure
-    .use(auditMutation("CREATE", "permission"))
-    .input(z.object({
-      module: z.string(), action: z.string(), description: z.string().optional(),
-    }))
-    .mutation(({ input }) => adminDb.createPermission(input)),
+    await writeAuditLog({
+      userId: ctx.user!.id,
+      action: "USER_DELETED",
+      entity: "user",
+      entityId: String(input.userId),
+      details: { email: existing[0].email, name: existing[0].name },
+    });
 
-  // ══════════════════════════════════════════════════
-  //  Role-Permission Mapping — ORG_ADMIN only
-  // ══════════════════════════════════════════════════
-  getRolePermissions: qaManagerProcedure
-    .input(z.object({ roleId: z.string() }))
-    .query(({ input }) => adminDb.getRolePermissions(input.roleId)),
+    return { success: true };
+  }),
 
-  addPermissionToRole: orgAdminProcedure
-    .use(auditMutation("ADD_PERMISSION", "role"))
-    .input(z.object({ roleId: z.string(), permissionId: z.string() }))
-    .mutation(({ input }) => adminDb.addPermissionToRole(input.roleId, input.permissionId)),
+  // ── Invites ─────────────────────────────────────────────────────────────
+  listInvites: adminProcedure.input(listInvitesInput).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-  removePermissionFromRole: orgAdminProcedure
-    .use(auditMutation("REMOVE_PERMISSION", "role"))
-    .input(z.object({ roleId: z.string(), permissionId: z.string() }))
-    .mutation(({ input }) => adminDb.removePermissionFromRole(input.roleId, input.permissionId)),
+    const { page, pageSize, offset } = normalizePagination(input);
+    const conditions: SQL[] = [];
+    if (input.status) conditions.push(eq(invites.status, input.status));
 
-  // ══════════════════════════════════════════════════
-  //  User-Role Mapping — ORG_ADMIN only
-  // ══════════════════════════════════════════════════
-  getUserRoles: qaManagerProcedure
-    .input(z.object({ userId: z.string() }))
-    .query(({ input }) => adminDb.getUserRoles(input.userId)),
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+    const baseQuery = where
+      ? db.select().from(invites).where(where)
+      : db.select().from(invites);
 
-  addRoleToUser: orgAdminProcedure
-    .use(auditMutation("ADD_ROLE", "user"))
-    .input(z.object({ userId: z.string(), roleId: z.string() }))
-    .mutation(({ input }) => adminDb.addRoleToUser(input.userId, input.roleId)),
+    const [data, countResult] = await Promise.all([
+      baseQuery.orderBy(desc(invites.createdAt)).limit(pageSize).offset(offset),
+      countRows(db, invites, where),
+    ]);
 
-  removeRoleFromUser: orgAdminProcedure
-    .use(auditMutation("REMOVE_ROLE", "user"))
-    .input(z.object({ userId: z.string(), roleId: z.string() }))
-    .mutation(({ input }) => adminDb.removeRoleFromUser(input.userId, input.roleId)),
+    const total = countResult[0]?.count ?? 0;
+    return {
+      data,
+      pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) },
+    };
+  }),
 
-  // ══════════════════════════════════════════════════
-  //  Audit Logs — SQL-native pagination + filters (high volume)
-  // ══════════════════════════════════════════════════
-  listAuditLogs: qaManagerProcedure
-    .input(z.object({
-      actorId: z.string().optional(),
-      entityType: z.string().optional(),
-      action: z.string().optional(),
-      dateFrom: z.string().optional(),
-      dateTo: z.string().optional(),
-    }).merge(paginationInput))
-    .query(async ({ input }) => {
-      const db = await getDb();
-      if (!db) return { items: [], total: 0, page: input.page, pageSize: input.pageSize };
+  createInvite: adminProcedure.input(createInviteInput).mutation(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-      const where: any[] = [];
-      if (input.actorId) where.push(eq(auditLogs.actorId, input.actorId));
-      if (input.entityType) where.push(eq(auditLogs.entityType, input.entityType));
-      if (input.action) where.push(eq(auditLogs.action, input.action));
-      where.push(...dateRangeFilter(auditLogs.timestamp, input.dateFrom, input.dateTo));
+    const existing = await db.select().from(invites)
+      .where(and(eq(invites.email, input.email), eq(invites.status, "PENDING")))
+      .limit(1);
 
-      return paginate(
-        db.select().from(auditLogs).$dynamic(),
-        auditLogs,
-        input,
-        {
-          allowedSortFields: AUDIT_SORT_FIELDS,
-          defaultSort: { by: "timestamp", dir: "desc" },
-          where: where.length > 0 ? where : undefined,
-        },
-      );
-    }),
+    if (existing.length > 0) {
+      throw new TRPCError({ code: "CONFLICT", message: "Une invitation est déjà en attente pour cet email" });
+    }
 
-  createAuditLog: orgAdminProcedure
-    .input(z.object({
-      actorId: z.string().optional(), actorName: z.string().optional(),
-      actorEmail: z.string().optional(), action: z.string(),
-      entityType: z.string(), entityId: z.string().optional(),
-      targetLabel: z.string().optional(),
-      metadata: z.record(z.string(), z.unknown()).optional(),
-      traceId: z.string().optional(),
-    }))
-    .mutation(({ input }) => adminDb.createAuditLog(input)),
+    const token = crypto.randomBytes(48).toString("hex");
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-  // ══════════════════════════════════════════════════
-  //  Users Management — ORG_ADMIN only
-  // ══════════════════════════════════════════════════
-  listUsers: orgAdminProcedure
-    .input(z.object({
-      search: z.string().optional(),
-      role: z.string().optional(),
-      status: z.enum(["ACTIVE", "DISABLED", "INVITED"]).optional(),
-    }).merge(paginationInput))
-    .query(async ({ input }) => {
-      const all = await adminDb.listUsers({
-        search: input.search,
-        role: input.role,
-        status: input.status,
-      });
-      return paginateInMemory(all, input);
-    }),
+    await db.insert(invites).values({
+      email: input.email,
+      role: input.role,
+      token,
+      status: "PENDING",
+      invitedBy: ctx.user!.id,
+      expiresAt,
+    });
 
-  getUser: orgAdminProcedure
-    .input(z.object({ id: z.number() }))
-    .query(({ input }) => adminDb.getUserById(input.id)),
+    await writeAuditLog({
+      userId: ctx.user!.id,
+      action: "INVITE_CREATED",
+      entity: "invite",
+      entityId: input.email,
+      details: { role: input.role },
+    });
 
-  createUser: orgAdminProcedure
-    .use(auditMutation("CREATE", "user"))
-    .input(z.object({
-      fullName: z.string().min(2, "Le nom doit contenir au moins 2 caractères"),
-      email: z.string().email("Adresse email invalide"),
-      role: z.enum(["ADMIN", "MANAGER", "VIEWER"]),
-      password: z.string().min(6, "Le mot de passe doit contenir au moins 6 caractères").optional(),
-    }))
-    .mutation(({ input }) => adminDb.createUser(input)),
+    return { success: true, token };
+  }),
 
-  updateUser: orgAdminProcedure
-    .use(auditMutation("UPDATE", "user"))
-    .input(z.object({
-      id: z.number(),
-      fullName: z.string().min(2).optional(),
-      email: z.string().email().optional(),
-      role: z.enum(["ADMIN", "MANAGER", "VIEWER"]).optional(),
-    }))
-    .mutation(async ({ input }) => {
-      const { id, ...data } = input;
-      const result = await adminDb.updateUser(id, data);
-      // Invalidate RBAC cache so role changes take effect immediately
-      if (data.role && result?.openId) {
-        invalidateRoleCache(result.openId);
-      }
-      return result;
-    }),
+  revokeInvite: adminProcedure.input(revokeInviteInput).mutation(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-  disableUser: orgAdminProcedure
-    .use(auditMutation("DISABLE", "user"))
-    .input(z.object({ id: z.number() }))
-    .mutation(({ input }) => adminDb.disableUser(input.id)),
+    const existing = await db.select().from(invites).where(eq(invites.id, input.inviteId)).limit(1);
+    if (existing.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Invitation introuvable" });
+    if (existing[0].status !== "PENDING") {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Seules les invitations en attente peuvent être révoquées" });
+    }
 
-  enableUser: orgAdminProcedure
-    .use(auditMutation("ENABLE", "user"))
-    .input(z.object({ id: z.number() }))
-    .mutation(({ input }) => adminDb.enableUser(input.id)),
+    await db.update(invites).set({ status: "REVOKED" }).where(eq(invites.id, input.inviteId));
 
-  resetUserPassword: orgAdminProcedure
-    .use(auditMutation("PASSWORD_RESET", "user"))
-    .input(z.object({
-      id: z.number(),
-      newPassword: z.string().min(6, "Le mot de passe doit contenir au moins 6 caractères"),
-    }))
-    .mutation(({ input }) => adminDb.resetUserPassword(input.id, input.newPassword)),
+    await writeAuditLog({
+      userId: ctx.user!.id,
+      action: "INVITE_REVOKED",
+      entity: "invite",
+      entityId: String(input.inviteId),
+      details: { email: existing[0].email },
+    });
 
-  deleteUser: orgAdminProcedure
-    .use(auditMutation("DELETE", "user"))
-    .input(z.object({ id: z.number() }))
-    .mutation(({ input }) => adminDb.deleteUser(input.id)),
+    return { success: true };
+  }),
+
+  // ── Audit Logs ──────────────────────────────────────────────────────────
+  listAuditLogs: adminProcedure.input(listAuditLogsInput).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+    const { page, pageSize, offset } = normalizePagination(input);
+    const conditions: SQL[] = [];
+    if (input.action) conditions.push(eq(auditLogs.action, input.action));
+    if (input.entity) conditions.push(eq(auditLogs.entity, input.entity));
+    if (input.userId) conditions.push(eq(auditLogs.userId, input.userId));
+
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+    const baseQuery = where
+      ? db.select().from(auditLogs).where(where)
+      : db.select().from(auditLogs);
+
+    const [data, countResult] = await Promise.all([
+      baseQuery.orderBy(desc(auditLogs.createdAt)).limit(pageSize).offset(offset),
+      countRows(db, auditLogs, where),
+    ]);
+
+    const total = countResult[0]?.count ?? 0;
+    return {
+      data,
+      pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) },
+    };
+  }),
 });

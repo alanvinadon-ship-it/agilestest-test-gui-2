@@ -1,7 +1,7 @@
 /**
  * AcceptInvitePage — /invite/accept?token=...
  * Page publique permettant à un utilisateur invité de finaliser son inscription.
- * Flux : validation token (via tRPC backend) → formulaire (nom, mot de passe) → activation compte → redirection login
+ * Flux : validation token → formulaire (nom, mot de passe) → activation compte → redirection login
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useLocation, useSearch } from 'wouter';
@@ -10,7 +10,8 @@ import {
   Shield, UserPlus, Loader2, AlertCircle, CheckCircle2,
   Eye, EyeOff, Mail, User, Lock, ArrowRight, XCircle,
 } from 'lucide-react';
-import { trpc } from '@/lib/trpc';
+import { adminInvites } from '../admin/adminStore';
+import type { Invite } from '../admin/types';
 
 // ─── Role labels ────────────────────────────────────────────────────────
 const ROLE_LABELS: Record<string, string> = {
@@ -18,14 +19,6 @@ const ROLE_LABELS: Record<string, string> = {
   MANAGER: 'Manager',
   VIEWER: 'Lecteur',
 };
-
-// ─── Types ──────────────────────────────────────────────────────────────
-interface InviteInfo {
-  email: string;
-  role?: string;
-  invitedByName?: string | null;
-  expiresAt?: Date | string | null;
-}
 
 // ─── Component ──────────────────────────────────────────────────────────
 export default function AcceptInvitePage() {
@@ -38,7 +31,7 @@ export default function AcceptInvitePage() {
 
   // State
   const [status, setStatus] = useState<'loading' | 'valid' | 'invalid' | 'expired' | 'accepted' | 'already' | 'success'>('loading');
-  const [invite, setInvite] = useState<InviteInfo | null>(null);
+  const [invite, setInvite] = useState<Invite | null>(null);
   const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -47,55 +40,43 @@ export default function AcceptInvitePage() {
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // tRPC mutations
-  const acceptInviteMutation = trpc.admin.acceptInvite.useMutation();
-
-  // Validate token on mount via tRPC backend
-  const validateQuery = trpc.admin.validateInviteToken.useQuery(
-    { token: token || '' },
-    { enabled: !!token, retry: false }
-  );
-
+  // Validate token on mount
   useEffect(() => {
     if (!token) {
       setStatus('invalid');
       return;
     }
 
-    if (validateQuery.isLoading) {
-      setStatus('loading');
-      return;
-    }
-
-    if (validateQuery.error) {
-      setStatus('invalid');
-      return;
-    }
-
-    if (validateQuery.data) {
-      const result = validateQuery.data;
-      if (result.valid && result.invite) {
-        setInvite(result.invite as InviteInfo);
-        setStatus('valid');
-      } else {
-        switch (result.reason) {
-          case 'already':
-            setInvite(result.invite as InviteInfo);
-            setStatus('already');
-            break;
-          case 'expired':
-            setInvite(result.invite as InviteInfo);
-            setStatus('expired');
-            break;
-          case 'revoked':
-          case 'invalid':
-          default:
-            setStatus('invalid');
-            break;
-        }
+    try {
+      const found = adminInvites.findByToken(token);
+      if (!found) {
+        setStatus('invalid');
+        return;
       }
+
+      if (found.status === 'ACCEPTED') {
+        setStatus('already');
+        setInvite(found);
+        return;
+      }
+
+      if (found.status === 'REVOKED') {
+        setStatus('invalid');
+        return;
+      }
+
+      if (found.status === 'EXPIRED' || new Date(found.expires_at).getTime() < Date.now()) {
+        setStatus('expired');
+        setInvite(found);
+        return;
+      }
+
+      setInvite(found);
+      setStatus('valid');
+    } catch {
+      setStatus('invalid');
     }
-  }, [token, validateQuery.isLoading, validateQuery.error, validateQuery.data]);
+  }, [token]);
 
   // Form validation
   const validate = useCallback((): boolean => {
@@ -123,35 +104,30 @@ export default function AcceptInvitePage() {
     return Object.keys(errs).length === 0;
   }, [fullName, password, confirmPassword]);
 
-  // Submit via tRPC backend
+  // Submit
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate() || !token) return;
 
     setSubmitting(true);
     try {
-      const result = await acceptInviteMutation.mutateAsync({
-        token,
-        fullName: fullName.trim(),
-        password,
-      });
+      const result = adminInvites.acceptByToken(token, fullName.trim(), password);
       setStatus('success');
-      toast.success(`Bienvenue ${result.user.fullName} ! Votre compte est activé.`);
+      toast.success(`Bienvenue ${result.user.full_name} ! Votre compte est activé.`);
 
       // Redirect to login after 3s
       setTimeout(() => {
         navigate('/login');
       }, 3000);
     } catch (err: any) {
-      const msg = err.message || "Erreur lors de l'activation du compte";
-      toast.error(msg);
-      if (msg.includes('expiré')) {
+      toast.error(err.message || 'Erreur lors de l\'activation du compte');
+      if (err.message?.includes('expiré')) {
         setStatus('expired');
       }
     } finally {
       setSubmitting(false);
     }
-  }, [token, fullName, password, validate, navigate, acceptInviteMutation]);
+  }, [token, fullName, password, validate, navigate]);
 
   // ─── Render ─────────────────────────────────────────────────────────────
 
@@ -206,15 +182,11 @@ export default function AcceptInvitePage() {
             <h2 className="text-lg font-heading font-bold text-foreground mb-2">Invitation expirée</h2>
             <p className="text-sm text-muted-foreground mb-2">
               L'invitation envoyée à <span className="text-foreground font-medium">{invite.email}</span> a expiré
-              {invite.expiresAt && (
-                <> le {new Date(invite.expiresAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</>
-              )}.
+              le {new Date(invite.expires_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}.
             </p>
-            {invite.invitedByName && (
-              <p className="text-xs text-muted-foreground mb-6">
-                Contactez <span className="text-foreground">{invite.invitedByName}</span> pour recevoir une nouvelle invitation.
-              </p>
-            )}
+            <p className="text-xs text-muted-foreground mb-6">
+              Contactez <span className="text-foreground">{invite.invited_by_name}</span> pour recevoir une nouvelle invitation.
+            </p>
             <button
               onClick={() => navigate('/login')}
               className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
@@ -284,99 +256,152 @@ export default function AcceptInvitePage() {
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
                   <span className="text-muted-foreground">Email</span>
-                  <div className="flex items-center gap-1.5 mt-0.5">
+                  <p className="text-foreground font-medium mt-0.5 flex items-center gap-1.5">
                     <Mail className="w-3.5 h-3.5 text-primary" />
-                    <span className="text-foreground font-medium">{invite.email}</span>
-                  </div>
+                    {invite.email}
+                  </p>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Rôle attribué</span>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <Shield className="w-3.5 h-3.5 text-primary" />
-                    <span className="text-foreground font-medium">{ROLE_LABELS[invite.role || 'VIEWER'] || invite.role}</span>
-                  </div>
+                  <p className="text-foreground font-medium mt-0.5">
+                    {ROLE_LABELS[invite.role] || invite.role}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Invité par</span>
+                  <p className="text-foreground font-medium mt-0.5">{invite.invited_by_name}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Expire le</span>
+                  <p className="text-foreground font-medium mt-0.5">
+                    {new Date(invite.expires_at).toLocaleDateString('fr-FR', {
+                      day: 'numeric', month: 'long', year: 'numeric',
+                    })}
+                  </p>
                 </div>
               </div>
             </div>
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-              {/* Full Name */}
+              {/* Full name */}
               <div>
-                <label htmlFor="fullName" className="block text-xs font-medium text-muted-foreground mb-1.5">
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">
                   Nom complet
                 </label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <input
-                    id="fullName"
                     type="text"
                     value={fullName}
-                    onChange={(e) => { setFullName(e.target.value); setErrors(p => ({ ...p, fullName: '' })); }}
-                    placeholder="Prénom Nom"
-                    className={`w-full pl-10 pr-4 py-2.5 bg-background border ${errors.fullName ? 'border-red-500' : 'border-border'} rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary`}
+                    onChange={e => { setFullName(e.target.value); setErrors(prev => ({ ...prev, fullName: '' })); }}
+                    placeholder="Jean Dupont"
+                    className={`w-full pl-10 pr-3 py-2.5 rounded-md border bg-background text-sm text-foreground placeholder:text-muted-foreground/50 transition-colors ${
+                      errors.fullName ? 'border-red-500 focus:ring-red-500' : 'border-border focus:ring-primary'
+                    } focus:outline-none focus:ring-1`}
+                    autoFocus
                   />
                 </div>
-                {errors.fullName && <p className="text-xs text-red-400 mt-1">{errors.fullName}</p>}
+                {errors.fullName && (
+                  <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" /> {errors.fullName}
+                  </p>
+                )}
               </div>
 
               {/* Password */}
               <div>
-                <label htmlFor="password" className="block text-xs font-medium text-muted-foreground mb-1.5">
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">
                   Mot de passe
                 </label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <input
-                    id="password"
                     type={showPassword ? 'text' : 'password'}
                     value={password}
-                    onChange={(e) => { setPassword(e.target.value); setErrors(p => ({ ...p, password: '' })); }}
+                    onChange={e => { setPassword(e.target.value); setErrors(prev => ({ ...prev, password: '' })); }}
                     placeholder="Minimum 8 caractères"
-                    className={`w-full pl-10 pr-10 py-2.5 bg-background border ${errors.password ? 'border-red-500' : 'border-border'} rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary`}
+                    className={`w-full pl-10 pr-10 py-2.5 rounded-md border bg-background text-sm text-foreground placeholder:text-muted-foreground/50 transition-colors ${
+                      errors.password ? 'border-red-500 focus:ring-red-500' : 'border-border focus:ring-primary'
+                    } focus:outline-none focus:ring-1`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    tabIndex={-1}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                {errors.password && <p className="text-xs text-red-400 mt-1">{errors.password}</p>}
+                {errors.password && (
+                  <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" /> {errors.password}
+                  </p>
+                )}
+                {/* Password strength indicator */}
+                {password && (
+                  <div className="mt-2 flex gap-1">
+                    {[1, 2, 3, 4].map(level => {
+                      const strength = password.length >= 12 && /[A-Z]/.test(password) && /[0-9]/.test(password) && /[^A-Za-z0-9]/.test(password) ? 4
+                        : password.length >= 10 && /[A-Z]/.test(password) && /[0-9]/.test(password) ? 3
+                        : password.length >= 8 ? 2 : 1;
+                      const colors = ['bg-red-500', 'bg-amber-500', 'bg-blue-500', 'bg-emerald-500'];
+                      return (
+                        <div
+                          key={level}
+                          className={`h-1 flex-1 rounded-full transition-colors ${
+                            level <= strength ? colors[strength - 1] : 'bg-border'
+                          }`}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
-              {/* Confirm Password */}
+              {/* Confirm password */}
               <div>
-                <label htmlFor="confirmPassword" className="block text-xs font-medium text-muted-foreground mb-1.5">
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">
                   Confirmer le mot de passe
                 </label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <input
-                    id="confirmPassword"
                     type={showConfirm ? 'text' : 'password'}
                     value={confirmPassword}
-                    onChange={(e) => { setConfirmPassword(e.target.value); setErrors(p => ({ ...p, confirmPassword: '' })); }}
+                    onChange={e => { setConfirmPassword(e.target.value); setErrors(prev => ({ ...prev, confirmPassword: '' })); }}
                     placeholder="Retapez le mot de passe"
-                    className={`w-full pl-10 pr-10 py-2.5 bg-background border ${errors.confirmPassword ? 'border-red-500' : 'border-border'} rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary`}
+                    className={`w-full pl-10 pr-10 py-2.5 rounded-md border bg-background text-sm text-foreground placeholder:text-muted-foreground/50 transition-colors ${
+                      errors.confirmPassword ? 'border-red-500 focus:ring-red-500' : 'border-border focus:ring-primary'
+                    } focus:outline-none focus:ring-1`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirm(!showConfirm)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    tabIndex={-1}
                   >
                     {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                {errors.confirmPassword && <p className="text-xs text-red-400 mt-1">{errors.confirmPassword}</p>}
+                {errors.confirmPassword && (
+                  <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" /> {errors.confirmPassword}
+                  </p>
+                )}
+                {confirmPassword && password === confirmPassword && (
+                  <p className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" /> Les mots de passe correspondent
+                  </p>
+                )}
               </div>
 
               {/* Submit */}
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full flex items-center justify-center gap-2 py-2.5 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary text-primary-foreground rounded-md text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors mt-2"
               >
                 {submitting ? (
                   <>
@@ -385,17 +410,30 @@ export default function AcceptInvitePage() {
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="w-4 h-4" />
+                    <UserPlus className="w-4 h-4" />
                     Activer mon compte
                   </>
                 )}
               </button>
             </form>
+
+            {/* Footer */}
+            <div className="px-6 py-3 border-t border-border text-center">
+              <p className="text-xs text-muted-foreground">
+                Vous avez déjà un compte ?{' '}
+                <button
+                  onClick={() => navigate('/login')}
+                  className="text-primary hover:underline"
+                >
+                  Se connecter
+                </button>
+              </p>
+            </div>
           </div>
         )}
 
-        {/* Footer */}
-        <p className="text-center text-xs text-muted-foreground mt-6 font-mono">
+        {/* Version */}
+        <p className="text-center text-xs text-muted-foreground/50 mt-6 font-mono">
           AgilesTest v0.1.1 — Orange CIV
         </p>
       </div>

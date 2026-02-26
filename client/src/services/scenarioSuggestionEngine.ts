@@ -17,7 +17,7 @@ import {
   getTemplatesForProfile,
   filterByScope,
 } from '../config/scenarioTemplates';
-import { localScenarios, localAuditLog } from '../api/localStoreTrpc';
+import { localScenarios, localAuditLog } from '../api/localStore';
 
 // ─── Domain Code Mapping ──────────────────────────────────────────────────
 
@@ -119,8 +119,7 @@ function generateScenarioCode(
   const slug = slugify(title);
 
   // Récupérer le prochain NNN disponible
-  const nextIdStr = localScenarios.nextId(projectId, testType, domain);
-  const nnn = parseInt(nextIdStr.split('-').pop() || '0', 10) || 1;
+  const { nnn } = localScenarios.nextId(projectId, testType, domain);
   const num = (nnn + offset).toString().padStart(3, '0');
   return `${prefix}-${num}-${slug}`;
 }
@@ -270,12 +269,12 @@ export function suggestionToScenario(
  * Importe une liste de suggestions avec gestion des collisions.
  * Modes : SKIP (ignorer), RENAME (auto-renommer), OVERWRITE (écraser, admin only)
  */
-export async function bulkImportSuggestions(
+export function bulkImportSuggestions(
   suggestions: SuggestedScenario[],
   profileId: string,
   projectId: string,
   importMode: ImportMode = 'RENAME',
-): Promise<ImportReport> {
+): ImportReport {
   const details: ImportReport['details'] = [];
   let imported_count = 0;
   let skipped_count = 0;
@@ -284,7 +283,7 @@ export async function bulkImportSuggestions(
 
   for (const suggestion of suggestions) {
     const scenarioCode = suggestion.scenario_code;
-    const exists = await localScenarios.codeExists(projectId, scenarioCode);
+    const exists = localScenarios.codeExists(projectId, scenarioCode);
 
     if (exists) {
       switch (importMode) {
@@ -314,7 +313,7 @@ export async function bulkImportSuggestions(
             import_mode: 'RENAME',
           };
 
-          const created = await localScenarios.create(profileId, projectId, data);
+          const created = localScenarios.create(profileId, projectId, data);
           renamed_count++;
           imported_count++;
           details.push({
@@ -329,11 +328,11 @@ export async function bulkImportSuggestions(
 
         case 'OVERWRITE': {
           // Trouver l'existant et le mettre à jour
-          const allScenarios = await localScenarios.listByProject(projectId);
-          const existing = (allScenarios as any[]).find((s: any) => s.scenario_code === scenarioCode);
+          const allScenarios = localScenarios.listByProject(projectId);
+          const existing = allScenarios.data.find(s => s.scenario_code === scenarioCode);
           if (existing) {
             const data = suggestionToScenario(suggestion, profileId, projectId);
-            await localScenarios.update(existing.id, {
+            localScenarios.update(existing.id, {
               ...data,
               version: (existing.version || 1) + 1,
               metadata: { ...data.metadata, import_mode: 'OVERWRITE' },
@@ -354,7 +353,7 @@ export async function bulkImportSuggestions(
       // Pas de collision — import direct
       const data = suggestionToScenario(suggestion, profileId, projectId);
       (data.metadata as any) = { ...data.metadata, import_mode: importMode };
-      const created = await localScenarios.create(profileId, projectId, data);
+      const created = localScenarios.create(profileId, projectId, data);
       imported_count++;
       details.push({
         scenario_id: created.id,
@@ -366,7 +365,7 @@ export async function bulkImportSuggestions(
   }
 
   // Audit log
-  localAuditLog.log('IMPORT', {
+  const auditEntry = localAuditLog.add({
     actor_user_id: 'local-admin-001',
     project_id: projectId,
     profile_id: profileId,
@@ -381,7 +380,7 @@ export async function bulkImportSuggestions(
     renamed_count,
     overwritten_count,
     details,
-    audit_log_id: 'audit-' + Date.now(),
-    timestamp: new Date().toISOString(),
+    audit_log_id: auditEntry.id,
+    timestamp: auditEntry.timestamp,
   };
 }

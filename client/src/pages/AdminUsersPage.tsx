@@ -1,131 +1,94 @@
 /**
  * AdminUsersPage — /admin/users
- * CRUD utilisateurs via tRPC backend (DB), filtres, disable/enable, reset password, view memberships
+ * CRUD utilisateurs, filtres, disable/enable, reset password, view memberships
  */
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, Fragment } from 'react';
 import { trpc } from '@/lib/trpc';
 import { localNotifSettings } from '../notifications';
 import {
-  Users, Plus, Search, Edit2, UserX, UserCheck,
-  KeyRound, Eye, Shield, X, ChevronLeft, ChevronRight,
-  Mail, MailX, MailCheck, RefreshCw, Send, Trash2,
+  Users, Plus, Search, Filter, Edit2, UserX, UserCheck,
+  KeyRound, Eye, MoreHorizontal, Shield, X, ChevronLeft, ChevronRight,
+  Mail, MailX, MailCheck, RefreshCw, Send,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../auth/AuthContext';
+import { adminUsers, adminMemberships, adminInvites } from '../admin/adminStore';
 import {
   GLOBAL_ROLE_LABELS, GLOBAL_ROLE_COLORS, PROJECT_ROLE_LABELS, PROJECT_ROLE_COLORS,
   createUserSchema, updateUserSchema,
 } from '../admin/types';
-import type { UserStatus, CreateUserInput, UpdateUserInput } from '../admin/types';
+import type { AdminUser, UserStatus, CreateUserInput, UpdateUserInput, ProjectMembership, Invite, InviteInput } from '../admin/types';
 import type { UserRole } from '../types';
-
-// ─── DB role mapping ────────────────────────────────────────────────────
-// DB stores lowercase (admin, manager, viewer, user)
-// Frontend uses uppercase (ADMIN, MANAGER, VIEWER)
-function dbRoleToFrontend(dbRole: string): UserRole {
-  const r = dbRole?.toUpperCase();
-  if (r === 'ADMIN') return 'ADMIN';
-  if (r === 'MANAGER') return 'MANAGER';
-  if (r === 'VIEWER') return 'VIEWER';
-  if (r === 'USER') return 'VIEWER'; // legacy "user" role maps to VIEWER
-  return 'VIEWER';
-}
-
-// Map DB user row to AdminUser-like shape for the UI
-function mapDbUser(row: any) {
-  return {
-    id: row.id,
-    full_name: row.fullName || row.name || row.email || '—',
-    email: row.email || '',
-    role: dbRoleToFrontend(row.role),
-    status: (row.status || 'ACTIVE') as UserStatus,
-    last_login_at: row.lastSignedIn || null,
-    memberships_count: 0, // TODO: join count
-    created_at: row.createdAt,
-  };
-}
 
 // ─── Component ──────────────────────────────────────────────────────────
 
 export default function AdminUsersPage() {
   const { user: currentUser } = useAuth();
-  const actorId = currentUser?.id || '';
-  const actorName = currentUser?.full_name || '';
+  const actor = currentUser
+    ? { id: currentUser.id, name: currentUser.full_name, email: currentUser.email }
+    : { id: '', name: '', email: '' };
 
   // State
   const [search, setSearch] = useState('');
   const [filterRole, setFilterRole] = useState<UserRole | ''>('');
   const [filterStatus, setFilterStatus] = useState<UserStatus | ''>('');
   const [page, setPage] = useState(1);
-  const pageSize = 15;
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Modals
   const [showCreate, setShowCreate] = useState(false);
-  const [editUser, setEditUser] = useState<any | null>(null);
-  const [viewMembershipsUser, setViewMembershipsUser] = useState<any | null>(null);
-  const [confirmDisable, setConfirmDisable] = useState<any | null>(null);
+  const [editUser, setEditUser] = useState<AdminUser | null>(null);
+  const [viewMembershipsUser, setViewMembershipsUser] = useState<AdminUser | null>(null);
+  const [confirmDisable, setConfirmDisable] = useState<AdminUser | null>(null);
   const [showInvite, setShowInvite] = useState(false);
   const [showInvitesList, setShowInvitesList] = useState(false);
-  const [resetPasswordUser, setResetPasswordUser] = useState<any | null>(null);
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmDelete, setConfirmDelete] = useState<any | null>(null);
 
-  // tRPC queries
-  const utils = trpc.useUtils();
-  const usersQuery = trpc.admin.listUsers.useQuery({
-    search: search || undefined,
-    role: filterRole || undefined,
-    status: filterStatus || undefined,
-    page,
-    pageSize,
-  }, { placeholderData: (prev) => prev });
+  const refresh = useCallback(() => setRefreshKey(k => k + 1), []);
 
-  const users = useMemo(() => {
-    const items = usersQuery.data?.items || [];
-    return items.map(mapDbUser);
-  }, [usersQuery.data]);
+  // Data
+  const result = useMemo(() => {
+    void refreshKey;
+    return adminUsers.list({
+      search: search || undefined,
+      status: filterStatus || undefined,
+      role: filterRole || undefined,
+      page,
+      limit: 15,
+    });
+  }, [search, filterRole, filterStatus, page, refreshKey]);
 
-  const total = usersQuery.data?.total || 0;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const { data: users, pagination } = result;
 
-  // Mutations
-  const disableMutation = trpc.admin.disableUser.useMutation({
-    onSuccess: () => { utils.admin.listUsers.invalidate(); toast.success('Utilisateur désactivé'); },
-    onError: (e) => toast.error(e.message),
-  });
-  const enableMutation = trpc.admin.enableUser.useMutation({
-    onSuccess: () => { utils.admin.listUsers.invalidate(); toast.success('Utilisateur réactivé'); },
-    onError: (e) => toast.error(e.message),
-  });
-  const resetPasswordMutation = trpc.admin.resetUserPassword.useMutation({
-    onSuccess: () => { toast.success('Mot de passe réinitialisé'); setResetPasswordUser(null); setNewPassword(''); },
-    onError: (e) => toast.error(e.message),
-  });
-  const deleteMutation = trpc.admin.deleteUser.useMutation({
-    onSuccess: () => { utils.admin.listUsers.invalidate(); toast.success('Utilisateur supprimé'); setConfirmDelete(null); },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const handleDisable = useCallback((u: any) => {
-    disableMutation.mutate({ id: u.id });
-    setConfirmDisable(null);
-  }, [disableMutation]);
-
-  const handleEnable = useCallback((u: any) => {
-    enableMutation.mutate({ id: u.id });
-  }, [enableMutation]);
-
-  const handleResetPassword = useCallback(() => {
-    if (!resetPasswordUser || !newPassword || newPassword.length < 6) {
-      toast.error('Le mot de passe doit contenir au moins 6 caractères');
-      return;
+  // Handlers
+  const handleDisable = useCallback((u: AdminUser) => {
+    try {
+      adminUsers.disable(u.id, actor);
+      toast.success(`${u.full_name} désactivé`);
+      refresh();
+    } catch (e: any) {
+      toast.error(e.message);
     }
-    resetPasswordMutation.mutate({ id: resetPasswordUser.id, newPassword });
-  }, [resetPasswordUser, newPassword, resetPasswordMutation]);
+    setConfirmDisable(null);
+  }, [actor, refresh]);
 
-  const handleDelete = useCallback((u: any) => {
-    deleteMutation.mutate({ id: u.id });
-  }, [deleteMutation]);
+  const handleEnable = useCallback((u: AdminUser) => {
+    try {
+      adminUsers.enable(u.id, actor);
+      toast.success(`${u.full_name} réactivé`);
+      refresh();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  }, [actor, refresh]);
+
+  const handleResetPassword = useCallback((u: AdminUser) => {
+    try {
+      const res = adminUsers.resetPassword(u.id, actor);
+      toast.success(res.message);
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  }, [actor]);
 
   return (
     <div className="space-y-6">
@@ -215,14 +178,7 @@ export default function AdminUsersPage() {
               </tr>
             </thead>
             <tbody>
-              {usersQuery.isLoading ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
-                    <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
-                    Chargement...
-                  </td>
-                </tr>
-              ) : users.length === 0 ? (
+              {users.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
                     Aucun utilisateur trouvé.
@@ -235,7 +191,7 @@ export default function AdminUsersPage() {
                       <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
                           <span className="text-xs font-bold text-primary">
-                            {u.full_name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
+                            {u.full_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
                           </span>
                         </div>
                         <span className="font-medium text-foreground">{u.full_name}</span>
@@ -279,7 +235,7 @@ export default function AdminUsersPage() {
                           <Eye className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => { setResetPasswordUser(u); setNewPassword(''); }}
+                          onClick={() => handleResetPassword(u)}
                           className="p-1.5 text-muted-foreground hover:text-amber-400 transition-colors"
                           title="Réinitialiser mot de passe"
                         >
@@ -302,13 +258,6 @@ export default function AdminUsersPage() {
                             <UserCheck className="w-3.5 h-3.5" />
                           </button>
                         )}
-                        <button
-                          onClick={() => setConfirmDelete(u)}
-                          className="p-1.5 text-muted-foreground hover:text-red-500 transition-colors"
-                          title="Supprimer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
                       </div>
                     </td>
                   </tr>
@@ -319,10 +268,10 @@ export default function AdminUsersPage() {
         </div>
 
         {/* Pagination */}
-        {totalPages > 1 && (
+        {pagination.total_pages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-border">
             <span className="text-xs text-muted-foreground">
-              {total} utilisateur{total > 1 ? 's' : ''} — Page {page}/{totalPages}
+              {pagination.total} utilisateur{pagination.total > 1 ? 's' : ''} — Page {pagination.page}/{pagination.total_pages}
             </span>
             <div className="flex items-center gap-1">
               <button
@@ -333,8 +282,8 @@ export default function AdminUsersPage() {
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
+                onClick={() => setPage(p => Math.min(pagination.total_pages, p + 1))}
+                disabled={page === pagination.total_pages}
                 className="p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
               >
                 <ChevronRight className="w-4 h-4" />
@@ -347,8 +296,9 @@ export default function AdminUsersPage() {
       {/* Create Modal */}
       {showCreate && (
         <CreateUserModal
+          actor={actor}
           onClose={() => setShowCreate(false)}
-          onCreated={() => { setShowCreate(false); utils.admin.listUsers.invalidate(); }}
+          onCreated={() => { setShowCreate(false); refresh(); }}
         />
       )}
 
@@ -356,8 +306,9 @@ export default function AdminUsersPage() {
       {editUser && (
         <EditUserModal
           user={editUser}
+          actor={actor}
           onClose={() => setEditUser(null)}
-          onUpdated={() => { setEditUser(null); utils.admin.listUsers.invalidate(); }}
+          onUpdated={() => { setEditUser(null); refresh(); }}
         />
       )}
 
@@ -373,7 +324,7 @@ export default function AdminUsersPage() {
       {showInvite && (
         <InviteModal
           onClose={() => setShowInvite(false)}
-          onSent={() => { setShowInvite(false); utils.admin.listUsers.invalidate(); }}
+          onSent={() => { setShowInvite(false); refresh(); }}
         />
       )}
 
@@ -381,7 +332,7 @@ export default function AdminUsersPage() {
       {showInvitesList && (
         <InvitesListDrawer
           onClose={() => setShowInvitesList(false)}
-          onRefresh={() => utils.admin.listUsers.invalidate()}
+          onRefresh={refresh}
         />
       )}
 
@@ -411,73 +362,6 @@ export default function AdminUsersPage() {
           </div>
         </div>
       )}
-
-      {/* Confirm Delete */}
-      {confirmDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-card border border-border rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-heading font-semibold text-foreground mb-2">Supprimer l'utilisateur</h3>
-            <p className="text-sm text-muted-foreground mb-2">
-              Êtes-vous sûr de vouloir supprimer définitivement <strong className="text-foreground">{confirmDelete.full_name}</strong> ?
-            </p>
-            <p className="text-xs text-red-400 mb-4">
-              Cette action est irréversible. Toutes les données associées (appartenances projets, invitations, journaux d'audit) seront également supprimées.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setConfirmDelete(null)}
-                className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Annuler
-              </button>
-              <button
-                onClick={() => handleDelete(confirmDelete)}
-                disabled={deleteMutation.isPending}
-                className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors"
-              >
-                {deleteMutation.isPending ? 'Suppression...' : 'Supprimer définitivement'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Reset Password Modal */}
-      {resetPasswordUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-card border border-border rounded-lg w-full max-w-md">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-              <h3 className="text-lg font-heading font-semibold text-foreground">Réinitialiser le mot de passe</h3>
-              <button onClick={() => setResetPasswordUser(null)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="p-6 space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Nouveau mot de passe pour <strong className="text-foreground">{resetPasswordUser.full_name}</strong> ({resetPasswordUser.email})
-              </p>
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Nouveau mot de passe *</label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={e => setNewPassword(e.target.value)}
-                  className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                  placeholder="Min. 6 caractères"
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 px-6 py-4 border-t border-border">
-              <button onClick={() => setResetPasswordUser(null)} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground">Annuler</button>
-              <button
-                onClick={handleResetPassword}
-                disabled={resetPasswordMutation.isPending}
-                className="px-4 py-2 bg-amber-600 text-white rounded-md text-sm font-medium hover:bg-amber-700 disabled:opacity-50 transition-colors"
-              >
-                {resetPasswordMutation.isPending ? 'En cours...' : 'Réinitialiser'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -485,9 +369,11 @@ export default function AdminUsersPage() {
 // ─── Create User Modal ──────────────────────────────────────────────────
 
 function CreateUserModal({
+  actor,
   onClose,
   onCreated,
 }: {
+  actor: { id: string; name: string; email: string };
   onClose: () => void;
   onCreated: () => void;
 }) {
@@ -500,14 +386,6 @@ function CreateUserModal({
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const createMutation = trpc.admin.createUser.useMutation({
-    onSuccess: () => {
-      toast.success(`Utilisateur ${form.full_name} créé`);
-      onCreated();
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
   const handleSubmit = () => {
     const result = createUserSchema.safeParse(form);
     if (!result.success) {
@@ -516,12 +394,13 @@ function CreateUserModal({
       setErrors(errs);
       return;
     }
-    createMutation.mutate({
-      fullName: form.full_name,
-      email: form.email,
-      role: form.role,
-      password: form.password || undefined,
-    });
+    try {
+      adminUsers.create(result.data, actor);
+      toast.success(`Utilisateur ${form.full_name} créé`);
+      onCreated();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
   };
 
   return (
@@ -577,15 +456,23 @@ function CreateUserModal({
             />
             {errors.password && <p className="text-xs text-red-400 mt-1">{errors.password}</p>}
           </div>
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={form.send_invite}
+              onChange={e => setForm(f => ({ ...f, send_invite: e.target.checked }))}
+              className="rounded border-border"
+            />
+            Envoyer un email d'invitation (simulé)
+          </label>
         </div>
         <div className="flex justify-end gap-2 px-6 py-4 border-t border-border">
           <button onClick={onClose} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground">Annuler</button>
           <button
             onClick={handleSubmit}
-            disabled={createMutation.isPending}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
           >
-            {createMutation.isPending ? 'Création...' : 'Créer'}
+            Créer
           </button>
         </div>
       </div>
@@ -597,10 +484,12 @@ function CreateUserModal({
 
 function EditUserModal({
   user,
+  actor,
   onClose,
   onUpdated,
 }: {
-  user: any;
+  user: AdminUser;
+  actor: { id: string; name: string; email: string };
   onClose: () => void;
   onUpdated: () => void;
 }) {
@@ -611,14 +500,6 @@ function EditUserModal({
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const updateMutation = trpc.admin.updateUser.useMutation({
-    onSuccess: () => {
-      toast.success(`Utilisateur ${form.full_name || user.full_name} mis à jour`);
-      onUpdated();
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
   const handleSubmit = () => {
     const result = updateUserSchema.safeParse(form);
     if (!result.success) {
@@ -627,12 +508,13 @@ function EditUserModal({
       setErrors(errs);
       return;
     }
-    updateMutation.mutate({
-      id: user.id,
-      fullName: form.full_name || undefined,
-      email: form.email || undefined,
-      role: form.role || undefined,
-    });
+    try {
+      adminUsers.update(user.id, result.data, actor);
+      toast.success(`Utilisateur ${form.full_name || user.full_name} mis à jour`);
+      onUpdated();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
   };
 
   return (
@@ -680,10 +562,9 @@ function EditUserModal({
           <button onClick={onClose} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground">Annuler</button>
           <button
             onClick={handleSubmit}
-            disabled={updateMutation.isPending}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
           >
-            {updateMutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
+            Enregistrer
           </button>
         </div>
       </div>
@@ -693,9 +574,8 @@ function EditUserModal({
 
 // ─── Memberships Drawer ─────────────────────────────────────────────────
 
-function MembershipsDrawer({ user, onClose }: { user: any; onClose: () => void }) {
-  const membershipsQuery = trpc.admin.listUserMemberships.useQuery({ userId: String(user.id) });
-  const memberships = membershipsQuery.data?.items || [];
+function MembershipsDrawer({ user, onClose }: { user: AdminUser; onClose: () => void }) {
+  const memberships = useMemo(() => adminMemberships.listByUser(user.id), [user.id]);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-sm" onClick={onClose}>
@@ -708,12 +588,7 @@ function MembershipsDrawer({ user, onClose }: { user: any; onClose: () => void }
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-6">
-          {membershipsQuery.isLoading ? (
-            <div className="text-center py-8">
-              <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Chargement...</p>
-            </div>
-          ) : memberships.length === 0 ? (
+          {memberships.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-sm text-muted-foreground">Aucun accès projet assigné.</p>
               {user.role !== 'ADMIN' && (
@@ -724,16 +599,14 @@ function MembershipsDrawer({ user, onClose }: { user: any; onClose: () => void }
             </div>
           ) : (
             <div className="space-y-3">
-              {memberships.map((m: any) => (
-                <div key={m.uid || m.id} className="flex items-center justify-between p-3 bg-secondary/30 rounded-md border border-border">
+              {memberships.map(m => (
+                <div key={m.id} className="flex items-center justify-between p-3 bg-secondary/30 rounded-md border border-border">
                   <div>
-                    <p className="text-sm font-medium text-foreground">{m.projectName || m.project_name || '—'}</p>
-                    <p className="text-xs text-muted-foreground">Depuis {new Date(m.createdAt || m.created_at).toLocaleDateString('fr-FR')}</p>
+                    <p className="text-sm font-medium text-foreground">{m.project_name}</p>
+                    <p className="text-xs text-muted-foreground">Depuis {new Date(m.created_at).toLocaleDateString('fr-FR')}</p>
                   </div>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${
-                    PROJECT_ROLE_COLORS[m.projectRole as keyof typeof PROJECT_ROLE_COLORS] || 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                  }`}>
-                    {PROJECT_ROLE_LABELS[m.projectRole as keyof typeof PROJECT_ROLE_LABELS] || m.projectRole || '—'}
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${PROJECT_ROLE_COLORS[m.project_role]}`}>
+                    {PROJECT_ROLE_LABELS[m.project_role]}
                   </span>
                 </div>
               ))}
@@ -749,15 +622,15 @@ function MembershipsDrawer({ user, onClose }: { user: any; onClose: () => void }
 
 function InviteModal({ onClose, onSent }: { onClose: () => void; onSent: () => void }) {
   const { user: currentUser } = useAuth();
-  const actorId = currentUser?.id || '';
-  const actorName = currentUser?.full_name || '';
+  const actor = currentUser
+    ? { id: currentUser.id, name: currentUser.full_name, email: currentUser.email }
+    : { id: '', name: '', email: '' };
 
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRole>('VIEWER');
   const [sending, setSending] = useState(false);
   const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle');
 
-  const createInviteMutation = trpc.admin.createInvite.useMutation();
   const sendInviteEmailMutation = trpc.notifications.sendInviteEmail.useMutation();
 
   const ROLE_LABELS: Record<string, string> = {
@@ -771,23 +644,10 @@ function InviteModal({ onClose, onSent }: { onClose: () => void; onSent: () => v
     setSending(true);
     setEmailStatus('idle');
     try {
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7);
+      // 1. Créer l'invitation en local
+      const invite = adminInvites.create({ email, role }, actor);
 
-      const invite = await createInviteMutation.mutateAsync({
-        email: email.trim(),
-        role,
-        invitedBy: actorId || undefined,
-        invitedByName: actorName || undefined,
-        expiresAt,
-      });
-
-      if (!invite) {
-        toast.error("Erreur lors de la création de l'invitation");
-        return;
-      }
-
-      // Try sending email via SMTP if configured
+      // 2. Tenter l'envoi d'email réel via SMTP si le mode Live est actif
       const rawEmail = localNotifSettings.getRawEmailSettings();
       const isSmtpLive = rawEmail.enabled && rawEmail.provider === 'SMTP' && rawEmail.host && rawEmail.username && rawEmail.password;
 
@@ -810,10 +670,10 @@ function InviteModal({ onClose, onSent }: { onClose: () => void; onSent: () => v
               timeout_ms: rawEmail.timeout_ms,
             },
             invitee_email: email,
-            inviter_name: actorName || 'Administrateur',
+            inviter_name: actor.name || 'Administrateur',
             role: ROLE_LABELS[role] || role,
             invite_link: inviteLink,
-            expires_at: invite.expiresAt?.toISOString?.() || expiresAt.toISOString(),
+            expires_at: invite.expires_at,
             app_name: 'AgilesTest',
           });
 
@@ -838,7 +698,7 @@ function InviteModal({ onClose, onSent }: { onClose: () => void; onSent: () => v
     } finally {
       setSending(false);
     }
-  }, [email, role, actorId, actorName, onSent, createInviteMutation, sendInviteEmailMutation]);
+  }, [email, role, actor, onSent, sendInviteEmailMutation]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -942,16 +802,15 @@ const INVITE_STATUS_COLORS: Record<string, string> = {
 
 function InvitesListDrawer({ onClose, onRefresh }: { onClose: () => void; onRefresh: () => void }) {
   const { user: currentUser } = useAuth();
-  const actorName = currentUser?.full_name || 'Administrateur';
+  const actor = currentUser
+    ? { id: currentUser.id, name: currentUser.full_name, email: currentUser.email }
+    : { id: '', name: '', email: '' };
 
-  const utils = trpc.useUtils();
-  const invitesQuery = trpc.admin.listInvites.useQuery({ pageSize: 100 });
-  const invites = invitesQuery.data?.items || [];
-
-  const revokeMutation = trpc.admin.revokeInvite.useMutation({
-    onSuccess: () => { utils.admin.listInvites.invalidate(); onRefresh(); toast.success('Invitation révoquée'); },
-    onError: (e) => toast.error(e.message),
-  });
+  const [refreshKey, setRefreshKey] = useState(0);
+  const invites = useMemo(() => {
+    void refreshKey;
+    return adminInvites.list();
+  }, [refreshKey]);
 
   const sendInviteEmailMutation = trpc.notifications.sendInviteEmail.useMutation();
 
@@ -959,21 +818,21 @@ function InvitesListDrawer({ onClose, onRefresh }: { onClose: () => void; onRefr
     ADMIN: 'Administrateur',
     MANAGER: 'Manager',
     VIEWER: 'Lecteur',
-    admin: 'Administrateur',
-    manager: 'Manager',
-    viewer: 'Lecteur',
   };
 
-  const handleResend = useCallback(async (inv: any) => {
+  const handleResend = useCallback(async (inv: Invite) => {
     try {
-      // Try sending email via SMTP if configured
+      const updatedInvite = adminInvites.resend(inv.id, actor);
+      setRefreshKey(k => k + 1);
+
+      // Tenter l'envoi d'email réel via SMTP si le mode Live est actif
       const rawEmail = localNotifSettings.getRawEmailSettings();
       const isSmtpLive = rawEmail.enabled && rawEmail.provider === 'SMTP' && rawEmail.host && rawEmail.username && rawEmail.password;
 
       if (isSmtpLive) {
         try {
           const baseUrl = window.location.origin;
-          const inviteLink = `${baseUrl}/invite/accept?token=${inv.token}`;
+          const inviteLink = `${baseUrl}/invite/accept?token=${updatedInvite.token}`;
 
           const result = await sendInviteEmailMutation.mutateAsync({
             smtp: {
@@ -988,32 +847,50 @@ function InvitesListDrawer({ onClose, onRefresh }: { onClose: () => void; onRefr
               timeout_ms: rawEmail.timeout_ms,
             },
             invitee_email: inv.email,
-            inviter_name: actorName,
+            inviter_name: actor.name || 'Administrateur',
             role: ROLE_LABELS[inv.role] || inv.role,
             invite_link: inviteLink,
-            expires_at: inv.expiresAt ? new Date(inv.expiresAt).toISOString() : '',
+            expires_at: updatedInvite.expires_at,
             app_name: 'AgilesTest',
           });
 
           if (result.success) {
             toast.success(`Invitation renvoyée à ${inv.email} — email délivré via SMTP`);
           } else {
-            toast.warning(`Erreur SMTP : ${result.error}`);
+            toast.warning(`Invitation renvoyée mais l'email a échoué : ${result.error}`);
           }
         } catch (smtpErr: any) {
-          toast.warning(`Erreur SMTP : ${smtpErr.message}`);
+          toast.warning(`Invitation renvoyée mais erreur SMTP : ${smtpErr.message}`);
         }
       } else {
-        toast.info(`Email non configuré — copiez le lien d'invitation manuellement`);
+        toast.success(`Invitation renvoyée à ${inv.email} (sans email — mode Stub)`);
       }
     } catch (e: any) {
       toast.error(e.message);
     }
-  }, [actorName, sendInviteEmailMutation]);
+  }, [actor, sendInviteEmailMutation]);
 
-  const handleRevoke = useCallback((inv: any) => {
-    revokeMutation.mutate({ uid: inv.uid });
-  }, [revokeMutation]);
+  const handleRevoke = useCallback((inv: Invite) => {
+    try {
+      adminInvites.revoke(inv.id, actor);
+      toast.success(`Invitation révoquée pour ${inv.email}`);
+      setRefreshKey(k => k + 1);
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  }, [actor, onRefresh]);
+
+  const handleSimulateAccept = useCallback((inv: Invite) => {
+    try {
+      adminInvites.accept(inv.id, inv.email.split('@')[0].replace('.', ' '));
+      toast.success(`Invitation acceptée (simulation) pour ${inv.email}`);
+      setRefreshKey(k => k + 1);
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  }, [onRefresh]);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-sm" onClick={onClose}>
@@ -1029,24 +906,19 @@ function InvitesListDrawer({ onClose, onRefresh }: { onClose: () => void; onRefr
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-6 space-y-3">
-          {invitesQuery.isLoading ? (
-            <div className="text-center py-12">
-              <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Chargement...</p>
-            </div>
-          ) : invites.length === 0 ? (
+          {invites.length === 0 ? (
             <div className="text-center py-12">
               <Mail className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
               <p className="text-sm text-muted-foreground">Aucune invitation envoyée.</p>
             </div>
           ) : (
-            invites.map((inv: any) => (
-              <div key={inv.uid || inv.id} className="p-4 bg-secondary/30 rounded-lg border border-border space-y-2">
+            invites.map(inv => (
+              <div key={inv.id} className="p-4 bg-secondary/30 rounded-lg border border-border space-y-2">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-foreground">{inv.email}</p>
                     <p className="text-xs text-muted-foreground">
-                      Invité par {inv.invitedByName || '—'} le {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('fr-FR') : '—'}
+                      Invité par {inv.invited_by_name} le {new Date(inv.created_at).toLocaleDateString('fr-FR')}
                     </p>
                   </div>
                   <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono border ${INVITE_STATUS_COLORS[inv.status] || ''}`}>
@@ -1054,9 +926,9 @@ function InvitesListDrawer({ onClose, onRefresh }: { onClose: () => void; onRefr
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>Rôle : <strong className="text-foreground">{ROLE_LABELS[inv.role] || inv.role}</strong></span>
+                  <span>Rôle : <strong className="text-foreground">{GLOBAL_ROLE_LABELS[inv.role]}</strong></span>
                   <span className="text-border">|</span>
-                  <span>Expire : {inv.expiresAt ? new Date(inv.expiresAt).toLocaleDateString('fr-FR') : '—'}</span>
+                  <span>Expire : {new Date(inv.expires_at).toLocaleDateString('fr-FR')}</span>
                 </div>
                 {(inv.status === 'PENDING' || inv.status === 'EXPIRED') && (
                   <div className="flex items-center gap-2 pt-1">
@@ -1068,14 +940,22 @@ function InvitesListDrawer({ onClose, onRefresh }: { onClose: () => void; onRefr
                       Renvoyer
                     </button>
                     {inv.status === 'PENDING' && (
-                      <button
-                        onClick={() => handleRevoke(inv)}
-                        disabled={revokeMutation.isPending}
-                        className="flex items-center gap-1 px-2 py-1 text-xs bg-red-600/10 text-red-400 rounded hover:bg-red-600/20 transition-colors"
-                      >
-                        <MailX className="w-3 h-3" />
-                        Révoquer
-                      </button>
+                      <>
+                        <button
+                          onClick={() => handleRevoke(inv)}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-red-600/10 text-red-400 rounded hover:bg-red-600/20 transition-colors"
+                        >
+                          <MailX className="w-3 h-3" />
+                          Révoquer
+                        </button>
+                        <button
+                          onClick={() => handleSimulateAccept(inv)}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-green-600/10 text-green-400 rounded hover:bg-green-600/20 transition-colors"
+                        >
+                          <MailCheck className="w-3 h-3" />
+                          Simuler acceptation
+                        </button>
+                      </>
                     )}
                   </div>
                 )}

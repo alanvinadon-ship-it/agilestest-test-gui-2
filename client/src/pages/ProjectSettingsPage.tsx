@@ -7,7 +7,7 @@ import { PermissionKey } from '../admin/permissions';
 import { CapturePolicyEditor } from '../capture/CapturePolicyEditor';
 import type { CapturePolicy } from '../capture/types';
 import { DEFAULT_CAPTURE_POLICY } from '../capture/types';
-import { localCapturePolicies } from '../api/localStoreTrpc';
+import { localCapturePolicies } from '../api/localStore';
 import { toast } from 'sonner';
 
 export default function ProjectSettingsPage() {

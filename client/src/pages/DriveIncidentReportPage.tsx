@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 import {
   localProjects, localDriveRoutes, localDriveRunSummaries,
   localDriveCampaigns, localDriveJobs, localKpiSamples,
-} from '@/api/localStoreTrpc';
+} from '@/api/localStore';
 import type { DriveIncident, RouteSegment, EnrichedKpiSample, ArtifactTimeIndex } from '@/driveCorrelation/types';
 import {
   KPI_LABELS, KPI_UNITS, SEVERITY_LABELS, SEVERITY_COLORS,
@@ -43,34 +43,29 @@ import {
 // ─── Mock incident for demo ────────────────────────────────────────────────
 
 function useMockIncidentData(incidentId: string) {
-  const [result, setResult] = useState<any>(null);
+  const projects = localProjects.list().data;
+  const projectId = projects[0]?.id || '';
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const projectsResult = await localProjects.list();
-        const projects = projectsResult?.data || [];
-        const projectId = projects[0]?.id || '';
-        if (!projectId) return;
+  return useMemo(() => {
+    const campaignsResult = localDriveCampaigns.list(projectId, { limit: 200 });
+    const campaign = campaignsResult.data[0];
+    if (!campaign) return null;
 
-        const campaignsResult = await localDriveCampaigns.list(projectId, { limit: 200 });
-        const campaign = campaignsResult.data[0];
-        if (!campaign) return;
+    const routes = localDriveRoutes.list(campaign.campaign_id);
+    const route = routes[0];
+    if (!route) return null;
 
-        const routes = await localDriveRoutes.list(campaign.campaign_id);
-        const route = routes[0];
-        if (!route) return;
+    const jobsResult = localDriveJobs.list({ campaign_id: campaign.campaign_id, limit: 200 });
+    const job = jobsResult.data[0];
+    if (!job) return null;
 
-        const jobsResult = await localDriveJobs.list({ campaign_id: campaign.campaign_id, limit: 200 });
-        const job = jobsResult.data[0];
-        if (!job) return;
-
-        const samples = await localKpiSamples.list({ drive_job_id: job.drive_job_id });
-        if (samples.length === 0) return;
+    const samplesResult = localKpiSamples.list({ drive_job_id: job.drive_job_id });
+    const samples = samplesResult.data;
+    if (samples.length === 0) return null;
 
     // Build segments from route
     const allCoords = route.route_geojson?.coordinates || [];
-    if (allCoords.length < 2) return;
+    if (allCoords.length < 2) return null;
 
     const config = { ...DEFAULT_SEGMENTATION_CONFIG };
     const segments = segmentRoute(route.route_id, campaign.campaign_id, allCoords, config);
@@ -80,7 +75,7 @@ function useMockIncidentData(incidentId: string) {
 
     // Find or create incident
     const critSegments = segments.filter((s: RouteSegment) => s.breach_level === 'CRIT');
-    if (critSegments.length === 0) return;
+    if (critSegments.length === 0) return null;
 
     const kpiName = Object.keys(critSegments[0].kpi_stats)[0] || 'RSRP';
     const stats = critSegments[0].kpi_stats[kpiName];
@@ -120,14 +115,8 @@ function useMockIncidentData(incidentId: string) {
       updated_at: new Date().toISOString(),
     };
 
-        setResult({ incident, segments, enrichedSamples: enriched, artifactIndex, campaign, job });
-      } catch (e) {
-        console.error('useMockIncidentData error:', e);
-      }
-    })();
-  }, [incidentId]);
-
-  return result;
+    return { incident, segments, enrichedSamples: enriched, artifactIndex, campaign, job };
+  }, [projectId, incidentId]);
 }
 
 // ─── Evidence Chip ──────────────────────────────────────────────────────────
@@ -329,7 +318,7 @@ export default function DriveIncidentReportPage() {
           </div>
           <div>
             <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1">Sévérité</p>
-            <p className={`text-sm font-semibold ${(SEVERITY_COLORS as any)[incident.severity]}`}>{(SEVERITY_LABELS as any)[incident.severity]}</p>
+            <p className={`text-sm font-semibold ${SEVERITY_COLORS[incident.severity]}`}>{SEVERITY_LABELS[incident.severity]}</p>
           </div>
           <div>
             <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1">Moyenne observée</p>

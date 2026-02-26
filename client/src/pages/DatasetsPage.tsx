@@ -3,7 +3,7 @@ import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
 import { usePermission, PermissionKey } from '../security';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { localDatasetTypes } from '../api/localStoreTrpc';
+import { localDatasetTypes } from '../api/localStore';
 import { useDatasetStorage } from '../contexts/DatasetStorageContext';
 import type { DatasetInstance, DatasetType, TargetEnv, DatasetInstanceStatus } from '../types';
 import {
@@ -65,7 +65,7 @@ function CreateDatasetModal({ isOpen, onClose, projectId }: {
     queryKey: ['dataset_types_all'],
     queryFn: () => localDatasetTypes.list(),
   });
-  const datasetTypes = (Array.isArray(dtData) ? dtData : (dtData as any)?.data || []) as DatasetType[];
+  const datasetTypes = (dtData?.data || []) as DatasetType[];
 
   const mutation = useMutation({
     mutationFn: async () => adapter.instances.create(projectId, { dataset_type_id: datasetTypeId, env, notes }),
@@ -162,10 +162,9 @@ function EditDatasetModal({ instance, onClose }: {
   const [showSecrets, setShowSecrets] = useState(false);
 
   // Charger le gabarit pour afficher le schéma
-  const { data: dt } = useQuery({
-    queryKey: ['dataset_type', instance.dataset_type_id],
-    queryFn: () => localDatasetTypes.get(instance.dataset_type_id),
-  }) as { data: any };
+  const dt = useMemo(() => {
+    try { return localDatasetTypes.get(instance.dataset_type_id); } catch { return null; }
+  }, [instance.dataset_type_id]);
 
   // Charger les secrets via adapter
   const { data: secretsData } = useQuery({
@@ -289,7 +288,7 @@ function EditDatasetModal({ instance, onClose }: {
           ) : (
             /* Field-by-field editor with schema info */
             <div className="space-y-3">
-              {dt?.schema_fields?.map((field: any) => {
+              {dt?.schema_fields.map(field => {
                 const isSecret = secretPaths.has(field.name);
                 const currentValue = String(valuesJson[field.name] ?? '');
                 const displayValue = isSecret && !showSecrets ? '••••••••' : currentValue;
@@ -316,7 +315,7 @@ function EditDatasetModal({ instance, onClose }: {
                           className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30"
                         >
                           <option value="">—</option>
-                          {field.enum_values.map((v: string) => <option key={v} value={v}>{v}</option>)}
+                          {field.enum_values.map(v => <option key={v} value={v}>{v}</option>)}
                         </select>
                       ) : (
                         <input
@@ -341,7 +340,7 @@ function EditDatasetModal({ instance, onClose }: {
               })}
 
               {/* Champs hors schéma */}
-              {Object.keys(valuesJson).filter(k => !(dt as any)?.schema_fields?.some((f: any) => f.name === k)).map(key => (
+              {Object.keys(valuesJson).filter(k => !dt?.schema_fields.some(f => f.name === k)).map(key => (
                 <div key={key} className="grid grid-cols-[1fr_2fr] gap-3 items-start">
                   <div className="pt-2">
                     <span className="text-sm font-mono text-muted-foreground">{key}</span>
@@ -435,7 +434,7 @@ export default function DatasetsPage() {
     queryKey: ['dataset_types_all'],
     queryFn: () => localDatasetTypes.list(),
   });
-  const datasetTypes = (Array.isArray(dtData) ? dtData : (dtData as any)?.data || []) as DatasetType[];
+  const datasetTypes = (dtData?.data || []) as DatasetType[];
   const dtMap = useMemo(() => new Map(datasetTypes.map(dt => [dt.dataset_type_id, dt])), [datasetTypes]);
 
   const filtered = useMemo(() => {

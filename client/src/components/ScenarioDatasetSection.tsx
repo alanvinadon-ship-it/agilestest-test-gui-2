@@ -5,7 +5,7 @@
  */
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { localDatasetTypes } from '../api/localStoreTrpc';
+import { localDatasetTypes } from '../api/localStore';
 import { useDatasetStorage } from '../contexts/DatasetStorageContext';
 import type { TestScenario, TargetEnv, ScenarioDatasetValidation, DatasetType } from '../types';
 import {
@@ -32,12 +32,11 @@ export default function ScenarioDatasetSection({ scenario }: Props) {
   const requiredTypes = scenario.required_dataset_types || [];
 
   // Charger les noms des dataset types
-  const [dtMap, setDtMap] = useState(new Map<string, string>());
-  useMemo(() => {
-    localDatasetTypes.list().then((all: any) => {
-      const arr = Array.isArray(all) ? all : all?.data || [];
-      setDtMap(new Map(arr.map((dt: any) => [dt.dataset_type_id, dt.name])));
-    }).catch(() => {});
+  const dtMap = useMemo(() => {
+    try {
+      const all = localDatasetTypes.list();
+      return new Map((all.data as DatasetType[]).map(dt => [dt.dataset_type_id, dt.name]));
+    } catch { return new Map<string, string>(); }
   }, []);
 
   // Validation par env via adapter (async-compatible)

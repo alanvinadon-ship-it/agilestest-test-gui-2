@@ -7,11 +7,10 @@
 import { useState, useEffect } from 'react';
 import { useRoute, Link, useLocation } from 'wouter';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { repositoryApi } from '../api/repositoryApiTrpc';
-// collectorApi remplacé par tRPC
-import { trpc } from '@/lib/trpc';
+import { repositoryApi } from '../api/repositoryApi';
+import { collectorApi } from '../api/collectorApi';
 import { localScriptRepository } from '../ai/scriptRepository';
-import { localExecutions } from '../api/localStoreTrpc';
+import { localExecutions } from '../api/localStore';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
 import { usePermission, PermissionKey } from '../security';
@@ -27,7 +26,7 @@ import {
 import { toast } from 'sonner';
 import { resolveCapturePolicy, CaptureModeBadge, captureModeLabel, captureSourceLabel, REASON_CODE_LABELS, REASON_CODE_SEVERITY } from '../capture';
 import type { ProbeReasonCode } from '../capture/types';
-import { localCapturePolicies, localCaptureSessions } from '../api/localStoreTrpc';
+import { localCapturePolicies, localCaptureSessions } from '../api/localStore';
 import type { CaptureSession } from '../capture/types';
 
 const statusConfig: Record<ExecutionStatus, { icon: typeof CheckCircle2; label: string; cls: string; bg: string }> = {
@@ -339,19 +338,13 @@ export default function ExecutionDetailPage() {
 
   const { data: artifactsData } = useQuery({
     queryKey: ['artifacts', executionId],
-    queryFn: async () => {
-      // Pas d'endpoint listArtifacts par execution directement - retourner vide
-      return { data: [] };
-    },
+    queryFn: () => collectorApi.listArtifacts(executionId),
     enabled: !!executionId,
   });
 
   const { data: incidentsData } = useQuery({
     queryKey: ['incidents', executionId],
-    queryFn: async () => {
-      // Pas d'endpoint incidents par execution directement - retourner vide
-      return { data: [] };
-    },
+    queryFn: () => collectorApi.listIncidentsByExecution(executionId),
     enabled: !!executionId,
   });
 
@@ -402,9 +395,9 @@ export default function ExecutionDetailPage() {
     );
   }
 
-  const config = statusConfig[execution.status as ExecutionStatus];
+  const config = statusConfig[execution.status];
   const StatusIcon = config.icon;
-  const envMeta = execution.target_env ? ENV_META[execution.target_env as TargetEnv] : null;
+  const envMeta = execution.target_env ? ENV_META[execution.target_env] : null;
   const isFailed = execution.status === 'FAILED' || execution.status === 'ERROR';
 
   return (
@@ -542,8 +535,9 @@ export default function ExecutionDetailPage() {
         const pid = currentProject?.id || execution.project_id || '';
         const projectPolicy = localCapturePolicies.get('project', pid);
         const captureResult = resolveCapturePolicy(projectPolicy);
-        // captureSessions chargées de manière synchrone (cache)
-        const captureSessions: CaptureSession[] = [];
+        const captureSessions = localCaptureSessions.list({ project_id: pid }).data.filter(
+          (s: CaptureSession) => s.execution_id === execution.id
+        );
         const pcapArtifacts = artifacts.filter(a => a.type === 'PCAP');
         
         return (

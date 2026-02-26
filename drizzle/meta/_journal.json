@@ -12,22 +12,8 @@
     {
       "idx": 1,
       "version": "5",
-      "when": 1772096155801,
-      "tag": "0001_volatile_giant_man",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "5",
-      "when": 1772105375422,
-      "tag": "0002_third_william_stryker",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "5",
-      "when": 1772110735742,
-      "tag": "0003_mature_nebula",
+      "when": 1772118171695,
+      "tag": "0001_futuristic_madame_hydra",
       "breakpoints": true
     }
   ]
