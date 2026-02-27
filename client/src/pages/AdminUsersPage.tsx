@@ -39,10 +39,12 @@ const GLOBAL_ROLE_COLORS: Record<string, string> = {
 const STATUS_LABELS: Record<string, string> = {
   active: 'Actif',
   inactive: 'Inactif',
+  invited: 'Invité',
 };
 const STATUS_COLORS: Record<string, string> = {
   active: 'text-emerald-400',
   inactive: 'text-muted-foreground',
+  invited: 'text-indigo-400',
 };
 
 const INVITE_STATUS_LABELS: Record<string, string> = {
@@ -90,6 +92,9 @@ export default function AdminUsersPage() {
     role: filterRole === 'admin' || filterRole === 'user' ? filterRole as 'admin' | 'user' : undefined,
   });
 
+  // Fetch pending invites to merge into user list as "invited" status
+  const invitesListQuery = trpc.admin.listInvites.useQuery({ page: 1, pageSize: 100 });
+
   const deleteUserMutation = trpc.admin.deleteUser.useMutation({
     onSuccess: () => {
       utils.admin.listUsers.invalidate();
@@ -108,29 +113,53 @@ export default function AdminUsersPage() {
     onError: (err) => toast.error(err.message),
   });
 
-  // Map DB users to display format
+  // Map DB users to display format, merging pending invites as "invited" entries
   const usersData = useMemo(() => {
     if (!usersQuery.data) return { users: [], pagination: { page: 1, pageSize: 15, total: 0, totalPages: 1 } };
+
+    const dbUsers = usersQuery.data.data.map((u: any) => {
+      // Determine status: user is active if they have logged in at least once
+      const status = u.lastSignedIn ? 'active' : 'inactive';
+      return {
+        id: u.id,
+        name: u.name || 'Sans nom',
+        email: u.email || '',
+        role: DB_ROLE_TO_FRONTEND[u.role] || 'VIEWER',
+        isOwner: u.isOwner || false,
+        status,
+        projectsCount: u.projectsCount ?? 0,
+        createdAt: u.createdAt,
+        lastSignedIn: u.lastSignedIn,
+        openId: u.openId,
+        isInvite: false,
+      };
+    });
+
+    // Merge pending invites that don't have a corresponding user yet
+    const pendingInvites = (invitesListQuery.data?.data ?? [])
+      .filter((inv: any) => inv.status === 'PENDING')
+      .filter((inv: any) => !dbUsers.some((u: any) => u.email === inv.email));
+
+    const inviteEntries = pendingInvites.map((inv: any) => ({
+      id: `invite-${inv.id}`,
+      name: inv.email.split('@')[0],
+      email: inv.email,
+      role: inv.role || 'VIEWER',
+      isOwner: false,
+      status: 'invited' as const,
+      projectsCount: 0,
+      createdAt: inv.createdAt,
+      lastSignedIn: null,
+      openId: null,
+      isInvite: true,
+      inviteId: inv.id,
+    }));
+
     return {
-      users: usersQuery.data.data.map((u: any) => {
-        // Determine status: user is active if they have logged in at least once
-        const status = u.lastSignedIn ? 'active' : 'inactive';
-        return {
-          id: u.id,
-          name: u.name || 'Sans nom',
-          email: u.email || '',
-          role: DB_ROLE_TO_FRONTEND[u.role] || 'VIEWER',
-          isOwner: u.isOwner || false,
-          status,
-          projectsCount: u.projectsCount ?? 0,
-          createdAt: u.createdAt,
-          lastSignedIn: u.lastSignedIn,
-          openId: u.openId,
-        };
-      }),
+      users: [...dbUsers, ...inviteEntries],
       pagination: usersQuery.data.pagination,
     };
-  }, [usersQuery.data]);
+  }, [usersQuery.data, invitesListQuery.data]);
 
   // Apply status filter client-side (since backend doesn't have status column)
   const filteredUsers = useMemo(() => {
@@ -207,6 +236,7 @@ export default function AdminUsersPage() {
           <option value="">Tous les statuts</option>
           <option value="active">Actif</option>
           <option value="inactive">Inactif</option>
+          <option value="invited">Invité</option>
         </select>
       </div>
 
@@ -268,7 +298,7 @@ export default function AdminUsersPage() {
                     </td>
                     <td className="px-4 py-3">
                       <span className={`flex items-center gap-1.5 text-xs font-medium ${STATUS_COLORS[u.status] || STATUS_COLORS.inactive}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${u.status === 'active' ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
+                        <span className={`w-1.5 h-1.5 rounded-full ${u.status === 'active' ? 'bg-emerald-400' : u.status === 'invited' ? 'bg-indigo-400' : 'bg-muted-foreground'}`} />
                         {STATUS_LABELS[u.status] || u.status}
                       </span>
                     </td>
@@ -282,35 +312,44 @@ export default function AdminUsersPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => setEditUser(u)}
-                          className="p-1.5 text-muted-foreground hover:text-primary transition-colors"
-                          title="Modifier"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setViewUser(u)}
-                          className="p-1.5 text-muted-foreground hover:text-primary transition-colors"
-                          title="Voir le profil"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setResetPasswordUser(u)}
-                          className="p-1.5 text-muted-foreground hover:text-amber-400 transition-colors"
-                          title="Réinitialiser le mot de passe"
-                        >
-                          <KeyRound className="w-3.5 h-3.5" />
-                        </button>
-                        {!u.isOwner && (
-                          <button
-                            onClick={() => setConfirmDelete(u)}
-                            className="p-1.5 text-muted-foreground hover:text-red-400 transition-colors"
-                            title="Supprimer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                        {u.isInvite ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs text-indigo-400 bg-indigo-500/10 rounded border border-indigo-500/20">
+                            <Mail className="w-3 h-3" />
+                            En attente
+                          </span>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => setEditUser(u)}
+                              className="p-1.5 text-muted-foreground hover:text-primary transition-colors"
+                              title="Modifier"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setViewUser(u)}
+                              className="p-1.5 text-muted-foreground hover:text-primary transition-colors"
+                              title="Voir le profil"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setResetPasswordUser(u)}
+                              className="p-1.5 text-muted-foreground hover:text-amber-400 transition-colors"
+                              title="Réinitialiser le mot de passe"
+                            >
+                              <KeyRound className="w-3.5 h-3.5" />
+                            </button>
+                            {!u.isOwner && (
+                              <button
+                                onClick={() => setConfirmDelete(u)}
+                                className="p-1.5 text-muted-foreground hover:text-red-400 transition-colors"
+                                title="Supprimer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </>
                         )}
                       </div>
                     </td>
@@ -471,7 +510,7 @@ function ViewUserModal({ user, onClose }: { user: any; onClose: () => void }) {
             <div className="bg-secondary/30 rounded-lg p-3">
               <p className="text-xs text-muted-foreground mb-1">Statut</p>
               <span className={`flex items-center gap-1.5 text-xs font-medium ${STATUS_COLORS[user.status] || STATUS_COLORS.inactive}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${user.status === 'active' ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
+                <span className={`w-1.5 h-1.5 rounded-full ${user.status === 'active' ? 'bg-emerald-400' : user.status === 'invited' ? 'bg-indigo-400' : 'bg-muted-foreground'}`} />
                 {STATUS_LABELS[user.status] || user.status}
               </span>
             </div>
