@@ -182,7 +182,7 @@ export const scenarioTemplatesRouter = router({
    */
   publish: protectedProcedure
     .input(z.object({
-      scenarioId: z.string(), // scenario uid
+      scenarioId: z.number(), // scenario auto-increment id
       projectId: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -191,7 +191,7 @@ export const scenarioTemplatesRouter = router({
       // Fetch the scenario
       const [scenario] = await db.select().from(testScenarios)
         .where(and(
-          eq(testScenarios.uid, input.scenarioId),
+          eq(testScenarios.id, input.scenarioId),
           eq(testScenarios.projectId, input.projectId),
         ))
         .limit(1);

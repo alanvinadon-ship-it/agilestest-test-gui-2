@@ -167,7 +167,7 @@ export const adminRouter = router({
       await db.delete(invites).where(eq(invites.email, existing[0].email));
     }
     await db.delete(projectMemberships).where(eq(projectMemberships.userId, String(input.userId)));
-    await db.delete(auditLogs).where(eq(auditLogs.userId, input.userId));
+    await db.delete(auditLogs).where(eq(auditLogs.userId, String(input.userId)));
     await db.delete(users).where(eq(users.id, input.userId));
 
     await writeAuditLog({
@@ -274,7 +274,7 @@ export const adminRouter = router({
     const conditions: SQL[] = [];
     if (input.action) conditions.push(eq(auditLogs.action, input.action));
     if (input.entity) conditions.push(eq(auditLogs.entity, input.entity));
-    if (input.userId) conditions.push(eq(auditLogs.userId, input.userId));
+    if (input.userId) conditions.push(eq(auditLogs.userId, String(input.userId)));
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
     const baseQuery = where

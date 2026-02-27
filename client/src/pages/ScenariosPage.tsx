@@ -9,7 +9,7 @@ import {
   Plus, FileText, Loader2, Trash2, X, AlertCircle, Search,
   ChevronDown, GripVertical, ClipboardCheck, Shield, Gauge, Filter, Edit2,
   Sparkles, Database, CheckCircle2, Lock, Archive, AlertTriangle, GitBranch, Hash,
-  Code2, MessageSquare, Download, Upload,
+  Code2, MessageSquare, Download, Upload, Share2,
 } from 'lucide-react';
 import GeneratePromptModal from '../components/GeneratePromptModal';
 import GenerateScriptModal from '../components/GenerateScriptModal';
@@ -520,6 +520,7 @@ export default function ScenariosPage() {
   const [suggestProfile, setSuggestProfile] = useState<TestProfile | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [exportingId, setExportingId] = useState<number | null>(null);
+  const [publishingId, setPublishingId] = useState<number | null>(null);
   const trpcUtils = trpc.useUtils();
   const [promptScenario, setPromptScenario] = useState<{ scenario: TestScenario; profile: TestProfile } | null>(null);
   const [scriptScenario, setScriptScenario] = useState<{ scenario: TestScenario; profile: TestProfile } | null>(null);
@@ -657,6 +658,17 @@ export default function ScenariosPage() {
 
   const deprecateMutation = trpc.scenarios.update.useMutation({
     onSuccess: () => utils.scenarios.list.invalidate(),
+  });
+
+  const publishMutation = trpc.scenarioTemplates.publish.useMutation({
+    onSuccess: () => {
+      toast.success('Scénario publié comme template communautaire !');
+      setPublishingId(null);
+    },
+    onError: (err) => {
+      toast.error(err.message || 'Erreur lors de la publication');
+      setPublishingId(null);
+    },
   });
 
   if (!currentProject) {
@@ -874,6 +886,16 @@ export default function ScenariosPage() {
                                       {isFinal ? <GitBranch className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
                                     </button>
                                   )}
+                                  <button onClick={() => {
+                                    setPublishingId(Number(scenario.id));
+                                    publishMutation.mutate({
+                                      scenarioId: Number(scenario.id),
+                                      projectId: String(currentProject?.id),
+                                    });
+                                  }}
+                                    className="text-muted-foreground hover:text-green-400 p-1.5 rounded hover:bg-green-500/10 transition-colors" title="Publier comme template communautaire">
+                                    {publishingId === Number(scenario.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
+                                  </button>
                                   <button onClick={async () => {
                                     setExportingId(Number(scenario.id));
                                     try {

@@ -40,6 +40,8 @@ import WebhooksPage from "./pages/WebhooksPage";
 import CollectorDashboardPage from "./pages/CollectorDashboardPage";
 import ScenarioTemplatesPage from "./pages/ScenarioTemplatesPage";
 import CompareExecutionsPage from "./pages/CompareExecutionsPage";
+import GlobalAnalyticsPage from "./pages/GlobalAnalyticsPage";
+import ImportExportPage from "./pages/ImportExportPage";
 
 // ─── Auth Guards ────────────────────────────────────────────────────────────
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -102,6 +104,7 @@ function AppRouter() {
             <Switch>
               <Route path="/" component={Home} />
               <Route path="/dashboard" component={DashboardPage} />
+              <Route path="/analytics" component={GlobalAnalyticsPage} />
               <Route path="/projects" component={ProjectsPage} />
 
               {/* Project-scoped pages (membership required) */}
@@ -149,6 +152,9 @@ function AppRouter() {
               </Route>
               <Route path="/templates">
                 <ScenarioTemplatesPage />
+              </Route>
+              <Route path="/import-export">
+                <ImportExportPage />
               </Route>
 
               {/* Project settings */}

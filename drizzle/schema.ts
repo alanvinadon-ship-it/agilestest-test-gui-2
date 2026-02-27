@@ -71,15 +71,20 @@ export type Invite = typeof invites.$inferSelect;
 export type InsertInvite = typeof invites.$inferInsert;
 
 // ─── Audit Logs ─────────────────────────────────────────────────────────────
+// DB columns: id, uid, timestamp, actor_id, actor_name, actor_email, action, entity_type, entity_id, target_label, metadata, trace_id
 export const auditLogs = mysqlTable("audit_logs", {
   id: int("id").autoincrement().primaryKey(),
-  userId: int("userId"),
-  action: varchar("action", { length: 128 }).notNull(),
-  entity: varchar("entity", { length: 128 }).notNull(),
-  entityId: varchar("entityId", { length: 128 }),
-  details: json("details"),
-  ipAddress: varchar("ipAddress", { length: 64 }),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  uid: varchar("uid", { length: 36 }),
+  userId: varchar("actor_id", { length: 64 }),
+  userName: varchar("actor_name", { length: 255 }),
+  userEmail: varchar("actor_email", { length: 320 }),
+  action: varchar("action", { length: 100 }).notNull(),
+  entity: varchar("entity_type", { length: 50 }),
+  entityId: varchar("entity_id", { length: 36 }),
+  targetLabel: varchar("target_label", { length: 500 }),
+  details: json("metadata"),
+  traceId: varchar("trace_id", { length: 64 }),
+  createdAt: timestamp("timestamp").defaultNow().notNull(),
 });
 
 export type AuditLog = typeof auditLogs.$inferSelect;
@@ -259,19 +264,20 @@ export type ProbeRow = typeof probes.$inferSelect;
 export type InsertProbe = typeof probes.$inferInsert;
 
 // ─── AI Generated Scripts ───────────────────────────────────────────────────
+// DB columns: id, uid, scenario_id, project_id, version, language, framework, code, script_status, generated_by, created_at, updated_at
 export const generatedScripts = mysqlTable("generated_scripts", {
   id: int("id").autoincrement().primaryKey(),
-  projectId: int("projectId").notNull(),
-  scenarioId: int("scenarioId"),
-  name: varchar("name", { length: 255 }).notNull(),
-  framework: varchar("framework", { length: 64 }).notNull(),
-  language: varchar("language", { length: 64 }).default("typescript").notNull(),
-  code: text("code").notNull(),
-  version: int("version").default(1).notNull(),
-  status: mysqlEnum("status", ["DRAFT", "ACTIVE", "DEPRECATED"]).default("DRAFT").notNull(),
-  createdBy: int("createdBy").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  uid: varchar("uid", { length: 36 }).notNull(),
+  projectId: varchar("project_id", { length: 36 }).notNull(),
+  scenarioId: varchar("scenario_id", { length: 36 }).notNull(),
+  framework: varchar("framework", { length: 50 }).default("playwright").notNull(),
+  language: varchar("language", { length: 50 }).default("typescript"),
+  code: text("code"),
+  version: int("version").default(1),
+  status: mysqlEnum("script_status", ["DRAFT", "VALIDATED", "DEPRECATED"]).default("DRAFT").notNull(),
+  createdBy: varchar("generated_by", { length: 50 }).default("AI"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
 export type GeneratedScript = typeof generatedScripts.$inferSelect;

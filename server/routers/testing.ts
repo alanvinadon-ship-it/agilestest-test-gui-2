@@ -825,9 +825,8 @@ export const scriptsRouter = router({
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     const { page, pageSize, offset } = normalizePagination(input);
-    // generatedScripts.projectId is still int
-    const conditions: SQL[] = [eq(generatedScripts.projectId, Number(input.projectId))];
-    if (input.search) conditions.push(like(generatedScripts.name, `%${input.search}%`));
+    const conditions: SQL[] = [eq(generatedScripts.projectId, input.projectId)];
+    if (input.search) conditions.push(like(generatedScripts.framework, `%${input.search}%`));
     const where = and(...conditions);
     const [data, cnt] = await Promise.all([
       db.select().from(generatedScripts).where(where).orderBy(desc(generatedScripts.createdAt)).limit(pageSize).offset(offset),
@@ -843,10 +842,12 @@ export const scriptsRouter = router({
   })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const uid = (await import("crypto")).randomUUID();
     const res = await db.insert(generatedScripts).values({
-      projectId: Number(input.projectId), scenarioId: input.scenarioId ?? null,
-      name: input.name, framework: input.framework, language: input.language,
-      code: input.code, status: "DRAFT", createdBy: ctx.user!.id,
+      uid,
+      projectId: input.projectId, scenarioId: input.scenarioId ? String(input.scenarioId) : "",
+      framework: input.name || input.framework, language: input.language,
+      code: input.code, status: "DRAFT", createdBy: String(ctx.user!.id),
     });
     return { success: true, scriptId: Number(res[0].insertId) };
   }),
@@ -888,8 +889,8 @@ export const scriptsRouter = router({
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     const conditions: SQL[] = [
-      eq(generatedScripts.projectId, Number(input.projectId)),
-      eq(generatedScripts.scenarioId, input.scenarioId),
+      eq(generatedScripts.projectId, input.projectId),
+      eq(generatedScripts.scenarioId, String(input.scenarioId)),
     ];
     if (input.framework) conditions.push(eq(generatedScripts.framework, input.framework));
     const data = await db.select().from(generatedScripts)

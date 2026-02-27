@@ -454,7 +454,7 @@ export const aiGenerationRouter = router({
         .from(generatedScripts)
         .where(
           and(
-            eq(generatedScripts.projectId, Number(input.projectId) || 0),
+            eq(generatedScripts.projectId, input.projectId),
             eq(generatedScripts.framework, input.framework),
           )
         )
@@ -477,16 +477,17 @@ export const aiGenerationRouter = router({
         ? `${input.framework}/${input.codeLanguage} v${nextVersion}`
         : `Script v${nextVersion}`;
 
+      const scriptUid = (await import("crypto")).randomUUID();
       const res = await db.insert(generatedScripts).values({
-        projectId: Number(input.projectId) || 0,
-        scenarioId: Number(input.scenarioId) || null,
-        name: scenarioName,
+        uid: scriptUid,
+        projectId: input.projectId,
+        scenarioId: input.scenarioId || "",
         framework: input.framework,
         language: input.codeLanguage.toLowerCase(),
         code: codePayload,
         version: nextVersion,
         status: "DRAFT",
-        createdBy: ctx.user!.id,
+        createdBy: String(ctx.user!.id),
       });
 
       return {

@@ -1,0 +1,106 @@
+{
+  "query": "DESCRIBE generated_scripts;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute DESCRIBE generated_scripts;",
+  "rows": [
+    {
+      "Field": "id",
+      "Type": "int(11)",
+      "Null": "NO",
+      "Key": "PRI",
+      "Default": "NULL",
+      "Extra": "auto_increment"
+    },
+    {
+      "Field": "uid",
+      "Type": "varchar(36)",
+      "Null": "NO",
+      "Key": "UNI",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "scenario_id",
+      "Type": "varchar(36)",
+      "Null": "NO",
+      "Key": "MUL",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "project_id",
+      "Type": "varchar(36)",
+      "Null": "NO",
+      "Key": "MUL",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "version",
+      "Type": "int(11)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "1",
+      "Extra": ""
+    },
+    {
+      "Field": "language",
+      "Type": "varchar(50)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "typescript",
+      "Extra": ""
+    },
+    {
+      "Field": "framework",
+      "Type": "varchar(50)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "playwright",
+      "Extra": ""
+    },
+    {
+      "Field": "code",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "script_status",
+      "Type": "enum('DRAFT','VALIDATED','DEPRECATED')",
+      "Null": "NO",
+      "Key": "",
+      "Default": "DRAFT",
+      "Extra": ""
+    },
+    {
+      "Field": "generated_by",
+      "Type": "varchar(50)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "AI",
+      "Extra": ""
+    },
+    {
+      "Field": "created_at",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": ""
+    },
+    {
+      "Field": "updated_at",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+    }
+  ],
+  "messages": [],
+  "stdout": "Field\tType\tNull\tKey\tDefault\tExtra\nid\tint(11)\tNO\tPRI\tNULL\tauto_increment\nuid\tvarchar(36)\tNO\tUNI\tNULL\t\nscenario_id\tvarchar(36)\tNO\tMUL\tNULL\t\nproject_id\tvarchar(36)\tNO\tMUL\tNULL\t\nversion\tint(11)\tYES\t\t1\t\nlanguage\tvarchar(50)\tYES\t\ttypescript\t\nframework\tvarchar(50)\tYES\t\tplaywright\t\ncode\ttext\tYES\t\tNULL\t\nscript_status\tenum('DRAFT','VALIDATED','DEPRECATED')\tNO\t\tDRAFT\t\ngenerated_by\tvarchar(50)\tYES\t\tAI\t\ncreated_at\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\t\nupdated_at\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\tDEFAULT_GENERATED on update CURRENT_TIMESTAMP\n",
+  "stderr": "",
+  "execution_time_ms": 430
+}

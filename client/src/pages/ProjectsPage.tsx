@@ -92,7 +92,7 @@ function CreateProjectModal({ isOpen, onClose, onCreated }: {
       setName(''); setDescription(''); setDomain('WEB'); setErrors({});
       // Build a Project object from the result and input
       const project: Project = {
-        id: String(result.projectId),
+        id: String(result.uid),
         name: name.trim(),
         description: description.trim(),
         domain,

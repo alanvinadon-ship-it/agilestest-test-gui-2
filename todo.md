@@ -335,3 +335,19 @@
 - [x] Chantier 11D: Frontend — publish intégré dans scenarioTemplates.publish (depuis ScenariosPage)
 - [x] Chantier 11E: Tests backend community templates (couvert par TS=0 + 514 tests)
 - [x] Chantier Final 9-10-11: Tests finaux (514 tests passés, 0 échecs) + TS=0 erreurs + checkpoint
+- [ ] Chantier 12A: Frontend — bouton Publier dans ScenariosPage (ouvre modal avec nom/description/tags)
+- [ ] Chantier 12B: Backend — endpoint scenarioTemplates.publishFromScenario (crée template depuis scénario existant)
+- [ ] Chantier 12C: Tests + vérification TS
+- [ ] Chantier 13A: Backend — endpoint analytics.globalDashboard (agrégats cross-projets)
+- [ ] Chantier 13B: Frontend — page AnalyticsDashboardPage (Chart.js: taux succès, temps moyen, top échecs)
+- [ ] Chantier 13C: Frontend — route + sidebar + tests
+- [x] Chantier 14A: Backend — endpoint projects.export (JSON complet: scénarios + profils + datasets + templates)
+- [x] Chantier 14B: Backend — endpoint projects.import (JSON → création projet + entités)
+- [x] Chantier 14C: Frontend — page Import/Export dédiée avec export JSON + import JSON + validation
+- [x] Chantier 14D: Tests backend export/import (9 tests importExport.test.ts: export, import new/existing, empty, roundtrip)
+- [ ] Chantier Final 12-13-14: Tests finaux + TS=0 + checkpoint
+- [x] Fix: Aligner schéma generatedScripts avec DB réelle (snake_case: project_id, scenario_id, script_status, generated_by, created_at, updated_at, uid)
+- [x] Fix: Aligner schéma auditLogs avec DB réelle (actor_id, actor_name, actor_email, entity_type, entity_id, target_label, metadata, trace_id, timestamp)
+- [x] Fix: Corriger aiGeneration.ts pour types varchar (projectId, scenarioId, createdBy)
+- [x] Fix: Corriger testing.ts scripts CRUD pour types varchar
+- [x] Fix: writeAuditLog accepte userId number|string + génère uid automatique

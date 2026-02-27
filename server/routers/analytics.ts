@@ -165,6 +165,132 @@ export const analyticsRouter = router({
       setCache(cacheKey, result);
       return result;
     }),
+
+  /**
+   * Global dashboard:: cross-project analytics with top failed scenarios,
+   * avg execution time, and per-project breakdown.
+   */
+  globalDashboard: protectedProcedure
+    .input(z.object({
+      period: z.enum(["week", "month"]).default("week"),
+      from: z.string().optional(),
+      to: z.string().optional(),
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      const cacheKey = `global-analytics:${input.period}:${input.from ?? ""}:${input.to ?? ""}`;
+      const cached = getCached<GlobalDashboardResult>(cacheKey);
+      if (cached) return cached;
+
+      const pTrunc = (col: string) => periodTrunc(input.period, col);
+
+      // Build WHERE clauses
+      const dateWhere: string[] = [];
+      if (input.from) dateWhere.push(`e.created_at >= '${input.from.replace(/'/g, "''")}'`);
+      if (input.to) dateWhere.push(`e.created_at <= '${input.to.replace(/'/g, "''")}'`);
+      const dateClause = dateWhere.length ? `WHERE ${dateWhere.join(" AND ")}` : "";
+
+      // 1) Global KPIs
+      const globalKpiQuery = sql.raw(`
+        SELECT
+          COUNT(*) AS total_runs,
+          SUM(CASE WHEN e.status = 'PASSED' THEN 1 ELSE 0 END) AS passed_runs,
+          SUM(CASE WHEN e.status = 'FAILED' THEN 1 ELSE 0 END) AS failed_runs,
+          AVG(CASE WHEN e.duration_ms IS NOT NULL AND e.duration_ms > 0 THEN e.duration_ms ELSE NULL END) AS avg_duration_ms,
+          COUNT(DISTINCT e.project_id) AS project_count
+        FROM executions e
+        ${dateClause}
+      `);
+
+      // 2) Success rate trend by period
+      const trendQuery = sql.raw(`
+        SELECT ${pTrunc("e.created_at")} AS period_label,
+          COUNT(*) AS total,
+          SUM(CASE WHEN e.status = 'PASSED' THEN 1 ELSE 0 END) AS passed,
+          SUM(CASE WHEN e.status = 'FAILED' THEN 1 ELSE 0 END) AS failed
+        FROM executions e
+        ${dateClause}
+        GROUP BY period_label
+        ORDER BY period_label
+      `);
+
+      // 3) Top 10 failed scenarios
+      const topFailedQuery = sql.raw(`
+        SELECT s.name AS scenario_name, p.name AS project_name,
+          COUNT(*) AS fail_count
+        FROM executions e
+        LEFT JOIN test_scenarios s ON s.uid = e.scenario_id
+        LEFT JOIN projects p ON p.id = e.project_id
+        ${dateClause ? dateClause + " AND" : "WHERE"} e.status = 'FAILED'
+        GROUP BY s.name, p.name
+        ORDER BY fail_count DESC
+        LIMIT 10
+      `);
+
+      // 4) Per-project breakdown
+      const perProjectQuery = sql.raw(`
+        SELECT p.name AS project_name, e.project_id,
+          COUNT(*) AS total_runs,
+          SUM(CASE WHEN e.status = 'PASSED' THEN 1 ELSE 0 END) AS passed,
+          SUM(CASE WHEN e.status = 'FAILED' THEN 1 ELSE 0 END) AS failed,
+          AVG(CASE WHEN e.duration_ms IS NOT NULL AND e.duration_ms > 0 THEN e.duration_ms ELSE NULL END) AS avg_duration_ms
+        FROM executions e
+        LEFT JOIN projects p ON p.id = e.project_id
+        ${dateClause}
+        GROUP BY p.name, e.project_id
+        ORDER BY total_runs DESC
+        LIMIT 20
+      `);
+
+      const [globalKpiRows] = await db.execute(globalKpiQuery) as any;
+      const [trendRows] = await db.execute(trendQuery) as any;
+      const [topFailedRows] = await db.execute(topFailedQuery) as any;
+      const [perProjectRows] = await db.execute(perProjectQuery) as any;
+
+      const gk = globalKpiRows[0] ?? { total_runs: 0, passed_runs: 0, failed_runs: 0, avg_duration_ms: null, project_count: 0 };
+      const totalRuns = Number(gk.total_runs);
+      const passedRuns = Number(gk.passed_runs);
+
+      const result: GlobalDashboardResult = {
+        kpis: {
+          totalRuns,
+          passedRuns,
+          failedRuns: Number(gk.failed_runs),
+          successRate: totalRuns > 0 ? Math.round((passedRuns / totalRuns) * 100) : 0,
+          avgDurationMs: gk.avg_duration_ms ? Math.round(Number(gk.avg_duration_ms)) : null,
+          projectCount: Number(gk.project_count),
+        },
+        trend: {
+          labels: (trendRows as any[]).map((r: any) => r.period_label),
+          total: (trendRows as any[]).map((r: any) => Number(r.total)),
+          passed: (trendRows as any[]).map((r: any) => Number(r.passed)),
+          failed: (trendRows as any[]).map((r: any) => Number(r.failed)),
+          successRate: (trendRows as any[]).map((r: any) => {
+            const t = Number(r.total);
+            return t > 0 ? Math.round((Number(r.passed) / t) * 100) : 0;
+          }),
+        },
+        topFailed: (topFailedRows as any[]).map((r: any) => ({
+          scenarioName: r.scenario_name || "(inconnu)",
+          projectName: r.project_name || "(inconnu)",
+          failCount: Number(r.fail_count),
+        })),
+        perProject: (perProjectRows as any[]).map((r: any) => ({
+          projectName: r.project_name || "(inconnu)",
+          projectId: r.project_id,
+          totalRuns: Number(r.total_runs),
+          passed: Number(r.passed),
+          failed: Number(r.failed),
+          successRate: Number(r.total_runs) > 0 ? Math.round((Number(r.passed) / Number(r.total_runs)) * 100) : 0,
+          avgDurationMs: r.avg_duration_ms ? Math.round(Number(r.avg_duration_ms)) : null,
+        })),
+      };
+
+      setCache(cacheKey, result);
+      return result;
+    }),
 });
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -173,4 +299,32 @@ interface DashboardResult {
   incidentSeries: { labels: string[]; critical: number[]; high: number[]; med: number[]; low: number[] };
   probesSeries: { labels: string[]; green: number[]; orange: number[]; red: number[] };
   kpis: { totalRuns: number; successRate: number; openIncidents: number; redProbes: number };
+}
+
+interface GlobalDashboardResult {
+  kpis: {
+    totalRuns: number;
+    passedRuns: number;
+    failedRuns: number;
+    successRate: number;
+    avgDurationMs: number | null;
+    projectCount: number;
+  };
+  trend: {
+    labels: string[];
+    total: number[];
+    passed: number[];
+    failed: number[];
+    successRate: number[];
+  };
+  topFailed: { scenarioName: string; projectName: string; failCount: number }[];
+  perProject: {
+    projectName: string;
+    projectId: string;
+    totalRuns: number;
+    passed: number;
+    failed: number;
+    successRate: number;
+    avgDurationMs: number | null;
+  }[];
 }

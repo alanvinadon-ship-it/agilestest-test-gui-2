@@ -31,6 +31,7 @@ import {
   Webhook,
   BookTemplate,
   GitCompareArrows,
+  TrendingUp,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -75,6 +76,7 @@ const baseNavSections: NavSection[] = [
     items: [
       { href: "/", icon: LayoutDashboard, label: "Dashboard" },
       { href: "/dashboard", icon: BarChart3, label: "Analytique" },
+      { href: "/analytics", icon: TrendingUp, label: "Analytique Globale" },
       { href: "/projects", icon: FolderKanban, label: "Projets" },
       { href: "/settings", icon: Settings2, label: "Paramètres Projet" },
     ],
@@ -90,6 +92,7 @@ const baseNavSections: NavSection[] = [
       { href: "/dataset-types", icon: Database, label: "Gabarits Datasets" },
       { href: "/scripts", icon: Code2, label: "Scripts Générés" },
       { href: "/templates", icon: BookTemplate, label: "Templates" },
+      { href: "/import-export", icon: Package, label: "Import / Export" },
     ],
   },
   {
