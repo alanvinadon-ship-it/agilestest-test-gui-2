@@ -35,10 +35,10 @@ export const reportsRouter = router({
         return { reportId: existing.id, status: "PENDING", message: "Un rapport est déjà en cours de génération." };
       }
 
-      // Create report record
+      // Create report record — execution.projectId is varchar, reports.projectId is int
       const [insertResult] = await db.insert(reports).values({
         executionId: input.executionId,
-        projectId: execution.projectId,
+        projectId: Number(execution.projectId),
         status: "PENDING",
         requestedBy: ctx.user!.id,
       });
@@ -48,7 +48,7 @@ export const reportsRouter = router({
       await enqueueJob("generateExecutionPdf", {
         executionId: input.executionId,
         reportId,
-        projectId: execution.projectId,
+        projectId: Number(execution.projectId),
       });
 
       return { reportId, status: "PENDING", message: "Génération du PDF lancée." };

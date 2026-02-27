@@ -88,13 +88,23 @@ function CreateProjectModal({ isOpen, onClose, onCreated }: {
     };
 
     try {
-      const project = await createMutation.mutateAsync(payload);
+      const result = await createMutation.mutateAsync(payload);
       setName(''); setDescription(''); setDomain('WEB'); setErrors({});
+      // Build a Project object from the result and input
+      const project: Project = {
+        id: String(result.projectId),
+        name: name.trim(),
+        description: description.trim(),
+        domain,
+        status: 'ACTIVE',
+        created_by: '',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
       onCreated(project);
       onClose();
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
-      setApiError(axiosErr?.response?.data?.error?.message || 'Erreur lors de la création.');
+      setApiError((err as Error)?.message || 'Erreur lors de la création.');
     }
   };
 
@@ -246,7 +256,7 @@ export default function ProjectsPage() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      await deleteMutation.mutateAsync(deleteTarget.id);
+      await deleteMutation.mutateAsync({ projectId: Number(deleteTarget.id) });
       setDeleteTarget(null);
     } catch {
       // error handled by mutation

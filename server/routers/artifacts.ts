@@ -18,6 +18,7 @@ import {
 import { getDb } from "../db";
 import { artifacts, executions } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
+import { randomUUID } from "crypto";
 
 export const artifactsRouter = router({
   /**
@@ -48,7 +49,7 @@ export const artifactsRouter = router({
       }
 
       const key = buildArtifactKey(
-        execution.projectId,
+        Number(execution.projectId),
         input.executionId,
         input.filename
       );
@@ -89,8 +90,12 @@ export const artifactsRouter = router({
         });
       }
 
+      // execution_id is varchar in DB, look up the execution's uid
+      const [exec] = await db.select().from(executions).where(eq(executions.id, input.executionId)).limit(1);
+      const executionUid = exec?.uid ?? String(input.executionId);
       const [inserted] = await db.insert(artifacts).values({
-        executionId: input.executionId,
+        uid: randomUUID(),
+        executionId: executionUid,
         type: input.type,
         filename: input.filename,
         mimeType: s3Info.contentType,
@@ -145,10 +150,13 @@ export const artifactsRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
+      // artifacts.execution_id is varchar (uid), look up execution uid first
+      const [exec] = await db.select().from(executions).where(eq(executions.id, input.executionId)).limit(1);
+      const executionUid = exec?.uid ?? String(input.executionId);
       const rows = await db
         .select()
         .from(artifacts)
-        .where(eq(artifacts.executionId, input.executionId));
+        .where(eq(artifacts.executionId, executionUid));
 
       return rows;
     }),

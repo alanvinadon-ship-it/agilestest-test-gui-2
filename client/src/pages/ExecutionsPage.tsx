@@ -141,18 +141,18 @@ export default function ExecutionsPage() {
 
   // Fetch scenarios for filter dropdown
   const { data: scenariosData } = trpc.scenarios.list.useQuery(
-    { projectId: Number(currentProject?.id) || 0, page: 1, pageSize: 200 },
+    { projectId: String(currentProject?.id || ''), page: 1, pageSize: 100 },
     { enabled: !!currentProject },
   );
   const scenariosList = scenariosData?.data ?? [];
 
   const { data, isLoading } = trpc.executions.list.useQuery(
     {
-      projectId: Number(currentProject?.id) || 0,
+      projectId: String(currentProject?.id || ''),
       page,
       pageSize,
       ...(statusFilter ? { status: statusFilter as ExecutionStatus } : {}),
-      ...(scenarioFilter ? { scenarioId: Number(scenarioFilter) } : {}),
+      ...(scenarioFilter ? { scenarioId: String(scenarioFilter) } : {}),
     },
     {
       enabled: !!currentProject,
@@ -210,7 +210,7 @@ export default function ExecutionsPage() {
           <button
             onClick={() => {
               createExecution.mutate({
-                projectId: Number(currentProject.id),
+                projectId: String(currentProject.id),
                 targetEnv: 'DEV',
               });
             }}

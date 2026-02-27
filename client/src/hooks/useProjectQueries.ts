@@ -1,58 +1,81 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { repositoryApi } from '../api/repositoryApi';
-import type { CreateProjectRequest, UpdateProjectRequest } from '../types';
+import { trpc } from '@/lib/trpc';
+import type { Project, CreateProjectRequest } from '../types';
 
-export const projectKeys = {
-  all: ['projects'] as const,
-  lists: () => [...projectKeys.all, 'list'] as const,
-  list: (params?: Record<string, unknown>) => [...projectKeys.lists(), params] as const,
-  details: () => [...projectKeys.all, 'detail'] as const,
-  detail: (id: string) => [...projectKeys.details(), id] as const,
-};
+/**
+ * Map DB row (camelCase) → frontend Project (snake_case)
+ */
+function toFrontendProject(row: any): Project {
+  return {
+    id: String(row.id),
+    name: row.name || '',
+    description: row.description || '',
+    domain: row.domain || 'WEB',
+    status: row.status || 'ACTIVE',
+    created_by: row.createdBy || '',
+    created_at: row.createdAt ? new Date(row.createdAt).toISOString() : '',
+    updated_at: row.updatedAt ? new Date(row.updatedAt).toISOString() : '',
+  };
+}
 
 export function useProjects(params?: { page?: number; limit?: number; status?: string; domain?: string }) {
-  return useQuery({
-    queryKey: projectKeys.list(params as Record<string, unknown>),
-    queryFn: () => repositoryApi.listProjects(params),
+  const query = trpc.projects.list.useQuery({
+    page: params?.page || 1,
+    pageSize: params?.limit || 50,
+    status: params?.status as any,
+    domain: params?.domain,
   });
+
+  // Transform data to match the expected format { data: Project[], pagination: ... }
+  const transformedData = query.data
+    ? {
+        data: query.data.data.map(toFrontendProject),
+        pagination: query.data.pagination,
+      }
+    : undefined;
+
+  return {
+    ...query,
+    data: transformedData,
+  };
 }
 
 export function useProjectDetail(projectId: string) {
-  return useQuery({
-    queryKey: projectKeys.detail(projectId),
-    queryFn: () => repositoryApi.getProject(projectId),
-    enabled: !!projectId,
-  });
+  const query = trpc.projects.get.useQuery(
+    { projectId: Number(projectId) },
+    { enabled: !!projectId },
+  );
+
+  const transformedData = query.data ? toFrontendProject(query.data) : undefined;
+
+  return {
+    ...query,
+    data: transformedData,
+  };
 }
 
 export function useCreateProject() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: CreateProjectRequest) => repositoryApi.createProject(data),
+  const utils = trpc.useUtils();
+  return trpc.projects.create.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: projectKeys.lists() });
+      utils.projects.list.invalidate();
     },
   });
 }
 
 export function useUpdateProject() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ projectId, data }: { projectId: string; data: UpdateProjectRequest }) =>
-      repositoryApi.updateProject(projectId, data),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: projectKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: projectKeys.detail(variables.projectId) });
+  const utils = trpc.useUtils();
+  return trpc.projects.update.useMutation({
+    onSuccess: () => {
+      utils.projects.list.invalidate();
     },
   });
 }
 
 export function useDeleteProject() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (projectId: string) => repositoryApi.deleteProject(projectId),
+  const utils = trpc.useUtils();
+  return trpc.projects.delete.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: projectKeys.lists() });
+      utils.projects.list.invalidate();
     },
   });
 }

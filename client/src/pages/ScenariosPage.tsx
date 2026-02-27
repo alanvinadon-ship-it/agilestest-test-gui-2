@@ -2,8 +2,7 @@ import { useState, useMemo } from 'react';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
 import { usePermission, PermissionKey } from '../security';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { repositoryApi } from '../api/repositoryApi';
+import { trpc } from '@/lib/trpc';
 import { localScenarios } from '../api/localStore';
 import type { TestProfile, TestScenario, TestType, ScenarioStatus } from '../types';
 import {
@@ -20,7 +19,6 @@ import ScenarioDatasetSection from '../components/ScenarioDatasetSection';
 import { CapturePolicyEditor } from '../capture';
 import type { CapturePolicy } from '../capture/types';
 import { localCapturePolicies } from '../api/localStore';
-import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import {
   type ProfileDomain, DOMAIN_META, PROFILE_TYPE_META, type ProfileType,
@@ -191,7 +189,7 @@ function CreateScenarioModal({ isOpen, onClose, profiles, testTypeFilter }: {
   isOpen: boolean; onClose: () => void; profiles: TestProfile[]; testTypeFilter: string;
 }) {
   const { currentProject } = useProject();
-  const queryClient = useQueryClient();
+  const utils = trpc.useUtils();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [profileId, setProfileId] = useState('');
@@ -208,17 +206,15 @@ function CreateScenarioModal({ isOpen, onClose, profiles, testTypeFilter }: {
 
   const selectedProfile = availableProfiles.find(p => p.id === profileId);
 
-  const mutation = useMutation({
-    mutationFn: (data: Partial<TestScenario>) => repositoryApi.createScenario(profileId, data, currentProject?.id),
+  const mutation = trpc.scenarios.create.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scenarios'] });
+      utils.scenarios.list.invalidate();
       setName(''); setDescription(''); setProfileId('');
       setSteps([{ id: 'step-1', order: 0, action: '', description: '', expected_result: '', parameters: {} }]);
       onClose();
     },
-    onError: (err: unknown) => {
-      const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
-      setError(axiosErr?.response?.data?.error?.message || (err as Error)?.message || 'Erreur lors de la création.');
+    onError: (err) => {
+      setError(err.message || 'Erreur lors de la création.');
     },
   });
 
@@ -235,7 +231,10 @@ function CreateScenarioModal({ isOpen, onClose, profiles, testTypeFilter }: {
     setError(null);
     if (!name.trim() || !profileId) { setError('Le nom et le profil sont requis.'); return; }
     mutation.mutate({
-      name: name.trim(), description: description.trim(), status: 'DRAFT', version: 1,
+      projectId: currentProject?.id || '',
+      profileId: profileId,
+      name: name.trim(), description: description.trim(), status: 'DRAFT',
+      testType: selectedProfile?.test_type as any || 'VABF',
       steps: steps.map((s, i) => ({ id: `step-${i + 1}`, order: i + 1, action: s.action, description: s.description, expected_result: s.expected_result, parameters: {} })),
     });
   };
@@ -333,7 +332,7 @@ function CreateScenarioModal({ isOpen, onClose, profiles, testTypeFilter }: {
 function EditScenarioModal({ scenario, profile, onClose }: {
   scenario: TestScenario; profile?: TestProfile; onClose: () => void;
 }) {
-  const queryClient = useQueryClient();
+  const utils = trpc.useUtils();
   const [name, setName] = useState(scenario.name);
   const [description, setDescription] = useState(scenario.description || '');
   const [steps, setSteps] = useState(scenario.steps || [{ id: 'step-1', order: 0, action: '', description: '', expected_result: '', parameters: {} as Record<string, unknown> }]);
@@ -341,22 +340,20 @@ function EditScenarioModal({ scenario, profile, onClose }: {
   const [error, setError] = useState<string | null>(null);
   const isFinal = scenario.status === 'FINAL';
 
-  const { data: datasetTypesData } = useQuery({
-    queryKey: ['dataset-types-for-scenario', profile?.domain, profile?.test_type],
-    queryFn: () => localDatasetTypes.list({ domain: profile?.domain, test_type: profile?.test_type }),
-  });
+  const { data: datasetTypesData } = trpc.datasets.list.useQuery(
+    { projectId: scenario.project_id || '', page: 1, pageSize: 100 },
+    { enabled: !!scenario.project_id },
+  );
   const availableDatasetTypes = datasetTypesData?.data || [];
 
   const toggleDatasetType = (dtId: string) => {
     setRequiredDatasetTypes(prev => prev.includes(dtId) ? prev.filter(id => id !== dtId) : [...prev, dtId]);
   };
 
-  const mutation = useMutation({
-    mutationFn: (data: Partial<TestScenario>) => repositoryApi.updateScenario(scenario.id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['scenarios'] }); onClose(); },
-    onError: (err: unknown) => {
-      const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
-      setError(axiosErr?.response?.data?.error?.message || (err as Error)?.message || 'Erreur lors de la modification.');
+  const mutation = trpc.scenarios.update.useMutation({
+    onSuccess: () => { utils.scenarios.list.invalidate(); onClose(); },
+    onError: (err) => {
+      setError(err.message || 'Erreur lors de la modification.');
     },
   });
 
@@ -371,7 +368,7 @@ function EditScenarioModal({ scenario, profile, onClose }: {
     setError(null);
     if (!name.trim()) { setError('Le nom est requis.'); return; }
     if (steps.length === 0) { setError('Au moins une étape est requise.'); return; }
-    mutation.mutate({ name: name.trim(), description: description.trim(), steps, required_dataset_types: requiredDatasetTypes });
+    mutation.mutate({ scenarioId: Number(scenario.id), name: name.trim(), description: description.trim(), steps, requiredDatasetTypes });
   };
 
   const testTypeMeta = profile?.test_type ? TEST_TYPE_META[profile.test_type] : null;
@@ -445,13 +442,13 @@ function EditScenarioModal({ scenario, profile, onClose }: {
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {availableDatasetTypes.map(dt => {
-                    const isSelected = requiredDatasetTypes.includes(dt.dataset_type_id);
+                    const isSelected = requiredDatasetTypes.includes(dt.datasetTypeId || '');
                     return (
-                      <button key={dt.id} type="button" onClick={() => toggleDatasetType(dt.dataset_type_id)}
+                      <button key={dt.id} type="button" onClick={() => toggleDatasetType(dt.datasetTypeId || '')}
                         className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
                           isSelected ? 'bg-orange-500/15 border-orange-500/40 text-orange-400 font-semibold' : 'bg-muted/30 border-border text-muted-foreground hover:border-orange-500/30'
                         }`}>
-                        <span className="font-mono text-[10px]">{dt.dataset_type_id}</span> · <span>{dt.name}</span>
+                        <span className="font-mono text-[10px]">{dt.datasetTypeId}</span> · <span>{dt.name}</span>
                       </button>
                     );
                   })}
@@ -525,15 +522,31 @@ export default function ScenariosPage() {
   const [testTypeFilter, setTestTypeFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [expandedProfile, setExpandedProfile] = useState<string | null>(null);
-  const queryClient = useQueryClient();
+  const utils = trpc.useUtils();
 
-  const { data: profilesData, isLoading: loadingProfiles } = useQuery({
-    queryKey: ['profiles', currentProject?.id],
-    queryFn: () => repositoryApi.listProfiles(currentProject!.id),
-    enabled: !!currentProject,
-  });
+  const { data: profilesData, isLoading: loadingProfiles } = trpc.profiles.list.useQuery(
+    { projectId: String(currentProject?.id || ''), page: 1, pageSize: 100 },
+    { enabled: !!currentProject },
+  );
 
-  const allProfiles = (profilesData?.data || []) as TestProfile[];
+  const allProfiles = useMemo(() => {
+    return (profilesData?.data || []).map((p: any): TestProfile => ({
+      id: String(p.id),
+      project_id: p.projectId || '',
+      name: p.name || '',
+      description: p.description || '',
+      test_type: (p.testType || 'VABF') as TestType,
+      domain: p.domain || '',
+      profile_type: p.profileType || '',
+      protocol: p.protocol || '',
+      target_host: p.targetHost || '',
+      target_port: p.targetPort || 0,
+      parameters: p.parameters || {},
+      config: p.config || {},
+      created_at: p.createdAt ? new Date(p.createdAt).toISOString() : '',
+      updated_at: p.updatedAt ? new Date(p.updatedAt).toISOString() : '',
+    }));
+  }, [profilesData]);
   const profiles = useMemo(() => allProfiles.map(p => !p.test_type ? { ...p, test_type: 'VABF' as TestType } : p), [allProfiles]);
 
   const filteredProfiles = useMemo(() => {
@@ -546,29 +559,40 @@ export default function ScenariosPage() {
     return result;
   }, [profiles, testTypeFilter, search]);
 
-  const { data: scenariosData, isLoading: loadingScenarios } = useQuery({
-    queryKey: ['scenarios', expandedProfile],
-    queryFn: () => repositoryApi.listScenarios(expandedProfile!),
-    enabled: !!expandedProfile,
-  });
+  const { data: scenariosData, isLoading: loadingScenarios } = trpc.scenarios.list.useQuery(
+    { projectId: String(currentProject?.id || ''), page: 1, pageSize: 100 },
+    { enabled: !!currentProject },
+  );
 
-  const allScenarios = (scenariosData?.data || []) as TestScenario[];
+  const allScenarios = useMemo(() => {
+    return (scenariosData?.data || []).map((s: any): TestScenario => ({
+      id: String(s.id),
+      profile_id: s.profileId || '',
+      project_id: s.projectId || '',
+      name: s.name || '',
+      description: s.description || '',
+      scenario_code: s.scenarioCode || '',
+      status: (s.status || 'DRAFT') as ScenarioStatus,
+      version: s.version || 1,
+      steps: s.steps || [],
+      required_dataset_types: s.requiredDatasetTypes || [],
+      created_at: s.createdAt ? new Date(s.createdAt).toISOString() : '',
+      updated_at: s.updatedAt ? new Date(s.updatedAt).toISOString() : '',
+    }));
+  }, [scenariosData]);
   const scenarios = useMemo(() => {
-    if (statusFilter === 'ALL') return allScenarios;
-    return allScenarios.filter(s => (s.status || 'DRAFT') === statusFilter);
-  }, [allScenarios, statusFilter]);
+    let result = allScenarios;
+    if (expandedProfile) result = result.filter(s => s.profile_id === expandedProfile);
+    if (statusFilter === 'ALL') return result;
+    return result.filter(s => (s.status || 'DRAFT') === statusFilter);
+  }, [allScenarios, expandedProfile, statusFilter]);
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => repositoryApi.deleteScenario(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scenarios'] }),
+  const deleteMutation = trpc.scenarios.delete.useMutation({
+    onSuccess: () => utils.scenarios.list.invalidate(),
   });
 
-  const deprecateMutation = useMutation({
-    mutationFn: (id: string) => {
-      localScenarios.deprecate(id);
-      return Promise.resolve();
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scenarios'] }),
+  const deprecateMutation = trpc.scenarios.update.useMutation({
+    onSuccess: () => utils.scenarios.list.invalidate(),
   });
 
   if (!currentProject) {
@@ -753,7 +777,7 @@ export default function ScenariosPage() {
                                     </button>
                                   )}
                                   {canActivateScenario && isFinal && (
-                                    <button onClick={() => deprecateMutation.mutate(scenario.id)}
+                                    <button onClick={() => deprecateMutation.mutate({ scenarioId: Number(scenario.id), status: 'DEPRECATED' })}
                                       className="text-red-400 hover:text-red-300 p-1.5 rounded hover:bg-red-500/10 transition-colors" title="Déprécier">
                                       <Archive className="w-4 h-4" />
                                     </button>
@@ -795,7 +819,7 @@ export default function ScenariosPage() {
                                     {exportingId === Number(scenario.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                                   </button>
                                   {canDeleteScenario && isDraft && (
-                                    <button onClick={() => deleteMutation.mutate(scenario.id)}
+                                    <button onClick={() => deleteMutation.mutate({ scenarioId: Number(scenario.id) })}
                                       className="text-muted-foreground hover:text-destructive p-1.5 rounded hover:bg-destructive/10 transition-colors" title="Supprimer">
                                       <Trash2 className="w-4 h-4" />
                                     </button>
@@ -825,7 +849,7 @@ export default function ScenariosPage() {
         <FinalizeDialog
           scenario={finalizingScenario}
           onClose={() => setFinalizingScenario(null)}
-          onFinalized={() => queryClient.invalidateQueries({ queryKey: ['scenarios'] })}
+          onFinalized={() => utils.scenarios.list.invalidate()}
         />
       )}
 
@@ -842,7 +866,7 @@ export default function ScenariosPage() {
           scenario={scriptScenario.scenario}
           profile={scriptScenario.profile}
           onClose={() => setScriptScenario(null)}
-          onSaved={() => queryClient.invalidateQueries({ queryKey: ['scripts'] })}
+          onSaved={() => utils.scenarios.list.invalidate()}
         />
       )}
 
@@ -853,7 +877,7 @@ export default function ScenariosPage() {
           projectName={currentProject.name}
           open={!!suggestProfile}
           onClose={() => setSuggestProfile(null)}
-          onImported={() => queryClient.invalidateQueries({ queryKey: ['scenarios'] })}
+          onImported={() => utils.scenarios.list.invalidate()}
         />
       )}
       {showImportModal && (
@@ -861,8 +885,8 @@ export default function ScenariosPage() {
           projectId={Number(currentProject.id)}
           onClose={() => setShowImportModal(false)}
           onImported={() => {
-            queryClient.invalidateQueries({ queryKey: ['scenarios'] });
-            queryClient.invalidateQueries({ queryKey: ['profiles'] });
+            utils.scenarios.list.invalidate();
+            utils.profiles.list.invalidate();
           }}
         />
       )}
@@ -884,7 +908,7 @@ function ImportScenarioModal({ projectId, onClose, onImported }: {
   const importMutation = trpc.scenarios.import.useMutation({
     onSuccess: (result) => {
       const msgs: string[] = [`Sc\u00e9nario import\u00e9 (ID: ${result.scenarioId})`];
-      if (result.profileId) msgs.push(`Profil cr\u00e9\u00e9 (ID: ${result.profileId})`);
+      if (result.profileUid) msgs.push(`Profil créé (ID: ${result.profileUid})`);
       if (result.importedDatasets > 0) msgs.push(`${result.importedDatasets} dataset(s) import\u00e9(s)`);
       if (result.warnings.length) msgs.push(`\u26a0 ${result.warnings.join(', ')}`);
       toast.success(msgs.join(' \u2014 '));
@@ -977,7 +1001,7 @@ function ImportScenarioModal({ projectId, onClose, onImported }: {
             className="px-4 py-2 text-sm rounded border border-border text-foreground hover:bg-accent transition-colors">
             Annuler
           </button>
-          <button onClick={() => importMutation.mutate({ projectId, payload, importProfile, importDatasets })}
+          <button onClick={() => importMutation.mutate({ projectId: String(projectId), payload, importProfile, importDatasets })}
             disabled={!payload || importMutation.isPending}
             className="px-4 py-2 text-sm rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors inline-flex items-center gap-2">
             {importMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}

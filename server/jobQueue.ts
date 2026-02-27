@@ -391,9 +391,9 @@ registerHandler("generateExecutionPdf", async (payload) => {
 
     // Fetch related data in parallel
     const [scenarioRows, profileRows, artifactRows, incidentRows, analysisRows] = await Promise.all([
-      execution.scenarioId ? db.select().from(testScenarios).where(eq(testScenarios.id, execution.scenarioId)).limit(1) : Promise.resolve([]),
-      execution.profileId ? db.select().from(testProfiles).where(eq(testProfiles.id, execution.profileId)).limit(1) : Promise.resolve([]),
-      db.select().from(artifacts).where(eq(artifacts.executionId, executionId)),
+      execution.scenarioId ? db.select().from(testScenarios).where(eq(testScenarios.uid, execution.scenarioId)).limit(1) : Promise.resolve([]),
+      execution.profileId ? db.select().from(testProfiles).where(eq(testProfiles.uid, execution.profileId)).limit(1) : Promise.resolve([]),
+      db.select().from(artifacts).where(eq(artifacts.executionId, execution.uid)),
       db.select().from(incidents).where(eq(incidents.executionId, executionId)),
       db.select().from(aiAnalyses).where(eq(aiAnalyses.executionId, executionId)),
     ]);

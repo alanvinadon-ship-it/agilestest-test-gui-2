@@ -187,3 +187,13 @@
 - [x] Étape 3: Frontend — bouton Export par scénario + bouton Importer JSON + ImportScenarioModal
 - [x] Étape 3: Tests — 18 tests scenario-import-export.test.ts (roundtrip, validation, portability)
 - [x] Étape 3: Docs — (intégré dans les tests et le code)
+- [x] Bug: Données non persistantes — les projets, profils et scénarios disparaissaient après rafraîchissement de la page
+- [x] Fix: Aligner le schéma Drizzle (drizzle/schema.ts) avec la structure réelle de la DB (snake_case, varchar pour UIDs)
+- [x] Fix: Corriger les routeurs tRPC (testing.ts, projects.ts, reports.ts, artifacts.ts, admin.ts, jobQueue.ts) pour les types varchar
+- [x] Fix: Migrer useProjectQueries.ts de repositoryApi vers tRPC (projects.list/create/update/delete)
+- [x] Fix: Migrer ProfilesPage.tsx de repositoryApi vers tRPC (profiles.list/create/update/delete)
+- [x] Fix: Migrer ScenariosPage.tsx de repositoryApi vers tRPC (scenarios.list/create/update/delete)
+- [x] Fix: Corriger pageSize > 100 dans ProfilesPage, ScenariosPage, ExecutionsPage
+- [x] Tests: 422 tests Vitest passent (dont 2 nouveaux tests de persistance profiles/scenarios)
+- [x] Vérification: Projet "Orange-Web-Persistance-Test" persiste après rafraîchissement ✓
+- [x] Vérification: Profil "Profil Persistance Test" persiste après rafraîchissement ✓

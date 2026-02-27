@@ -166,7 +166,7 @@ export const adminRouter = router({
     if (existing[0].email) {
       await db.delete(invites).where(eq(invites.email, existing[0].email));
     }
-    await db.delete(projectMemberships).where(eq(projectMemberships.userId, input.userId));
+    await db.delete(projectMemberships).where(eq(projectMemberships.userId, String(input.userId)));
     await db.delete(auditLogs).where(eq(auditLogs.userId, input.userId));
     await db.delete(users).where(eq(users.id, input.userId));
 

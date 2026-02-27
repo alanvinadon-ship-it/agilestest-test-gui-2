@@ -337,7 +337,7 @@ export default function ExecutionDetailPage() {
   const handleRerun = () => {
     if (!execData || !currentProject) return;
     createExecution.mutate({
-      projectId: Number(currentProject.id),
+      projectId: String(currentProject.id),
       profileId: execData.profileId ?? undefined,
       scenarioId: execData.scenarioId ?? undefined,
       scriptId: execData.scriptId ?? undefined,
@@ -438,7 +438,7 @@ export default function ExecutionDetailPage() {
           {execData.scenario ? (
             <div>
               <p className="text-sm font-medium text-foreground truncate">{execData.scenario.name}</p>
-              <p className="text-[10px] text-muted-foreground">{execData.scenario.testType} — {execData.scenario.priority}</p>
+              <p className="text-[10px] text-muted-foreground">{execData.scenario.testType} — {execData.scenario.status}</p>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">—</p>

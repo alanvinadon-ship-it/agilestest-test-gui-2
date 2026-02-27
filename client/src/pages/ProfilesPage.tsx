@@ -2,8 +2,7 @@ import { useState, useMemo } from 'react';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
 import { usePermission, PermissionKey } from '../security';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { repositoryApi } from '../api/repositoryApi';
+import { trpc } from '@/lib/trpc';
 import type { TestProfile, TestType } from '../types';
 import {
   Plus, Settings2, Loader2, Trash2, X, AlertCircle, Search,
@@ -153,7 +152,7 @@ function TypeBadge({ profileType }: { profileType?: string }) {
 function CreateProfileModal({ isOpen, onClose, projectId, projectDomain }: {
   isOpen: boolean; onClose: () => void; projectId: string; projectDomain: string;
 }) {
-  const queryClient = useQueryClient();
+  const utils = trpc.useUtils();
   const enabledDomains = useMemo(() => getEnabledDomains(projectDomain), [projectDomain]);
   const isSingleDomain = enabledDomains.length === 1;
 
@@ -177,15 +176,13 @@ function CreateProfileModal({ isOpen, onClose, projectId, projectDomain }: {
   const totalSteps = isSingleDomain ? 3 : 4;
   const displayStep = step - firstStep + 1;
 
-  const mutation = useMutation({
-    mutationFn: (data: Partial<TestProfile>) => repositoryApi.createProfile(projectId, data),
+  const mutation = trpc.profiles.create.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['profiles', projectId] });
+      utils.profiles.list.invalidate();
       resetAndClose();
     },
-    onError: (err: unknown) => {
-      const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
-      setError(axiosErr?.response?.data?.error?.message || (err as Error)?.message || 'Erreur lors de la création.');
+    onError: (err) => {
+      setError(err.message || 'Erreur lors de la création.');
     },
   });
 
@@ -249,14 +246,15 @@ function CreateProfileModal({ isOpen, onClose, projectId, projectDomain }: {
     const targetPort = (config.port || config.target_port || config.mme_port || config.pgw_port || config.sgw_port || config.amf_port || config.smf_port || config.adb_port || 0) as number;
 
     mutation.mutate({
+      projectId,
       name: name.trim(),
       description: description.trim(),
-      test_type: selectedTestType,
-      domain: selectedDomain,
-      profile_type: selectedType,
+      testType: selectedTestType!,
+      domain: selectedDomain!,
+      profileType: selectedType!,
       protocol: 'CUSTOM',
-      target_host: targetHost,
-      target_port: targetPort || 0,
+      targetHost: targetHost,
+      targetPort: targetPort || 0,
       parameters: {},
       config,
     });
@@ -534,37 +532,50 @@ export default function ProfilesPage() {
   const [search, setSearch] = useState('');
   const [domainFilter, setDomainFilter] = useState<string>('ALL');
   const [testTypeFilter, setTestTypeFilter] = useState<string>('ALL');
-  const queryClient = useQueryClient();
+  const utils = trpc.useUtils();
 
   const enabledDomains = useMemo(
     () => currentProject ? getEnabledDomains(currentProject.domain) : [],
     [currentProject?.domain]
   );
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['profiles', currentProject?.id],
-    queryFn: () => repositoryApi.listProfiles(currentProject!.id),
-    enabled: !!currentProject,
+  const { data, isLoading } = trpc.profiles.list.useQuery(
+    { projectId: String(currentProject?.id || ''), page: 1, pageSize: 100 },
+    { enabled: !!currentProject },
+  );
+
+  const deleteMutation = trpc.profiles.delete.useMutation({
+    onSuccess: () => utils.profiles.list.invalidate(),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => repositoryApi.deleteProfile(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['profiles', currentProject?.id] }),
-  });
-
-  // Migrate old profiles and apply filters
+  // Map DB camelCase to frontend snake_case and apply filters
   const profiles = useMemo(() => {
-    const raw = (data?.data || []) as TestProfile[];
-    return raw.map(p => {
-      if (!p.domain && p.protocol) {
-        const migrated = migrateOldProfile(p.protocol);
-        return { ...p, domain: migrated.domain, profile_type: migrated.type, test_type: p.test_type || 'VABF' as TestType };
+    const raw = data?.data || [];
+    return raw.map((p: any): TestProfile => {
+      const mapped: TestProfile = {
+        id: String(p.id),
+        project_id: p.projectId || '',
+        name: p.name || '',
+        description: p.description || '',
+        test_type: (p.testType || 'VABF') as TestType,
+        domain: p.domain || '',
+        profile_type: p.profileType || '',
+        protocol: p.protocol || '',
+        target_host: p.targetHost || '',
+        target_port: p.targetPort || 0,
+        parameters: p.parameters || {},
+        config: p.config || {},
+        created_at: p.createdAt ? new Date(p.createdAt).toISOString() : '',
+        updated_at: p.updatedAt ? new Date(p.updatedAt).toISOString() : '',
+      };
+      if (!mapped.domain && mapped.protocol) {
+        const migrated = migrateOldProfile(mapped.protocol);
+        return { ...mapped, domain: migrated.domain, profile_type: migrated.type, test_type: mapped.test_type || 'VABF' as TestType };
       }
-      // Migration : profils sans test_type → VABF par défaut
-      if (!p.test_type) {
-        return { ...p, test_type: 'VABF' as TestType };
+      if (!mapped.test_type) {
+        return { ...mapped, test_type: 'VABF' as TestType };
       }
-      return p;
+      return mapped;
     });
   }, [data]);
 
@@ -742,7 +753,7 @@ export default function ProfilesPage() {
                       </button>
                     )}
                     {canDeleteProfile && (
-                      <button onClick={() => deleteMutation.mutate(profile.id)}
+                      <button onClick={() => deleteMutation.mutate({ profileId: Number(profile.id) })}
                         className="text-muted-foreground hover:text-destructive transition-colors p-1.5" title="Supprimer">
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -777,30 +788,28 @@ function EditProfileModal({ profile, onClose, projectDomain }: {
   onClose: () => void;
   projectDomain?: string;
 }) {
-  const queryClient = useQueryClient();
+  const utils = trpc.useUtils();
   const [name, setName] = useState(profile.name);
   const [description, setDescription] = useState(profile.description || '');
   const [config, setConfig] = useState<Record<string, unknown>>(profile.config || {});
   const [error, setError] = useState<string | null>(null);
   const [testTypeError, setTestTypeError] = useState(false);
 
-  const { data: scenariosData } = useQuery({
-    queryKey: ['scenarios', profile.id],
-    queryFn: () => repositoryApi.listScenarios(profile.id),
-  });
+  const { data: scenariosData } = trpc.scenarios.list.useQuery(
+    { projectId: profile.project_id || '', page: 1, pageSize: 100 },
+    { enabled: !!profile.id },
+  );
 
   const hasScenarios = (scenariosData?.data || []).length > 0;
   const configFields = profile.profile_type ? CONFIG_TEMPLATES[profile.profile_type as ProfileType] : [];
 
-  const mutation = useMutation({
-    mutationFn: (data: Partial<TestProfile>) => repositoryApi.updateProfile(profile.id, data),
+  const mutation = trpc.profiles.update.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      utils.profiles.list.invalidate();
       onClose();
     },
-    onError: (err: unknown) => {
-      const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
-      const msg = axiosErr?.response?.data?.error?.message || (err as Error)?.message || 'Erreur lors de la modification.';
+    onError: (err) => {
+      const msg = err.message || 'Erreur lors de la modification.';
       if (msg.includes('409')) {
         setTestTypeError(true);
       }
@@ -829,6 +838,7 @@ function EditProfileModal({ profile, onClose, projectDomain }: {
     }
 
     mutation.mutate({
+      profileId: Number(profile.id),
       name: name.trim(),
       description: description.trim(),
       config,

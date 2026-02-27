@@ -7,6 +7,7 @@ import { projects, projectMemberships } from "../../drizzle/schema";
 import { paginationInput } from "../../shared/pagination";
 import { normalizePagination, countRows } from "../lib/pagination";
 import { writeAuditLog } from "../lib/auditLog";
+import { randomUUID } from "crypto";
 
 const listProjectsInput = z.object({
   ...paginationInput.shape,
@@ -76,20 +77,27 @@ export const projectsRouter = router({
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
+    const uid = randomUUID();
     const result = await db.insert(projects).values({
+      uid,
       name: input.name,
       description: input.description ?? null,
       domain: input.domain,
       status: input.status,
-      createdBy: ctx.user!.id,
+      createdBy: String(ctx.user!.id),
     });
 
     const projectId = Number(result[0].insertId);
 
     await db.insert(projectMemberships).values({
-      projectId,
-      userId: ctx.user!.id,
-      role: "ADMIN",
+      uid: crypto.randomUUID(),
+      projectId: String(projectId),
+      projectName: input.name,
+      userId: String(ctx.user!.id),
+      userEmail: ctx.user!.email ?? null,
+      userName: ctx.user!.name ?? null,
+      role: "PROJECT_ADMIN",
+      addedBy: String(ctx.user!.id),
     });
 
     await writeAuditLog({
@@ -138,7 +146,7 @@ export const projectsRouter = router({
     const existing = await db.select().from(projects).where(eq(projects.id, input.projectId)).limit(1);
     if (existing.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Projet introuvable" });
 
-    await db.delete(projectMemberships).where(eq(projectMemberships.projectId, input.projectId));
+    await db.delete(projectMemberships).where(eq(projectMemberships.projectId, String(input.projectId)));
     await db.delete(projects).where(eq(projects.id, input.projectId));
 
     await writeAuditLog({

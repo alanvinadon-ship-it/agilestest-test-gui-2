@@ -11,11 +11,13 @@ import {
 import { paginationInput } from "../../shared/pagination";
 import { normalizePagination, countRows } from "../lib/pagination";
 import { writeAuditLog } from "../lib/auditLog";
+import { randomUUID } from "crypto";
 
 // ─── Shared inputs ──────────────────────────────────────────────────────────
+// projectId is varchar(36) in DB — use z.string() for all project-scoped queries
 const projectScopedList = z.object({
   ...paginationInput.shape,
-  projectId: z.number(),
+  projectId: z.string(),
   search: z.string().optional(),
 });
 
@@ -43,14 +45,28 @@ export const profilesRouter = router({
     return r[0];
   }),
   create: protectedProcedure.input(z.object({
-    projectId: z.number(), name: z.string().min(1), description: z.string().optional(),
+    projectId: z.string(), name: z.string().min(1), description: z.string().optional(),
     profileType: z.string().default("WEB"), config: z.any().optional(),
+    testType: z.enum(["VABF", "VSR", "VABE"]).default("VABF"),
+    domain: z.string().optional(),
+    protocol: z.string().optional(),
+    targetHost: z.string().optional(),
+    targetPort: z.number().optional(),
+    parameters: z.any().optional(),
   })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const uid = randomUUID();
     const res = await db.insert(testProfiles).values({
+      uid,
       projectId: input.projectId, name: input.name, description: input.description ?? null,
-      profileType: input.profileType, config: input.config ?? null, createdBy: ctx.user!.id,
+      profileType: input.profileType, config: input.config ?? null,
+      testType: input.testType,
+      domain: input.domain ?? null,
+      protocol: input.protocol ?? null,
+      targetHost: input.targetHost ?? null,
+      targetPort: input.targetPort ?? null,
+      parameters: input.parameters ?? null,
     });
     await writeAuditLog({ userId: ctx.user!.id, action: "PROFILE_CREATED", entity: "test_profile", entityId: String(res[0].insertId) });
     return { success: true, profileId: Number(res[0].insertId) };
@@ -58,6 +74,12 @@ export const profilesRouter = router({
   update: protectedProcedure.input(z.object({
     profileId: z.number(), name: z.string().optional(), description: z.string().optional(),
     profileType: z.string().optional(), config: z.any().optional(),
+    testType: z.enum(["VABF", "VSR", "VABE"]).optional(),
+    domain: z.string().optional(),
+    protocol: z.string().optional(),
+    targetHost: z.string().optional(),
+    targetPort: z.number().optional(),
+    parameters: z.any().optional(),
   })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
@@ -66,6 +88,12 @@ export const profilesRouter = router({
     if (input.description !== undefined) u.description = input.description;
     if (input.profileType !== undefined) u.profileType = input.profileType;
     if (input.config !== undefined) u.config = input.config;
+    if (input.testType !== undefined) u.testType = input.testType;
+    if (input.domain !== undefined) u.domain = input.domain;
+    if (input.protocol !== undefined) u.protocol = input.protocol;
+    if (input.targetHost !== undefined) u.targetHost = input.targetHost;
+    if (input.targetPort !== undefined) u.targetPort = input.targetPort;
+    if (input.parameters !== undefined) u.parameters = input.parameters;
     if (Object.keys(u).length) await db.update(testProfiles).set(u).where(eq(testProfiles.id, input.profileId));
     await writeAuditLog({ userId: ctx.user!.id, action: "PROFILE_UPDATED", entity: "test_profile", entityId: String(input.profileId) });
     return { success: true };
@@ -108,17 +136,24 @@ export const scenariosRouter = router({
     return r[0];
   }),
   create: protectedProcedure.input(z.object({
-    projectId: z.number(), name: z.string().min(1), description: z.string().optional(),
-    profileId: z.number().optional(), testType: z.enum(["VABF", "VSR", "VABE"]).default("VABF"),
+    projectId: z.string(), name: z.string().min(1), description: z.string().optional(),
+    profileId: z.string().optional(), testType: z.enum(["VABF", "VSR", "VABE"]).default("VABF"),
     status: z.enum(["DRAFT", "FINAL", "DEPRECATED"]).default("DRAFT"),
-    priority: z.enum(["P0", "P1", "P2"]).default("P1"), steps: z.any().optional(),
+    steps: z.any().optional(),
+    scenarioCode: z.string().optional(),
+    requiredDatasetTypes: z.any().optional(),
   })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const uid = randomUUID();
+    const scenarioCode = input.scenarioCode || `SC-${Date.now().toString(36).toUpperCase()}`;
     const res = await db.insert(testScenarios).values({
+      uid,
+      scenarioCode,
       projectId: input.projectId, name: input.name, description: input.description ?? null,
-      profileId: input.profileId ?? null, testType: input.testType, status: input.status,
-      priority: input.priority, steps: input.steps ?? null, createdBy: ctx.user!.id,
+      profileId: input.profileId ?? "", testType: input.testType, status: input.status,
+      steps: input.steps ?? null,
+      requiredDatasetTypes: input.requiredDatasetTypes ?? null,
     });
     await writeAuditLog({ userId: ctx.user!.id, action: "SCENARIO_CREATED", entity: "test_scenario", entityId: String(res[0].insertId) });
     return { success: true, scenarioId: Number(res[0].insertId) };
@@ -127,7 +162,8 @@ export const scenariosRouter = router({
     scenarioId: z.number(), name: z.string().optional(), description: z.string().optional(),
     testType: z.enum(["VABF", "VSR", "VABE"]).optional(),
     status: z.enum(["DRAFT", "FINAL", "DEPRECATED"]).optional(),
-    priority: z.enum(["P0", "P1", "P2"]).optional(), steps: z.any().optional(),
+    steps: z.any().optional(),
+    requiredDatasetTypes: z.any().optional(),
   })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
@@ -136,8 +172,8 @@ export const scenariosRouter = router({
     if (input.description !== undefined) u.description = input.description;
     if (input.testType !== undefined) u.testType = input.testType;
     if (input.status !== undefined) u.status = input.status;
-    if (input.priority !== undefined) u.priority = input.priority;
     if (input.steps !== undefined) u.steps = input.steps;
+    if (input.requiredDatasetTypes !== undefined) u.requiredDatasetTypes = input.requiredDatasetTypes;
     if (Object.keys(u).length) await db.update(testScenarios).set(u).where(eq(testScenarios.id, input.scenarioId));
     await writeAuditLog({ userId: ctx.user!.id, action: "SCENARIO_UPDATED", entity: "test_scenario", entityId: String(input.scenarioId) });
     return { success: true };
@@ -160,7 +196,8 @@ export const scenariosRouter = router({
     // Fetch linked profile if any
     let profile: Record<string, unknown> | null = null;
     if (scenario.profileId) {
-      const [p] = await db.select().from(testProfiles).where(eq(testProfiles.id, scenario.profileId)).limit(1);
+      // profileId is a varchar uid, we need to look up by uid
+      const [p] = await db.select().from(testProfiles).where(eq(testProfiles.uid, scenario.profileId)).limit(1);
       if (p) {
         profile = {
           name: p.name,
@@ -171,7 +208,7 @@ export const scenariosRouter = router({
       }
     }
 
-    // Fetch datasets for same project (no direct FK, export all project datasets)
+    // Fetch datasets for same project
     const projectDatasets = await db.select().from(datasets).where(eq(datasets.projectId, scenario.projectId)).limit(100);
 
     const exportPayload = {
@@ -182,15 +219,14 @@ export const scenariosRouter = router({
         description: scenario.description,
         testType: scenario.testType,
         status: scenario.status,
-        priority: scenario.priority,
         steps: scenario.steps,
       },
       profile,
       datasets: projectDatasets.map(d => ({
         name: d.name,
         description: d.description,
-        datasetType: d.datasetType,
-        data: d.data,
+        format: d.format,
+        datasetTypeId: d.datasetTypeId,
       })),
     };
     return exportPayload;
@@ -198,7 +234,7 @@ export const scenariosRouter = router({
 
   // ── Import scenario from portable JSON ────────────────────────────────
   import: protectedProcedure.input(z.object({
-    projectId: z.number(),
+    projectId: z.string(),
     payload: z.object({
       _format: z.literal("agilestest-scenario-v1"),
       scenario: z.object({
@@ -206,7 +242,6 @@ export const scenariosRouter = router({
         description: z.string().nullable().optional(),
         testType: z.enum(["VABF", "VSR", "VABE"]).default("VABF"),
         status: z.enum(["DRAFT", "FINAL", "DEPRECATED"]).default("DRAFT"),
-        priority: z.enum(["P0", "P1", "P2"]).default("P1"),
         steps: z.any().optional(),
       }),
       profile: z.object({
@@ -218,8 +253,8 @@ export const scenariosRouter = router({
       datasets: z.array(z.object({
         name: z.string(),
         description: z.string().nullable().optional(),
-        datasetType: z.string(),
-        data: z.any().optional(),
+        format: z.enum(["CSV", "JSON", "YAML"]).default("CSV"),
+        datasetTypeId: z.string().optional(),
       })).optional(),
     }),
     importProfile: z.boolean().default(true),
@@ -230,22 +265,24 @@ export const scenariosRouter = router({
     const { projectId, payload, importProfile, importDatasets } = input;
     const userId = ctx.user!.id;
 
-    let profileId: number | null = null;
+    let profileUid: string | null = null;
     const importedDatasetIds: number[] = [];
     const warnings: string[] = [];
 
     // Import profile if requested and present
     if (importProfile && payload.profile) {
       try {
+        const uid = randomUUID();
         const res = await db.insert(testProfiles).values({
+          uid,
           projectId,
           name: payload.profile.name,
           description: payload.profile.description ?? null,
           profileType: payload.profile.profileType ?? "WEB",
           config: payload.profile.config ?? null,
-          createdBy: userId,
+          testType: "VABF",
         });
-        profileId = Number(res[0].insertId);
+        profileUid = uid;
       } catch (err: any) {
         warnings.push(`Profil non importé: ${err.message}`);
       }
@@ -255,13 +292,14 @@ export const scenariosRouter = router({
     if (importDatasets && payload.datasets && payload.datasets.length > 0) {
       for (const ds of payload.datasets) {
         try {
+          const uid = randomUUID();
           const res = await db.insert(datasets).values({
+            uid,
             projectId,
             name: ds.name,
             description: ds.description ?? null,
-            datasetType: ds.datasetType,
-            data: ds.data ?? null,
-            createdBy: userId,
+            format: ds.format ?? "CSV",
+            datasetTypeId: ds.datasetTypeId ?? null,
           });
           importedDatasetIds.push(Number(res[0].insertId));
         } catch (err: any) {
@@ -271,16 +309,18 @@ export const scenariosRouter = router({
     }
 
     // Import scenario
+    const scenarioUid = randomUUID();
+    const scenarioCode = `SC-IMP-${Date.now().toString(36).toUpperCase()}`;
     const scenarioRes = await db.insert(testScenarios).values({
+      uid: scenarioUid,
+      scenarioCode,
       projectId,
       name: payload.scenario.name,
       description: payload.scenario.description ?? null,
       testType: payload.scenario.testType ?? "VABF",
-      status: "DRAFT", // Always import as DRAFT
-      priority: payload.scenario.priority ?? "P1",
+      status: "DRAFT",
       steps: payload.scenario.steps ?? null,
-      profileId,
-      createdBy: userId,
+      profileId: profileUid ?? "",
     });
     const scenarioId = Number(scenarioRes[0].insertId);
 
@@ -289,7 +329,7 @@ export const scenariosRouter = router({
     return {
       success: true,
       scenarioId,
-      profileId,
+      profileUid,
       importedDatasets: importedDatasetIds.length,
       warnings,
     };
@@ -306,7 +346,7 @@ export const datasetsRouter = router({
     const { page, pageSize, offset } = normalizePagination(input);
     const conditions: SQL[] = [eq(datasets.projectId, input.projectId)];
     if (input.search) conditions.push(like(datasets.name, `%${input.search}%`));
-    if (input.datasetType) conditions.push(eq(datasets.datasetType, input.datasetType));
+    if (input.datasetType) conditions.push(eq(datasets.datasetTypeId, input.datasetType));
     const where = and(...conditions);
     const [data, cnt] = await Promise.all([
       db.select().from(datasets).where(where).orderBy(desc(datasets.createdAt)).limit(pageSize).offset(offset),
@@ -316,28 +356,39 @@ export const datasetsRouter = router({
     return { data, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
   }),
   create: protectedProcedure.input(z.object({
-    projectId: z.number(), name: z.string().min(1), description: z.string().optional(),
-    datasetType: z.string(), data: z.any().optional(),
+    projectId: z.string(), name: z.string().min(1), description: z.string().optional(),
+    format: z.enum(["CSV", "JSON", "YAML"]).default("CSV"),
+    datasetTypeId: z.string().optional(),
+    rowCount: z.number().optional(),
+    sizeBytes: z.number().optional(),
+    storageUrl: z.string().optional(),
   })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const uid = randomUUID();
     const res = await db.insert(datasets).values({
+      uid,
       projectId: input.projectId, name: input.name, description: input.description ?? null,
-      datasetType: input.datasetType, data: input.data ?? null, createdBy: ctx.user!.id,
+      format: input.format,
+      datasetTypeId: input.datasetTypeId ?? null,
+      rowCount: input.rowCount ?? null,
+      sizeBytes: input.sizeBytes ?? null,
+      storageUrl: input.storageUrl ?? null,
     });
     return { success: true, datasetId: Number(res[0].insertId) };
   }),
   update: protectedProcedure.input(z.object({
     datasetId: z.number(), name: z.string().optional(), description: z.string().optional(),
-    datasetType: z.string().optional(), data: z.any().optional(),
+    format: z.enum(["CSV", "JSON", "YAML"]).optional(),
+    datasetTypeId: z.string().optional(),
   })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     const u: Record<string, unknown> = {};
     if (input.name !== undefined) u.name = input.name;
     if (input.description !== undefined) u.description = input.description;
-    if (input.datasetType !== undefined) u.datasetType = input.datasetType;
-    if (input.data !== undefined) u.data = input.data;
+    if (input.format !== undefined) u.format = input.format;
+    if (input.datasetTypeId !== undefined) u.datasetTypeId = input.datasetTypeId;
     if (Object.keys(u).length) await db.update(datasets).set(u).where(eq(datasets.id, input.datasetId));
     return { success: true };
   }),
@@ -353,7 +404,7 @@ export const datasetsRouter = router({
 export const executionsRouter = router({
   list: protectedProcedure.input(projectScopedList.extend({
     status: z.enum(["PENDING", "RUNNING", "PASSED", "FAILED", "ERROR", "CANCELLED"]).optional(),
-    scenarioId: z.number().optional(),
+    scenarioId: z.string().optional(),
   })).query(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
@@ -374,16 +425,17 @@ export const executionsRouter = router({
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     const r = await db.select().from(executions).where(eq(executions.id, input.executionId)).limit(1);
     if (!r.length) throw new TRPCError({ code: "NOT_FOUND", message: "Exécution introuvable" });
-    // Fetch related data in parallel
+    // Fetch related data in parallel — use uid-based lookups for varchar FK columns
+    const exec = r[0];
     const [arts, incs, analyses, scenario, profile] = await Promise.all([
-      db.select().from(artifacts).where(eq(artifacts.executionId, input.executionId)),
+      db.select().from(artifacts).where(eq(artifacts.executionId, exec.uid)),
       db.select().from(incidents).where(eq(incidents.executionId, input.executionId)).orderBy(desc(incidents.createdAt)),
       db.select().from(aiAnalyses).where(eq(aiAnalyses.executionId, input.executionId)).orderBy(desc(aiAnalyses.createdAt)),
-      r[0].scenarioId ? db.select().from(testScenarios).where(eq(testScenarios.id, r[0].scenarioId)).limit(1) : Promise.resolve([]),
-      r[0].profileId ? db.select().from(testProfiles).where(eq(testProfiles.id, r[0].profileId)).limit(1) : Promise.resolve([]),
+      exec.scenarioId ? db.select().from(testScenarios).where(eq(testScenarios.uid, exec.scenarioId)).limit(1) : Promise.resolve([]),
+      exec.profileId ? db.select().from(testProfiles).where(eq(testProfiles.uid, exec.profileId)).limit(1) : Promise.resolve([]),
     ]);
     return {
-      ...r[0],
+      ...exec,
       artifacts: arts,
       incidents: incs,
       analyses,
@@ -392,17 +444,19 @@ export const executionsRouter = router({
     };
   }),
   create: protectedProcedure.input(z.object({
-    projectId: z.number(), profileId: z.number().optional(), scenarioId: z.number().optional(),
+    projectId: z.string(), profileId: z.string().optional(), scenarioId: z.string().optional(),
     runnerType: z.string().optional(), scriptId: z.string().optional(),
     targetEnv: z.enum(["DEV", "PREPROD", "PILOT_ORANGE", "PROD"]).default("DEV"),
   })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const uid = randomUUID();
     const res = await db.insert(executions).values({
-      projectId: input.projectId, profileId: input.profileId ?? null,
-      scenarioId: input.scenarioId ?? null, status: "PENDING",
+      uid,
+      projectId: input.projectId, profileId: input.profileId ?? "",
+      scenarioId: input.scenarioId ?? "", status: "PENDING",
       runnerType: input.runnerType ?? null, scriptId: input.scriptId ?? null,
-      targetEnv: input.targetEnv, createdBy: ctx.user!.id,
+      targetEnv: input.targetEnv,
     });
     await writeAuditLog({ userId: ctx.user!.id, action: "EXECUTION_CREATED", entity: "execution", entityId: String(res[0].insertId) });
     return { success: true, executionId: Number(res[0].insertId) };
@@ -434,8 +488,8 @@ export const capturesRouter = router({
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     const { page, pageSize, offset } = normalizePagination(input);
-    const conditions: SQL[] = [eq(captures.projectId, input.projectId)];
-    // Status filter (single or array)
+    // captures.projectId is still int in DB
+    const conditions: SQL[] = [eq(captures.projectId, Number(input.projectId))];
     if (input.status) {
       const statuses = Array.isArray(input.status) ? input.status : [input.status];
       if (statuses.length === 1) {
@@ -444,15 +498,12 @@ export const capturesRouter = router({
         conditions.push(inArray(captures.status, statuses));
       }
     }
-    // Probe filter: match probeId stored in config JSON
     if (input.probeId) {
       conditions.push(sql`JSON_EXTRACT(${captures.config}, '$.probeId') = ${input.probeId}`);
     }
-    // Text search on name
     if (input.q && input.q.trim()) {
       conditions.push(like(captures.name, `%${input.q.trim()}%`));
     }
-    // General search (same as existing "search" param)
     if (input.search && input.search.trim()) {
       conditions.push(like(captures.name, `%${input.search.trim()}%`));
     }
@@ -465,7 +516,7 @@ export const capturesRouter = router({
     return { data, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
   }),
   create: protectedProcedure.input(z.object({
-    projectId: z.number(), name: z.string().min(1), executionId: z.number().optional(),
+    projectId: z.string(), name: z.string().min(1), executionId: z.number().optional(),
     captureType: z.enum(["LOGS", "PCAP"]).default("PCAP"),
     targetType: z.enum(["K8S", "SSH", "PROBE"]).default("SSH"),
     probeId: z.number().optional(),
@@ -473,25 +524,21 @@ export const capturesRouter = router({
   })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
-    // Validate probeId when targetType is PROBE
     if (input.targetType === "PROBE") {
       if (!input.probeId) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "probeId requis quand targetType=PROBE" });
       }
-      // Verify probe exists and is ONLINE
       const [probe] = await db.select().from(probes).where(eq(probes.id, input.probeId)).limit(1);
       if (!probe) throw new TRPCError({ code: "NOT_FOUND", message: "Sonde introuvable" });
     }
-    // Build config: merge probeId into config JSON when targetType=PROBE
     let configValue = typeof input.config === 'object' && input.config ? { ...input.config } : {};
     if (input.targetType === "PROBE" && input.probeId) {
       configValue = { ...configValue, probeId: input.probeId };
     } else {
-      // Strip probeId from config if not PROBE target
       delete (configValue as any).probeId;
     }
     const res = await db.insert(captures).values({
-      projectId: input.projectId, name: input.name, executionId: input.executionId ?? null,
+      projectId: Number(input.projectId), name: input.name, executionId: input.executionId ?? null,
       captureType: input.captureType, targetType: input.targetType,
       config: Object.keys(configValue).length ? configValue : null, status: "QUEUED", createdBy: ctx.user!.id,
     });
@@ -507,7 +554,6 @@ export const capturesRouter = router({
 
 // ─── Probes ─────────────────────────────────────────────────────────────────
 export const probesRouter = router({
-  /** Lightweight list for dropdowns (id, name, type, status) */
   listLite: protectedProcedure.input(z.object({
     q: z.string().optional(),
     status: z.enum(["ONLINE", "OFFLINE", "DEGRADED"]).optional(),
@@ -523,7 +569,6 @@ export const probesRouter = router({
     }).from(probes).where(where).orderBy(probes.name).limit(200);
     return rows;
   }),
-  /** Monitoring endpoint with server-side health calculation */
   monitoring: protectedProcedure.input(z.object({
     q: z.string().optional(),
     probeType: z.enum(["LINUX_EDGE", "K8S_CLUSTER", "NETWORK_TAP"]).optional(),
@@ -537,7 +582,6 @@ export const probesRouter = router({
     if (input?.q) conditions.push(like(probes.name, `%${input.q}%`));
     const where = conditions.length ? and(...conditions) : undefined;
     const rows = await db.select().from(probes).where(where).orderBy(probes.name).limit(500);
-    // Server-side health calculation
     const HEALTH_GREEN_SEC = Number(process.env.PROBE_HEALTH_GREEN_SEC ?? 60);
     const HEALTH_ORANGE_SEC = Number(process.env.PROBE_HEALTH_ORANGE_SEC ?? 300);
     const now = Date.now();
@@ -549,7 +593,7 @@ export const probesRouter = router({
         else if (ageSec <= HEALTH_ORANGE_SEC) health = "ORANGE";
         else health = "RED";
       } else if (p.status === "ONLINE") {
-        health = "ORANGE"; // ONLINE but no heartbeat
+        health = "ORANGE";
       } else if (p.status === "DEGRADED") {
         health = "ORANGE";
       }
@@ -584,12 +628,10 @@ export const probesRouter = router({
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     const r = await db.select().from(probes).where(eq(probes.id, input.probeId)).limit(1);
     if (!r.length) throw new TRPCError({ code: "NOT_FOUND", message: "Sonde introuvable" });
-    // Fetch captures linked to this probe (targetType = PROBE)
     const linkedCaptures = await db.select().from(captures)
       .where(and(eq(captures.targetType, "PROBE")))
       .orderBy(desc(captures.createdAt))
       .limit(50);
-    // Filter captures whose config references this probe
     const probeCaptures = linkedCaptures.filter((c: any) => {
       try {
         const cfg = typeof c.config === 'string' ? JSON.parse(c.config) : c.config;
@@ -658,7 +700,8 @@ export const scriptsRouter = router({
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     const { page, pageSize, offset } = normalizePagination(input);
-    const conditions: SQL[] = [eq(generatedScripts.projectId, input.projectId)];
+    // generatedScripts.projectId is still int
+    const conditions: SQL[] = [eq(generatedScripts.projectId, Number(input.projectId))];
     if (input.search) conditions.push(like(generatedScripts.name, `%${input.search}%`));
     const where = and(...conditions);
     const [data, cnt] = await Promise.all([
@@ -669,14 +712,14 @@ export const scriptsRouter = router({
     return { data, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
   }),
   create: protectedProcedure.input(z.object({
-    projectId: z.number(), scenarioId: z.number().optional(),
+    projectId: z.string(), scenarioId: z.number().optional(),
     name: z.string().min(1), framework: z.string(), language: z.string().default("typescript"),
     code: z.string(),
   })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     const res = await db.insert(generatedScripts).values({
-      projectId: input.projectId, scenarioId: input.scenarioId ?? null,
+      projectId: Number(input.projectId), scenarioId: input.scenarioId ?? null,
       name: input.name, framework: input.framework, language: input.language,
       code: input.code, status: "DRAFT", createdBy: ctx.user!.id,
     });

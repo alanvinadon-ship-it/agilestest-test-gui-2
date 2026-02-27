@@ -20,27 +20,36 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
 // ─── Projects ───────────────────────────────────────────────────────────────
+// DB columns: id, uid, name, description, domain, status, created_by, created_at, updated_at
 export const projects = mysqlTable("projects", {
   id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
-  domain: varchar("domain", { length: 64 }).default("WEB").notNull(),
+  domain: varchar("domain", { length: 50 }).default("WEB").notNull(),
   status: mysqlEnum("status", ["ACTIVE", "ARCHIVED", "DRAFT"]).default("ACTIVE").notNull(),
-  createdBy: int("createdBy").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  createdBy: varchar("created_by", { length: 64 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
 export type Project = typeof projects.$inferSelect;
 export type InsertProject = typeof projects.$inferInsert;
 
 // ─── Project Memberships ────────────────────────────────────────────────────
+// DB columns: id, uid, project_id, project_name, user_id, user_email, user_name, project_role, added_by, created_at, updated_at
 export const projectMemberships = mysqlTable("project_memberships", {
   id: int("id").autoincrement().primaryKey(),
-  projectId: int("projectId").notNull(),
-  userId: int("userId").notNull(),
-  role: mysqlEnum("role", ["ADMIN", "MANAGER", "VIEWER"]).default("VIEWER").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  uid: varchar("uid", { length: 36 }).notNull(),
+  projectId: varchar("project_id", { length: 36 }).notNull(),
+  projectName: varchar("project_name", { length: 255 }),
+  userId: varchar("user_id", { length: 64 }).notNull(),
+  userEmail: varchar("user_email", { length: 320 }),
+  userName: varchar("user_name", { length: 255 }),
+  role: mysqlEnum("project_role", ["PROJECT_ADMIN", "PROJECT_EDITOR", "PROJECT_VIEWER"]).default("PROJECT_VIEWER").notNull(),
+  addedBy: varchar("added_by", { length: 64 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
 export type ProjectMembership = typeof projectMemberships.$inferSelect;
@@ -77,94 +86,120 @@ export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = typeof auditLogs.$inferInsert;
 
 // ─── Test Profiles ──────────────────────────────────────────────────────────
+// DB columns: id, uid, project_id, name, description, protocol, test_type, domain, profile_type, target_host, target_port, parameters, config, created_at, updated_at
 export const testProfiles = mysqlTable("test_profiles", {
   id: int("id").autoincrement().primaryKey(),
-  projectId: int("projectId").notNull(),
+  uid: varchar("uid", { length: 36 }).notNull(),
+  projectId: varchar("project_id", { length: 36 }).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
-  profileType: varchar("profileType", { length: 64 }).default("WEB").notNull(),
+  protocol: varchar("protocol", { length: 50 }),
+  testType: mysqlEnum("test_type", ["VABF", "VSR", "VABE"]).default("VABF").notNull(),
+  domain: varchar("domain", { length: 50 }),
+  profileType: varchar("profile_type", { length: 50 }),
+  targetHost: varchar("target_host", { length: 255 }),
+  targetPort: int("target_port"),
+  parameters: json("parameters"),
   config: json("config"),
-  createdBy: int("createdBy").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
 export type TestProfile = typeof testProfiles.$inferSelect;
 export type InsertTestProfile = typeof testProfiles.$inferInsert;
 
 // ─── Test Scenarios ─────────────────────────────────────────────────────────
+// DB columns: id, uid, scenario_code, project_id, profile_id, name, description, test_type, status, version, steps, required_dataset_types, artifact_policy, kpi_thresholds, created_at, updated_at
 export const testScenarios = mysqlTable("test_scenarios", {
   id: int("id").autoincrement().primaryKey(),
-  projectId: int("projectId").notNull(),
-  profileId: int("profileId"),
+  uid: varchar("uid", { length: 36 }).notNull(),
+  scenarioCode: varchar("scenario_code", { length: 100 }).notNull(),
+  projectId: varchar("project_id", { length: 36 }).notNull(),
+  profileId: varchar("profile_id", { length: 36 }).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
-  testType: mysqlEnum("testType", ["VABF", "VSR", "VABE"]).default("VABF").notNull(),
+  testType: mysqlEnum("test_type", ["VABF", "VSR", "VABE"]).default("VABF").notNull(),
   status: mysqlEnum("status", ["DRAFT", "FINAL", "DEPRECATED"]).default("DRAFT").notNull(),
-  priority: mysqlEnum("priority", ["P0", "P1", "P2"]).default("P1").notNull(),
+  version: int("version"),
   steps: json("steps"),
-  createdBy: int("createdBy").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  requiredDatasetTypes: json("required_dataset_types"),
+  artifactPolicy: json("artifact_policy"),
+  kpiThresholds: json("kpi_thresholds"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
 export type TestScenario = typeof testScenarios.$inferSelect;
 export type InsertTestScenario = typeof testScenarios.$inferInsert;
 
 // ─── Datasets ───────────────────────────────────────────────────────────────
+// DB columns: id, uid, project_id, name, description, format, row_count, size_bytes, storage_url, dataset_type_id, created_at, updated_at
 export const datasets = mysqlTable("datasets", {
   id: int("id").autoincrement().primaryKey(),
-  projectId: int("projectId").notNull(),
+  uid: varchar("uid", { length: 36 }).notNull(),
+  projectId: varchar("project_id", { length: 36 }).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
-  datasetType: varchar("datasetType", { length: 128 }).notNull(),
-  data: json("data"),
-  createdBy: int("createdBy").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  format: mysqlEnum("format", ["CSV", "JSON", "YAML"]).default("CSV").notNull(),
+  rowCount: int("row_count"),
+  sizeBytes: int("size_bytes"),
+  storageUrl: varchar("storage_url", { length: 500 }),
+  datasetTypeId: varchar("dataset_type_id", { length: 100 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
 export type Dataset = typeof datasets.$inferSelect;
 export type InsertDataset = typeof datasets.$inferInsert;
 
 // ─── Executions ─────────────────────────────────────────────────────────────
+// DB columns: id, uid, project_id, profile_id, scenario_id, status, runner_type, script_id, script_version, dataset_bundle_id, target_env, runner_id, ai_repair_from_execution_id, started_at, finished_at, duration_ms, artifacts_count, incidents_count, created_at, updated_at
 export const executions = mysqlTable("executions", {
   id: int("id").autoincrement().primaryKey(),
-  projectId: int("projectId").notNull(),
-  profileId: int("profileId"),
-  scenarioId: int("scenarioId"),
+  uid: varchar("uid", { length: 36 }).notNull(),
+  projectId: varchar("project_id", { length: 36 }).notNull(),
+  profileId: varchar("profile_id", { length: 36 }).notNull(),
+  scenarioId: varchar("scenario_id", { length: 36 }).notNull(),
   status: mysqlEnum("status", ["PENDING", "RUNNING", "PASSED", "FAILED", "ERROR", "CANCELLED"]).default("PENDING").notNull(),
-  runnerType: varchar("runnerType", { length: 64 }),
-  scriptId: varchar("scriptId", { length: 128 }),
-  scriptVersion: int("scriptVersion"),
-  datasetBundleId: int("datasetBundleId"),
-  targetEnv: mysqlEnum("targetEnv", ["DEV", "PREPROD", "PILOT_ORANGE", "PROD"]).default("DEV"),
-  runnerId: varchar("runnerId", { length: 128 }),
-  startedAt: timestamp("startedAt"),
-  finishedAt: timestamp("finishedAt"),
-  durationMs: int("durationMs"),
-  artifactsCount: int("artifactsCount").default(0).notNull(),
-  incidentsCount: int("incidentsCount").default(0).notNull(),
-  createdBy: int("createdBy").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  runnerType: varchar("runner_type", { length: 50 }),
+  scriptId: varchar("script_id", { length: 36 }),
+  scriptVersion: int("script_version"),
+  datasetBundleId: varchar("dataset_bundle_id", { length: 36 }),
+  targetEnv: mysqlEnum("target_env", ["DEV", "PREPROD", "PILOT_ORANGE", "PROD"]).default("DEV"),
+  runnerId: varchar("runner_id", { length: 64 }),
+  aiRepairFromExecutionId: varchar("ai_repair_from_execution_id", { length: 36 }),
+  startedAt: timestamp("started_at"),
+  finishedAt: timestamp("finished_at"),
+  durationMs: int("duration_ms"),
+  artifactsCount: int("artifacts_count").default(0),
+  incidentsCount: int("incidents_count").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
 export type Execution = typeof executions.$inferSelect;
 export type InsertExecution = typeof executions.$inferInsert;
 
 // ─── Artifacts ──────────────────────────────────────────────────────────────
+// DB columns: id, uid, execution_id, type, filename, name, mime_type, content_type, size_bytes, storage_path, storage_url, s3_uri, checksum, capture_job_id, download_url, created_at, uploaded_at
 export const artifacts = mysqlTable("artifacts", {
   id: int("id").autoincrement().primaryKey(),
-  executionId: int("executionId").notNull(),
-  type: varchar("type", { length: 64 }).default("OTHER").notNull(),
-  filename: varchar("filename", { length: 512 }).notNull(),
-  mimeType: varchar("mimeType", { length: 128 }),
-  sizeBytes: int("sizeBytes").default(0).notNull(),
-  storagePath: varchar("storagePath", { length: 1024 }),
-  storageUrl: varchar("storageUrl", { length: 1024 }),
+  uid: varchar("uid", { length: 36 }).notNull(),
+  executionId: varchar("execution_id", { length: 36 }).notNull(),
+  type: varchar("type", { length: 50 }).notNull(),
+  filename: varchar("filename", { length: 500 }).notNull(),
+  name: varchar("name", { length: 255 }),
+  mimeType: varchar("mime_type", { length: 100 }),
+  contentType: varchar("content_type", { length: 100 }),
+  sizeBytes: int("size_bytes"),
+  storagePath: varchar("storage_path", { length: 500 }),
+  storageUrl: varchar("storage_url", { length: 500 }),
+  s3Uri: varchar("s3_uri", { length: 500 }),
   checksum: varchar("checksum", { length: 128 }),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  captureJobId: varchar("capture_job_id", { length: 36 }),
+  downloadUrl: varchar("download_url", { length: 500 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  uploadedAt: timestamp("uploaded_at"),
 });
 
 export type Artifact = typeof artifacts.$inferSelect;
@@ -278,6 +313,7 @@ export type AiAnalysis = typeof aiAnalyses.$inferSelect;
 export type InsertAiAnalysis = typeof aiAnalyses.$inferInsert;
 
 // ─── Reports (PDF exports) ──────────────────────────────────────────────────
+// Note: reports table still uses camelCase column names in DB
 export const reports = mysqlTable("reports", {
   id: int("id").autoincrement().primaryKey(),
   executionId: int("executionId").notNull(),
@@ -297,18 +333,13 @@ export type Report = typeof reports.$inferSelect;
 export type InsertReport = typeof reports.$inferInsert;
 
 // ─── Probe Alert State ─────────────────────────────────────────────────────
-// Tracks health state per probe for alerting (RED > 5min → notify, anti-spam 30min)
 export const probeAlertState = mysqlTable("probe_alert_state", {
   id: int("id").autoincrement().primaryKey(),
   probeId: int("probeId").notNull(),
   orgId: int("orgId").notNull(),
-  /** Current health state: GREEN, ORANGE, RED */
   healthState: mysqlEnum("healthState", ["GREEN", "ORANGE", "RED"]).default("GREEN").notNull(),
-  /** When the probe first entered RED state (null if not RED) */
   redSinceAt: timestamp("redSinceAt"),
-  /** Last time a notification was sent for this probe */
   lastNotifiedAt: timestamp("lastNotifiedAt"),
-  /** Number of consecutive RED alerts sent */
   alertCount: int("alertCount").default(0).notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

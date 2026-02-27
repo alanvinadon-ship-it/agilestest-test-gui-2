@@ -25,7 +25,7 @@ const captureStatusConfig: Record<CaptureStatus, { icon: typeof CheckCircle2; la
 
 // ─── Create Capture Modal ────────────────────────────────────────────────
 function CreateCaptureModal({ isOpen, onClose, projectId }: {
-  isOpen: boolean; onClose: () => void; projectId: number;
+  isOpen: boolean; onClose: () => void; projectId: string;
 }) {
   const utils = trpc.useUtils();
   const [name, setName] = useState('');
@@ -44,7 +44,7 @@ function CreateCaptureModal({ isOpen, onClose, projectId }: {
 
   // Fetch executions for the project to link capture
   const { data: execData } = trpc.executions.list.useQuery(
-    { projectId, page: 1, pageSize: 20 },
+    { projectId: String(projectId), page: 1, pageSize: 20 },
     { enabled: isOpen },
   );
   const executions = execData?.data ?? [];
@@ -67,7 +67,7 @@ function CreateCaptureModal({ isOpen, onClose, projectId }: {
     if (targetType === 'PROBE' && !probeId) { setError('Sonde requise quand la cible est PROBE.'); return; }
 
     createMutation.mutate({
-      projectId,
+      projectId: String(projectId),
       name: name.trim(),
       executionId: executionId ? Number(executionId) : undefined,
       captureType,
@@ -234,7 +234,7 @@ export default function CapturesPage() {
 
   const { data, isLoading, isPlaceholderData } = trpc.captures.list.useQuery(
     {
-      projectId: Number(currentProject?.id) || 0,
+      projectId: String(currentProject?.id || ''),
       page,
       pageSize,
       ...(statusFilter ? { status: statusFilter as CaptureStatus } : {}),
@@ -442,7 +442,7 @@ export default function CapturesPage() {
         </div>
       )}
 
-      <CreateCaptureModal isOpen={showCreate} onClose={() => setShowCreate(false)} projectId={Number(currentProject.id)} />
+      <CreateCaptureModal isOpen={showCreate} onClose={() => setShowCreate(false)} projectId={String(currentProject.id)} />
     </div>
   );
 }
