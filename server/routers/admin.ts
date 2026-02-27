@@ -222,12 +222,15 @@ export const adminRouter = router({
     const token = crypto.randomBytes(48).toString("hex");
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
+    const uid = crypto.randomUUID();
     await db.insert(invites).values({
+      uid,
       email: input.email,
       role: input.role,
       token,
       status: "PENDING",
-      invitedBy: ctx.user!.id,
+      invitedBy: String(ctx.user!.id),
+      invitedByName: ctx.user!.name ?? null,
       expiresAt,
     });
 

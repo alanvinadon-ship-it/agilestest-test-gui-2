@@ -379,3 +379,4 @@
 - [x] Sprint Analytics 3B: Backend — Probes RED alert unifié (probeAlertService.ts) + webhook dispatch analytics.success_rate.low
 - [x] Sprint Analytics 3C: Tests alertes (13 tests: threshold, cooldown, reset, probe health, webhook types)
 - [x] Sprint Analytics Final: 596 tests verts, 0 TS errors + checkpoint
+- [x] Fix: Schéma Drizzle invites — colonnes camelCase vs snake_case (invite_role, invite_status, invited_by, invited_by_name, expires_at, accepted_at, created_at) + ajout uid

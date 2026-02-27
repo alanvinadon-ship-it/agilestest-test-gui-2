@@ -55,16 +55,19 @@ export const projectMemberships = mysqlTable("project_memberships", {
 export type ProjectMembership = typeof projectMemberships.$inferSelect;
 
 // ─── Invites ────────────────────────────────────────────────────────────────
+// DB columns: id, uid, email, invite_role, invite_status, token, invited_by, invited_by_name, expires_at, accepted_at, created_at
 export const invites = mysqlTable("invites", {
   id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
   email: varchar("email", { length: 320 }).notNull(),
-  role: mysqlEnum("role", ["ADMIN", "MANAGER", "VIEWER"]).default("VIEWER").notNull(),
+  role: mysqlEnum("invite_role", ["ADMIN", "MANAGER", "VIEWER"]).default("VIEWER").notNull(),
   token: varchar("token", { length: 128 }).notNull().unique(),
-  status: mysqlEnum("status", ["PENDING", "ACCEPTED", "EXPIRED", "REVOKED"]).default("PENDING").notNull(),
-  invitedBy: int("invitedBy").notNull(),
-  acceptedAt: timestamp("acceptedAt"),
-  expiresAt: timestamp("expiresAt").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  status: mysqlEnum("invite_status", ["PENDING", "ACCEPTED", "EXPIRED", "REVOKED"]).default("PENDING").notNull(),
+  invitedBy: varchar("invited_by", { length: 64 }),
+  invitedByName: varchar("invited_by_name", { length: 255 }),
+  expiresAt: timestamp("expires_at").notNull(),
+  acceptedAt: timestamp("accepted_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export type Invite = typeof invites.$inferSelect;
