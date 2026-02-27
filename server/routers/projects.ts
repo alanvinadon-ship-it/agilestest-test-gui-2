@@ -151,10 +151,10 @@ export const projectsRouter = router({
       const scriptRows = await db.select().from(generatedScripts).where(eq(generatedScripts.projectId, input.projectId));
 
       // Fetch bundle items for each bundle
-      const allBundleItems: Record<number, any[]> = {};
+      const allBundleItems: Record<string, any[]> = {};
       for (const b of bundleRows) {
-        const items = await db.select().from(bundleItems).where(eq(bundleItems.bundleId, String(b.id)));
-        allBundleItems[b.id] = items;
+        const items = await db.select().from(bundleItems).where(eq(bundleItems.bundleId, b.uid));
+        allBundleItems[b.uid] = items;
       }
 
       return {
@@ -215,7 +215,7 @@ export const projectsRouter = router({
           version: b.version,
           status: b.status,
           tags: b.tags,
-          items: (allBundleItems[b.id] || []).map((item: any) => ({
+          items: (allBundleItems[b.uid] || []).map((item: any) => ({
             datasetId: item.datasetId,
             alias: item.alias,
           })),
@@ -280,7 +280,7 @@ export const projectsRouter = router({
 
       // Map old UIDs to new UIDs
       const profileUidMap = new Map<string, string>();
-      const instanceUidMap = new Map<string, number>();
+      const instanceUidMap = new Map<string, string>();
 
       // Import profiles
       if (exportData.profiles?.length) {
@@ -339,7 +339,7 @@ export const projectsRouter = router({
             valuesJson: di.valuesJson || {},
             notes: di.notes || "",
           }).$returningId();
-          if (di.uid) instanceUidMap.set(di.uid, result.id);
+          if (di.uid) instanceUidMap.set(di.uid, newUid);
         }
       }
 
@@ -359,13 +359,13 @@ export const projectsRouter = router({
 
           if (b.items?.length) {
             for (const item of b.items) {
-              const instanceId = item.datasetId
+              const newInstanceUid = item.datasetId
                 ? (instanceUidMap.get(item.datasetId) || null)
                 : null;
-              if (instanceId) {
+              if (newInstanceUid) {
                 await db.insert(bundleItems).values({
-                  bundleId: String(bundleResult.id),
-                  datasetId: String(instanceId),
+                  bundleId: newUid,
+                  datasetId: newInstanceUid,
                 });
               }
             }

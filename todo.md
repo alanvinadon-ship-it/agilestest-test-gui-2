@@ -364,3 +364,8 @@
 - [x] Chantier 13D: Frontend — KPI cards (9 cards: totalRuns, successRate, passedRuns, failedRuns, avgDuration, projectCount, openIncidents, redProbes, jobsBacklog) + period selector + auto-refresh 60s
 - [x] Chantier 13E: Documentation docs/ANALYTICS.md (endpoints, périodes, formules)
 - [x] Chantier 13 Final: Tests finaux (554 tests, TS=0) + checkpoint
+- [x] E2E Validation A: Analyse code export/import + helpers DB
+- [x] E2E Validation B: Test Vitest import-export.e2e.test.ts (seed peuplé: 5 profils, 10 scénarios, 6 dataset types, 20 instances, 3 bundles, 5 scripts)
+- [x] E2E Validation C: Assertions counts + intégrité FK + contenu normalisé + idempotence inject (16 tests)
+- [x] E2E Validation D: Documentation docs/IMPORT_EXPORT_VALIDATION.md
+- [x] E2E Validation Final: 570 tests verts, 0 TS errors + checkpoint

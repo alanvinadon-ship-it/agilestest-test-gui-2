@@ -846,7 +846,7 @@ export const scriptsRouter = router({
     const res = await db.insert(generatedScripts).values({
       uid,
       projectId: input.projectId, scenarioId: input.scenarioId ? String(input.scenarioId) : "",
-      framework: input.name || input.framework, language: input.language,
+      framework: input.framework || input.name, language: input.language,
       code: input.code, status: "DRAFT", createdBy: String(ctx.user!.id),
     });
     return { success: true, scriptId: Number(res[0].insertId) };
