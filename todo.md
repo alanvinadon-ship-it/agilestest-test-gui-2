@@ -204,7 +204,7 @@
 - [x] Étape 1: Frontend — BundlesPage migrée vers tRPC (bundles.list/create/update/delete)
 - [x] Étape 1: Frontend — Invalidation cache via utils.bundles.list.invalidate()
 - [x] Étape 1: Tests — 422 tests Vitest passent + vérification navigateur bundle persiste après refresh
-- [ ] Étape 2: Cleanup — repositoryApi/localStore encore utilisés par pages secondaires (DatasetsPage, DatasetTypesPage, DriveCampaignsPage)
+- [x] Étape 2: Cleanup — repositoryApi/localStore supprimés de DatasetsPage, DatasetTypesPage, DriveCampaignsPage (campagnes tRPC, sous-entités Drive encore localStorage)
 - [ ] Étape 2: Cleanup — Mettre à jour imports/exports/barrels
 - [ ] Étape 2: Cleanup — Gate anti-régression (script audit:legacy ou eslint rule)
 - [ ] Étape 2: Tests — build + typecheck + vitest OK après cleanup
@@ -216,3 +216,15 @@
 - [x] Fix: Migrer projectId vers UUID (uid) partout — useProjectQueries, projectStore, uiStorage, routeurs projects
 - [x] Fix: Corriger données orphelines dans DB — project_id numériques remplacés par UUID dans test_profiles, test_scenarios, executions
 - [x] Vérification: Bundle "BUNDLE_PERSISTANCE_TEST_V1" persiste après rafraîchissement ✓
+- [x] Sprint 3 Étape 1: Analyser pages secondaires (DatasetsPage, DatasetTypesPage, DriveCampaignsPage) et routeurs existants
+- [x] Sprint 3 Étape 1: Backend — Routeurs tRPC datasetTypes, datasetInstances, driveCampaigns déjà complets dans bundles.ts et driveCampaigns.ts
+- [x] Sprint 3 Étape 1: Frontend — Migrer DatasetsPage vers tRPC (datasetTypes.list + datasetInstances CRUD)
+- [x] Sprint 3 Étape 1: Frontend — Migrer DatasetTypesPage vers tRPC (datasetTypes.list/create/update/delete)
+- [x] Sprint 3 Étape 1: Frontend — Migrer DriveCampaignsPage vers tRPC (driveCampaigns.list/create/update/delete, routes/devices/probes restent localStorage)
+- [x] Sprint 3 Étape 1: Nettoyage — Imports repositoryApi supprimés des 3 pages migrées (localStore conservé pour sous-entités Drive)
+- [ ] Sprint 3 Étape 1: Gate anti-régression — script audit:legacy ou eslint no-restricted-imports
+- [ ] Sprint 3 Étape 2: Frontend — Cursor pagination UI "Charger plus" sur ProfilesPage
+- [ ] Sprint 3 Étape 2: Frontend — Cursor pagination UI "Charger plus" sur ScenariosPage
+- [ ] Sprint 3 Étape 3: DB — Index (project_id, created_at DESC, id DESC) sur test_profiles
+- [ ] Sprint 3 Étape 3: DB — Index (project_id, created_at DESC, id DESC) sur test_scenarios
+- [ ] Sprint 3: Tests verts + TS OK + vérification navigateur

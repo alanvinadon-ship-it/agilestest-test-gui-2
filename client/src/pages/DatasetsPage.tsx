@@ -2,16 +2,43 @@ import { useState, useMemo } from 'react';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
 import { usePermission, PermissionKey } from '../security';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { localDatasetTypes } from '../api/localStore';
-import { useDatasetStorage } from '../contexts/DatasetStorageContext';
-import type { DatasetInstance, DatasetType, TargetEnv, DatasetInstanceStatus } from '../types';
+import { trpc } from '@/lib/trpc';
+import type { DatasetTypeField, TestType } from '../types';
 import {
   Plus, Database, Loader2, Trash2, X, Search, Filter, Copy,
   Eye, EyeOff, Lock, CheckCircle2, Archive, FileText, ChevronDown,
   AlertTriangle, Save, Shield,
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+// ─── Types ───────────────────────────────────────────────────────────────
+
+type TargetEnv = 'DEV' | 'PREPROD' | 'PILOT_ORANGE' | 'PROD';
+type DatasetInstanceStatus = 'DRAFT' | 'ACTIVE' | 'DEPRECATED';
+
+interface DisplayDatasetInstance {
+  dataset_id: string;       // uid from DB
+  project_id: string;
+  dataset_type_id: string;
+  env: TargetEnv;
+  version: number;
+  status: DatasetInstanceStatus;
+  values_json: Record<string, unknown>;
+  notes: string;
+  created_at: string;
+}
+
+interface DisplayDatasetType {
+  id: string;
+  dataset_type_id: string;
+  domain: string;
+  test_type?: string | null;
+  name: string;
+  description: string;
+  schema_fields: DatasetTypeField[];
+  example_placeholders: Record<string, string>;
+  tags: string[];
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────
 
@@ -50,32 +77,58 @@ function StatusBadge({ status }: { status: DatasetInstanceStatus }) {
   );
 }
 
+// ─── Helpers: map DB rows ────────────────────────────────────────────────
+
+function mapInstance(row: any): DisplayDatasetInstance {
+  return {
+    dataset_id: row.uid ?? row.dataset_id ?? '',
+    project_id: row.projectId ?? row.project_id ?? '',
+    dataset_type_id: row.datasetTypeId ?? row.dataset_type_id ?? '',
+    env: (row.env ?? 'DEV') as TargetEnv,
+    version: row.version ?? 1,
+    status: (row.status ?? 'DRAFT') as DatasetInstanceStatus,
+    values_json: (row.valuesJson ?? row.values_json ?? {}) as Record<string, unknown>,
+    notes: row.notes ?? '',
+    created_at: row.createdAt ?? row.created_at ?? new Date().toISOString(),
+  };
+}
+
+function mapDatasetType(row: any): DisplayDatasetType {
+  return {
+    id: row.uid ?? row.id?.toString() ?? '',
+    dataset_type_id: row.datasetTypeId ?? row.dataset_type_id ?? '',
+    domain: row.domain ?? 'WEB',
+    test_type: row.testType ?? row.test_type ?? null,
+    name: row.name ?? '',
+    description: row.description ?? '',
+    schema_fields: (row.schemaFields ?? row.schema_fields ?? []) as DatasetTypeField[],
+    example_placeholders: (row.examplePlaceholders ?? row.example_placeholders ?? {}) as Record<string, string>,
+    tags: (row.tags ?? []) as string[],
+  };
+}
+
 // ─── Create Dataset Modal ─────────────────────────────────────────────────
 
 function CreateDatasetModal({ isOpen, onClose, projectId }: {
   isOpen: boolean; onClose: () => void; projectId: string;
 }) {
-  const queryClient = useQueryClient();
-  const { adapter } = useDatasetStorage();
+  const utils = trpc.useUtils();
   const [env, setEnv] = useState<TargetEnv>('PREPROD');
   const [datasetTypeId, setDatasetTypeId] = useState('');
   const [notes, setNotes] = useState('');
 
-  const { data: dtData } = useQuery({
-    queryKey: ['dataset_types_all'],
-    queryFn: () => localDatasetTypes.list(),
-  });
-  const datasetTypes = (dtData?.data || []) as DatasetType[];
+  // Fetch dataset types from DB via tRPC
+  const { data: dtData } = trpc.datasetTypes.list.useQuery();
+  const datasetTypes = useMemo(() => (dtData?.data || []).map(mapDatasetType), [dtData]);
 
-  const mutation = useMutation({
-    mutationFn: async () => adapter.instances.create(projectId, { dataset_type_id: datasetTypeId, env, notes }),
+  const mutation = trpc.datasetInstances.create.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dataset_instances'] });
+      utils.datasetInstances.list.invalidate();
       toast.success('Dataset instance créé');
       setDatasetTypeId(''); setNotes('');
       onClose();
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err) => toast.error(err.message),
   });
 
   if (!isOpen) return null;
@@ -138,7 +191,7 @@ function CreateDatasetModal({ isOpen, onClose, projectId }: {
             className="px-4 py-2 rounded-md border border-input text-sm font-medium text-foreground hover:bg-accent transition-colors">
             Annuler
           </button>
-          <button onClick={() => mutation.mutate()} disabled={!datasetTypeId || mutation.isPending}
+          <button onClick={() => mutation.mutate({ projectId, datasetTypeId, env, notes: notes || undefined })} disabled={!datasetTypeId || mutation.isPending}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50">
             {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
             Créer
@@ -149,65 +202,47 @@ function CreateDatasetModal({ isOpen, onClose, projectId }: {
   );
 }
 
-// ─── Edit Dataset Modal (JSON editor + secrets) ───────────────────────────
+// ─── Edit Dataset Modal (JSON editor) ───────────────────────────────────
 
 function EditDatasetModal({ instance, onClose }: {
-  instance: DatasetInstance; onClose: () => void;
+  instance: DisplayDatasetInstance; onClose: () => void;
 }) {
-  const queryClient = useQueryClient();
-  const { adapter } = useDatasetStorage();
+  const utils = trpc.useUtils();
   const [valuesJson, setValuesJson] = useState<Record<string, unknown>>({ ...instance.values_json });
   const [notes, setNotes] = useState(instance.notes || '');
   const [jsonError, setJsonError] = useState<string | null>(null);
-  const [showSecrets, setShowSecrets] = useState(false);
 
-  // Charger le gabarit pour afficher le schéma
+  // Fetch dataset type for schema display
+  const { data: dtData } = trpc.datasetTypes.list.useQuery();
   const dt = useMemo(() => {
-    try { return localDatasetTypes.get(instance.dataset_type_id); } catch { return null; }
-  }, [instance.dataset_type_id]);
+    const all = (dtData?.data || []).map(mapDatasetType);
+    return all.find(d => d.dataset_type_id === instance.dataset_type_id) ?? null;
+  }, [dtData, instance.dataset_type_id]);
 
-  // Charger les secrets via adapter
-  const { data: secretsData } = useQuery({
-    queryKey: ['dataset_secrets', instance.dataset_id],
-    queryFn: () => adapter.secrets.list(instance.dataset_id),
-  });
-  const secrets = secretsData || [];
-  const secretPaths = useMemo(() => new Set(secrets.filter(s => s.is_secret).map(s => s.key_path)), [secrets]);
-
-  const saveMutation = useMutation({
-    mutationFn: async () => adapter.instances.update(instance.dataset_id, { values_json: valuesJson, notes }),
+  const saveMutation = trpc.datasetInstances.update.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dataset_instances'] });
+      utils.datasetInstances.list.invalidate();
       toast.success('Dataset sauvegardé');
       onClose();
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err) => toast.error(err.message),
   });
 
-  const activateMutation = useMutation({
-    mutationFn: async () => adapter.instances.update(instance.dataset_id, { status: 'ACTIVE', values_json: valuesJson, notes }),
+  const activateMutation = trpc.datasetInstances.update.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dataset_instances'] });
+      utils.datasetInstances.list.invalidate();
       toast.success('Dataset activé');
       onClose();
     },
   });
 
-  const deprecateMutation = useMutation({
-    mutationFn: async () => adapter.instances.update(instance.dataset_id, { status: 'DEPRECATED' }),
+  const deprecateMutation = trpc.datasetInstances.update.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dataset_instances'] });
+      utils.datasetInstances.list.invalidate();
       toast.success('Dataset déprécié');
       onClose();
     },
   });
-
-  const toggleSecret = async (keyPath: string) => {
-    const isCurrentlySecret = secretPaths.has(keyPath);
-    await adapter.secrets.set(instance.dataset_id, keyPath, !isCurrentlySecret);
-    queryClient.invalidateQueries({ queryKey: ['dataset_secrets'] });
-    queryClient.invalidateQueries({ queryKey: ['dataset_instances'] });
-  };
 
   const handleFieldChange = (fieldName: string, value: string) => {
     setValuesJson(prev => ({ ...prev, [fieldName]: value }));
@@ -219,7 +254,7 @@ function EditDatasetModal({ instance, onClose }: {
       const parsed = JSON.parse(raw);
       setValuesJson(parsed);
       setJsonError(null);
-    } catch (e) {
+    } catch {
       setJsonError('JSON invalide');
     }
   };
@@ -258,13 +293,6 @@ function EditDatasetModal({ instance, onClose }: {
               {dt ? `${dt.schema_fields.length} champs définis dans le gabarit` : 'Gabarit non trouvé'}
             </p>
             <div className="flex items-center gap-2">
-              <button onClick={() => setShowSecrets(!showSecrets)}
-                className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors ${
-                  showSecrets ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'border-border text-muted-foreground hover:text-foreground'
-                }`}>
-                {showSecrets ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                {showSecrets ? 'Masquer secrets' : 'Voir secrets'}
-              </button>
               <button onClick={() => setRawMode(!rawMode)}
                 className={`text-xs px-2 py-1 rounded border transition-colors ${
                   rawMode ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' : 'border-border text-muted-foreground hover:text-foreground'
@@ -289,9 +317,7 @@ function EditDatasetModal({ instance, onClose }: {
             /* Field-by-field editor with schema info */
             <div className="space-y-3">
               {dt?.schema_fields.map(field => {
-                const isSecret = secretPaths.has(field.name);
                 const currentValue = String(valuesJson[field.name] ?? '');
-                const displayValue = isSecret && !showSecrets ? '••••••••' : currentValue;
 
                 return (
                   <div key={field.name} className="grid grid-cols-[1fr_2fr] gap-3 items-start">
@@ -299,7 +325,6 @@ function EditDatasetModal({ instance, onClose }: {
                       <div className="flex items-center gap-1.5">
                         <span className="text-sm font-mono text-foreground">{field.name}</span>
                         {field.required && <span className="text-destructive text-xs">*</span>}
-                        {isSecret && <Lock className="w-3 h-3 text-amber-400" />}
                       </div>
                       <p className="text-[10px] text-muted-foreground mt-0.5">{field.description}</p>
                       <p className="text-[10px] text-muted-foreground/60 font-mono">
@@ -311,7 +336,6 @@ function EditDatasetModal({ instance, onClose }: {
                         <select
                           value={currentValue}
                           onChange={e => handleFieldChange(field.name, e.target.value)}
-                          disabled={isSecret && !showSecrets}
                           className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30"
                         >
                           <option value="">—</option>
@@ -320,20 +344,12 @@ function EditDatasetModal({ instance, onClose }: {
                       ) : (
                         <input
                           type={field.type === 'number' ? 'number' : field.type === 'boolean' ? 'checkbox' : 'text'}
-                          value={displayValue}
+                          value={currentValue}
                           onChange={e => handleFieldChange(field.name, e.target.value)}
-                          disabled={isSecret && !showSecrets}
-                          className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 disabled:opacity-50"
+                          className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30"
                           placeholder={field.example || ''}
                         />
                       )}
-                      <button onClick={() => toggleSecret(field.name)}
-                        className={`p-1.5 rounded transition-colors ${
-                          isSecret ? 'text-amber-400 hover:text-amber-300 bg-amber-500/10' : 'text-muted-foreground hover:text-foreground'
-                        }`}
-                        title={isSecret ? 'Retirer le marquage secret' : 'Marquer comme secret'}>
-                        <Shield className="w-3.5 h-3.5" />
-                      </button>
                     </div>
                   </div>
                 );
@@ -370,13 +386,13 @@ function EditDatasetModal({ instance, onClose }: {
         <div className="flex items-center justify-between px-6 py-4 border-t border-border shrink-0">
           <div className="flex items-center gap-2">
             {instance.status === 'DRAFT' && (
-              <button onClick={() => activateMutation.mutate()}
+              <button onClick={() => activateMutation.mutate({ datasetId: instance.dataset_id, status: 'ACTIVE', valuesJson, notes })}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-green-600 text-xs font-medium text-white hover:bg-green-500 transition-colors">
                 <CheckCircle2 className="w-3.5 h-3.5" /> Activer
               </button>
             )}
             {instance.status === 'ACTIVE' && (
-              <button onClick={() => deprecateMutation.mutate()}
+              <button onClick={() => deprecateMutation.mutate({ datasetId: instance.dataset_id, status: 'DEPRECATED' })}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-red-600/80 text-xs font-medium text-white hover:bg-red-500 transition-colors">
                 <Archive className="w-3.5 h-3.5" /> Déprécier
               </button>
@@ -387,7 +403,7 @@ function EditDatasetModal({ instance, onClose }: {
               className="px-4 py-2 rounded-md border border-input text-sm font-medium text-foreground hover:bg-accent transition-colors">
               Annuler
             </button>
-            <button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !!jsonError}
+            <button onClick={() => saveMutation.mutate({ datasetId: instance.dataset_id, valuesJson, notes })} disabled={saveMutation.isPending || !!jsonError}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50">
               {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               Sauvegarder
@@ -407,34 +423,30 @@ export default function DatasetsPage() {
   const { can } = usePermission();
   const canCreateDataset = can(PermissionKey.DATASETS_CREATE);
   const canDeleteDataset = can(PermissionKey.DATASETS_DELETE);
-  const canActivateDataset = can(PermissionKey.DATASETS_ACTIVATE);
-  const { adapter, mode } = useDatasetStorage();
-  const queryClient = useQueryClient();
+  const utils = trpc.useUtils();
   const [showCreate, setShowCreate] = useState(false);
-  const [editingInstance, setEditingInstance] = useState<DatasetInstance | null>(null);
+  const [editingInstance, setEditingInstance] = useState<DisplayDatasetInstance | null>(null);
   const [search, setSearch] = useState('');
   const [envFilter, setEnvFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['dataset_instances', currentProject?.id, envFilter, statusFilter, typeFilter],
-    queryFn: () => adapter.instances.list(currentProject!.id, {
-      env: envFilter !== 'ALL' ? envFilter as TargetEnv : undefined,
-      status: statusFilter !== 'ALL' ? statusFilter as DatasetInstanceStatus : undefined,
-      dataset_type_id: typeFilter !== 'ALL' ? typeFilter : undefined,
-    }),
-    enabled: !!currentProject,
-  });
+  // ── Query: dataset instances from DB via tRPC ──
+  const { data, isLoading } = trpc.datasetInstances.list.useQuery(
+    {
+      projectId: String(currentProject?.id || ''),
+      env: envFilter !== 'ALL' ? envFilter as any : undefined,
+      status: statusFilter !== 'ALL' ? statusFilter as any : undefined,
+      datasetTypeId: typeFilter !== 'ALL' ? typeFilter : undefined,
+    },
+    { enabled: !!currentProject },
+  );
 
-  const instances = (data?.data || []) as DatasetInstance[];
+  const instances = useMemo(() => (data?.data || []).map(mapInstance), [data]);
 
-  // Charger les dataset types pour le filtre
-  const { data: dtData } = useQuery({
-    queryKey: ['dataset_types_all'],
-    queryFn: () => localDatasetTypes.list(),
-  });
-  const datasetTypes = (dtData?.data || []) as DatasetType[];
+  // ── Query: dataset types for display ──
+  const { data: dtData } = trpc.datasetTypes.list.useQuery();
+  const datasetTypes = useMemo(() => (dtData?.data || []).map(mapDatasetType), [dtData]);
   const dtMap = useMemo(() => new Map(datasetTypes.map(dt => [dt.dataset_type_id, dt])), [datasetTypes]);
 
   const filtered = useMemo(() => {
@@ -447,22 +459,13 @@ export default function DatasetsPage() {
     );
   }, [instances, search, dtMap]);
 
-  const cloneMutation = useMutation({
-    mutationFn: async (id: string) => adapter.instances.clone(id),
+  // ── Mutations ──
+  const deleteMutation = trpc.datasetInstances.delete.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dataset_instances'] });
-      toast.success('Dataset cloné (nouvelle version)');
-    },
-    onError: (err: Error) => toast.error(err.message),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => adapter.instances.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dataset_instances'] });
+      utils.datasetInstances.list.invalidate();
       toast.success('Dataset supprimé');
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err) => toast.error(err.message),
   });
 
   // Unique dataset_type_ids in current instances
@@ -487,9 +490,6 @@ export default function DatasetsPage() {
           <p className="text-sm text-muted-foreground mt-1">
             Instances de datasets par environnement pour <strong className="text-foreground">{currentProject.name}</strong>.
             Workflow : <span className="font-mono text-xs">DRAFT → ACTIVE → DEPRECATED</span>
-            <span className="ml-2 text-[10px] font-mono px-1.5 py-0.5 rounded bg-secondary/50 border border-border">
-              mode: {mode}
-            </span>
           </p>
         </div>
         {canCreateDataset && (
@@ -611,12 +611,8 @@ export default function DatasetsPage() {
                           className="text-muted-foreground hover:text-primary p-1.5 rounded hover:bg-primary/10 transition-colors" title="Éditer">
                           <FileText className="w-4 h-4" />
                         </button>
-                        <button onClick={() => cloneMutation.mutate(inst.dataset_id)}
-                          className="text-muted-foreground hover:text-cyan-400 p-1.5 rounded hover:bg-cyan-500/10 transition-colors" title="Cloner (nouvelle version)">
-                          <Copy className="w-4 h-4" />
-                        </button>
                         {canDeleteDataset && inst.status !== 'ACTIVE' && (
-                          <button onClick={() => deleteMutation.mutate(inst.dataset_id)}
+                          <button onClick={() => deleteMutation.mutate({ datasetId: inst.dataset_id })}
                             className="text-muted-foreground hover:text-destructive p-1.5 rounded hover:bg-destructive/10 transition-colors" title="Supprimer">
                             <Trash2 className="w-4 h-4" />
                           </button>

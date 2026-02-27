@@ -47,6 +47,32 @@ export const datasetTypesRouter = router({
     return { success: true, id: Number(res[0].insertId) };
   }),
 
+  update: protectedProcedure.input(z.object({
+    datasetTypeId: z.string(),
+    name: z.string().optional(),
+    description: z.string().optional(),
+    domain: z.string().optional(),
+    testType: z.string().optional(),
+    schemaFields: z.any().optional(),
+    examplePlaceholders: z.any().optional(),
+    tags: z.array(z.string()).optional(),
+  })).mutation(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const u: Record<string, unknown> = {};
+    if (input.name !== undefined) u.name = input.name;
+    if (input.description !== undefined) u.description = input.description;
+    if (input.domain !== undefined) u.domain = input.domain;
+    if (input.testType !== undefined) u.testType = input.testType;
+    if (input.schemaFields !== undefined) u.schemaFields = input.schemaFields;
+    if (input.examplePlaceholders !== undefined) u.examplePlaceholders = input.examplePlaceholders;
+    if (input.tags !== undefined) u.tags = input.tags;
+    if (Object.keys(u).length) {
+      await db.update(datasetTypes).set(u).where(eq(datasetTypes.datasetTypeId, input.datasetTypeId));
+    }
+    return { success: true };
+  }),
+
   delete: protectedProcedure.input(z.object({ datasetTypeId: z.string() })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });

@@ -1,11 +1,9 @@
 import { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { localDatasetTypes } from '../api/localStore';
-import type { DatasetType, DatasetTypeField, TestType } from '../types';
+import { trpc } from '@/lib/trpc';
+import type { DatasetTypeField, TestType } from '../types';
 import {
   Plus, Database, Search, Filter, Edit2, Trash2, X, AlertCircle,
-  ChevronDown, ChevronRight, Eye, Tag, Copy, Check,
-  ClipboardCheck, Shield, Gauge
+  ChevronDown, ChevronRight, Check,
 } from 'lucide-react';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -39,7 +37,7 @@ function DomainBadge({ domain }: { domain: string }) {
   return <span className={`inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-bold border ${cls}`}>{domain}</span>;
 }
 
-function TestTypeBadge({ testType }: { testType?: string }) {
+function TestTypeBadge({ testType }: { testType?: string | null }) {
   if (!testType) return <span className="text-[10px] text-muted-foreground">—</span>;
   const cls = TEST_TYPE_COLORS[testType] || 'bg-muted text-muted-foreground';
   return <span className={`inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-bold border ${cls}`}>{testType}</span>;
@@ -86,6 +84,34 @@ function SchemaPreview({ fields, placeholders }: { fields: DatasetTypeField[]; p
   );
 }
 
+// ─── Helper: map DB row (camelCase from tRPC) to frontend display shape ────
+
+interface DisplayDatasetType {
+  id: string;           // uid from DB
+  dataset_type_id: string;
+  domain: string;
+  test_type?: string | null;
+  name: string;
+  description: string;
+  schema_fields: DatasetTypeField[];
+  example_placeholders: Record<string, string>;
+  tags: string[];
+}
+
+function mapRow(row: any): DisplayDatasetType {
+  return {
+    id: row.uid ?? row.id?.toString() ?? '',
+    dataset_type_id: row.datasetTypeId ?? row.dataset_type_id ?? '',
+    domain: row.domain ?? 'WEB',
+    test_type: row.testType ?? row.test_type ?? null,
+    name: row.name ?? '',
+    description: row.description ?? '',
+    schema_fields: (row.schemaFields ?? row.schema_fields ?? []) as DatasetTypeField[],
+    example_placeholders: (row.examplePlaceholders ?? row.example_placeholders ?? {}) as Record<string, string>,
+    tags: (row.tags ?? []) as string[],
+  };
+}
+
 // ─── Create/Edit Modal ─────────────────────────────────────────────────────
 
 function DatasetTypeModal({
@@ -93,8 +119,17 @@ function DatasetTypeModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onSave: (data: Partial<DatasetType>) => void;
-  initial?: DatasetType;
+  onSave: (data: {
+    datasetTypeId: string;
+    name: string;
+    domain: string;
+    testType?: string;
+    description?: string;
+    schemaFields?: DatasetTypeField[];
+    examplePlaceholders?: Record<string, string>;
+    tags?: string[];
+  }) => void;
+  initial?: DisplayDatasetType;
 }) {
   const isEdit = !!initial;
   const [slug, setSlug] = useState(initial?.dataset_type_id || '');
@@ -132,13 +167,13 @@ function DatasetTypeModal({
     const placeholders: Record<string, string> = {};
     fields.forEach(f => { if (f.example) placeholders[f.name] = f.example; });
     onSave({
-      dataset_type_id: slug,
+      datasetTypeId: slug,
       name,
       domain,
-      test_type: testType as TestType || undefined,
+      testType: testType || undefined,
       description,
-      schema_fields: fields.filter(f => f.name),
-      example_placeholders: placeholders,
+      schemaFields: fields.filter(f => f.name),
+      examplePlaceholders: placeholders,
       tags: tags.split(',').map(t => t.trim()).filter(Boolean),
     });
   }
@@ -223,7 +258,7 @@ function DatasetTypeModal({
               onChange={e => setDescription(e.target.value)}
               rows={2}
               placeholder="Description du gabarit de dataset..."
-              className="w-full px-3 py-2 rounded bg-muted/50 border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-orange-500/50 resize-none"
+              className="w-full px-3 py-2 rounded bg-muted/50 border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-orange-500/50"
             />
           </div>
 
@@ -234,7 +269,7 @@ function DatasetTypeModal({
               type="text"
               value={tags}
               onChange={e => setTags(e.target.value)}
-              placeholder="ex: auth, login, profil"
+              placeholder="auth, admin, ims"
               className="w-full px-3 py-2 rounded bg-muted/50 border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-orange-500/50"
             />
           </div>
@@ -242,56 +277,37 @@ function DatasetTypeModal({
           {/* Schema Fields */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold text-muted-foreground">Schéma des champs</label>
-              <button onClick={addField} className="flex items-center gap-1 text-xs text-orange-400 hover:text-orange-300">
+              <label className="text-xs font-semibold text-muted-foreground">Champs du schéma</label>
+              <button onClick={addField} className="text-xs text-orange-400 hover:text-orange-300 flex items-center gap-1">
                 <Plus className="w-3 h-3" /> Ajouter un champ
               </button>
             </div>
             {fields.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic py-2">Aucun champ. Cliquez "Ajouter un champ" pour définir le schéma.</p>
+              <p className="text-xs text-muted-foreground italic">Aucun champ. Cliquez sur "Ajouter un champ".</p>
             ) : (
               <div className="space-y-2">
                 {fields.map((f, i) => (
-                  <div key={i} className="grid grid-cols-[1fr_100px_60px_1fr_1fr_32px] gap-2 items-start">
+                  <div key={i} className="grid grid-cols-[1fr_100px_50px_1fr_auto] gap-2 items-center bg-muted/20 rounded p-2">
                     <input
-                      type="text"
-                      value={f.name}
-                      onChange={e => updateField(i, 'name', e.target.value)}
+                      type="text" value={f.name} onChange={e => updateField(i, 'name', e.target.value)}
                       placeholder="nom_champ"
-                      className="px-2 py-1.5 rounded bg-muted/50 border border-border text-xs text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+                      className="px-2 py-1 rounded bg-muted/50 border border-border text-xs text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-orange-500/50"
                     />
-                    <select
-                      value={f.type}
-                      onChange={e => updateField(i, 'type', e.target.value)}
-                      className="px-2 py-1.5 rounded bg-muted/50 border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-orange-500/50"
-                    >
+                    <select value={f.type} onChange={e => updateField(i, 'type', e.target.value)}
+                      className="px-2 py-1 rounded bg-muted/50 border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-orange-500/50">
                       {FIELD_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
-                    <label className="flex items-center justify-center gap-1 text-xs text-muted-foreground cursor-pointer pt-1.5">
-                      <input
-                        type="checkbox"
-                        checked={f.required}
-                        onChange={e => updateField(i, 'required', e.target.checked)}
-                        className="accent-orange-500"
-                      />
-                      Req.
+                    <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <input type="checkbox" checked={f.required} onChange={e => updateField(i, 'required', e.target.checked)} />
+                      Req
                     </label>
                     <input
-                      type="text"
-                      value={f.description}
-                      onChange={e => updateField(i, 'description', e.target.value)}
-                      placeholder="Description"
-                      className="px-2 py-1.5 rounded bg-muted/50 border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+                      type="text" value={f.description} onChange={e => updateField(i, 'description', e.target.value)}
+                      placeholder="description"
+                      className="px-2 py-1 rounded bg-muted/50 border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-orange-500/50"
                     />
-                    <input
-                      type="text"
-                      value={f.example || ''}
-                      onChange={e => updateField(i, 'example', e.target.value)}
-                      placeholder="Exemple"
-                      className="px-2 py-1.5 rounded bg-muted/50 border border-border text-xs text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-orange-500/50"
-                    />
-                    <button onClick={() => removeField(i)} className="p-1 rounded hover:bg-red-500/10 text-red-400 mt-0.5">
-                      <Trash2 className="w-3.5 h-3.5" />
+                    <button onClick={() => removeField(i)} className="p-1 rounded hover:bg-red-500/10 text-red-400">
+                      <Trash2 className="w-3 h-3" />
                     </button>
                   </div>
                 ))}
@@ -300,12 +316,15 @@ function DatasetTypeModal({
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 px-5 py-3 border-t border-border">
-          <button onClick={onClose} className="px-4 py-2 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-muted">
+        {/* Footer */}
+        <div className="flex justify-end gap-3 px-5 py-4 border-t border-border">
+          <button onClick={onClose}
+            className="px-4 py-2 rounded-lg text-sm font-medium text-foreground border border-border hover:bg-muted transition-colors">
             Annuler
           </button>
-          <button onClick={handleSave} className="px-4 py-2 rounded text-sm font-semibold bg-orange-500 text-white hover:bg-orange-600">
-            {isEdit ? 'Enregistrer' : '+ Créer le gabarit'}
+          <button onClick={handleSave}
+            className="px-4 py-2 rounded-lg text-sm font-semibold bg-orange-500 text-white hover:bg-orange-600 transition-colors">
+            {isEdit ? 'Enregistrer' : 'Créer'}
           </button>
         </div>
       </div>
@@ -316,53 +335,65 @@ function DatasetTypeModal({
 // ─── Main Page ─────────────────────────────────────────────────────────────
 
 export default function DatasetTypesPage() {
-  const queryClient = useQueryClient();
+  const utils = trpc.useUtils();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDomain, setFilterDomain] = useState<string>('');
   const [filterTestType, setFilterTestType] = useState<string>('');
   const [showCreate, setShowCreate] = useState(false);
-  const [editing, setEditing] = useState<DatasetType | null>(null);
+  const [editing, setEditing] = useState<DisplayDatasetType | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['dataset-types', filterDomain, filterTestType],
-    queryFn: () => localDatasetTypes.list({
-      domain: filterDomain || undefined,
-      test_type: filterTestType || undefined,
-    }),
-  });
+  // ── Query: fetch all dataset types from DB via tRPC ──
+  const { data, isLoading } = trpc.datasetTypes.list.useQuery();
 
-  const createMutation = useMutation({
-    mutationFn: (d: Partial<DatasetType>) => Promise.resolve(localDatasetTypes.create(d)),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['dataset-types'] }); setShowCreate(false); },
-  });
+  // Map DB rows to display shape
+  const allItems = useMemo(() => {
+    return (data?.data || []).map(mapRow);
+  }, [data]);
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<DatasetType> }) => Promise.resolve(localDatasetTypes.update(id, data)),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['dataset-types'] }); setEditing(null); },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => Promise.resolve(localDatasetTypes.delete(id)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['dataset-types'] }),
-  });
-
+  // Apply client-side filters (domain, testType, search)
   const items = useMemo(() => {
-    const all = data?.data || [];
-    if (!searchQuery) return all;
-    const q = searchQuery.toLowerCase();
-    return all.filter(dt =>
-      dt.name.toLowerCase().includes(q) ||
-      dt.dataset_type_id.toLowerCase().includes(q) ||
-      dt.description.toLowerCase().includes(q) ||
-      dt.tags.some(t => t.toLowerCase().includes(q))
-    );
-  }, [data, searchQuery]);
+    let filtered = allItems;
+    if (filterDomain) {
+      filtered = filtered.filter(dt => dt.domain === filterDomain);
+    }
+    if (filterTestType) {
+      filtered = filtered.filter(dt => !dt.test_type || dt.test_type === filterTestType);
+    }
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(dt =>
+        dt.name.toLowerCase().includes(q) ||
+        dt.dataset_type_id.toLowerCase().includes(q) ||
+        dt.description.toLowerCase().includes(q) ||
+        dt.tags.some(t => t.toLowerCase().includes(q))
+      );
+    }
+    return filtered;
+  }, [allItems, filterDomain, filterTestType, searchQuery]);
 
   const uniqueDomains = useMemo(() => {
-    const all = data?.data || [];
-    return Array.from(new Set(all.map(dt => dt.domain))).sort();
-  }, [data]);
+    return Array.from(new Set(allItems.map(dt => dt.domain))).sort();
+  }, [allItems]);
+
+  // ── Mutations ──
+  const createMutation = trpc.datasetTypes.create.useMutation({
+    onSuccess: () => {
+      utils.datasetTypes.list.invalidate();
+      setShowCreate(false);
+    },
+  });
+
+  const updateMutation = trpc.datasetTypes.update.useMutation({
+    onSuccess: () => {
+      utils.datasetTypes.list.invalidate();
+      setEditing(null);
+    },
+  });
+
+  const deleteMutation = trpc.datasetTypes.delete.useMutation({
+    onSuccess: () => utils.datasetTypes.list.invalidate(),
+  });
 
   return (
     <div className="space-y-6">
@@ -454,7 +485,7 @@ export default function DatasetTypesPage() {
                       <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />
                     </button>
                     <button
-                      onClick={() => { if (confirm(`Supprimer "${dt.name}" ?`)) deleteMutation.mutate(dt.id); }}
+                      onClick={() => { if (confirm(`Supprimer "${dt.name}" ?`)) deleteMutation.mutate({ datasetTypeId: dt.dataset_type_id }); }}
                       className="p-1 rounded hover:bg-red-500/10"
                       title="Supprimer"
                     >
@@ -490,7 +521,7 @@ export default function DatasetTypesPage() {
         <DatasetTypeModal
           open={true}
           onClose={() => setEditing(null)}
-          onSave={d => updateMutation.mutate({ id: editing.id, data: d })}
+          onSave={d => updateMutation.mutate(d)}
           initial={editing}
         />
       )}

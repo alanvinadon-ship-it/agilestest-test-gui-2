@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useProject } from '../state/projectStore';
 import { useAuth } from '@/auth/AuthContext';
 import { usePermission, PermissionKey } from '@/security';
+import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -20,22 +22,18 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
-  localDriveCampaigns,
   localDriveRoutes,
   localTestDevices,
   localDriveProbeConfigs,
-  localProjects,
   localDriveJobs,
   localDriveRunSummaries,
 } from '@/api/localStore';
 import type {
-  DriveCampaign,
   DriveRoute,
   TestDevice,
   DriveProbeConfig,
   DriveJob,
   DriveRunSummary,
-  CampaignStatus,
   NetworkType,
   TargetEnv,
   DeviceType,
@@ -60,13 +58,9 @@ import {
   FileText,
   Signal,
   Navigation,
-  Copy,
   Activity,
   BarChart3,
   Loader2,
-  AlertTriangle,
-  Download,
-  ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { CapturePolicyEditor, CaptureModeBadge } from '@/capture';
@@ -77,63 +71,111 @@ import { localCapturePolicies } from '@/api/localStore';
 
 const NETWORK_TYPES: NetworkType[] = ['4G', '5G_SA', '5G_NSA', 'IMS', 'IP'];
 const ENVS: TargetEnv[] = ['DEV', 'PREPROD', 'PILOT_ORANGE', 'PROD'];
-const CAMPAIGN_STATUSES: CampaignStatus[] = ['DRAFT', 'READY', 'RUNNING', 'DONE'];
+// DB status values
+type DBCampaignStatus = 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+const CAMPAIGN_STATUSES: DBCampaignStatus[] = ['DRAFT', 'ACTIVE', 'COMPLETED', 'CANCELLED'];
 const DEVICE_TYPES: DeviceType[] = ['ANDROID', 'MODEM', 'CPE', 'LAPTOP'];
 const TOOL_NAMES: DriveToolName[] = ['GNetTrack', 'NSG', 'QXDM', 'Wireshark', 'iperf3', 'ping', 'traceroute', 'tcpdump'];
 const PROBE_LOCATIONS: ProbeLocation[] = ['RUNNER_HOST', 'EDGE_VM', 'K8S_NODE', 'SPAN_PORT', 'MIRROR_TAP'];
 const CAPTURE_TYPES: DriveCaptureType[] = ['PCAP', 'SIP_TRACE', 'DIAMETER', 'GTPU', 'NGAP', 'NAS', 'HTTP', 'DNS', 'SYSLOG'];
 const OUTPUT_TARGETS: ProbeOutputTarget[] = ['MINIO', 'LOCAL', 'BOTH'];
 
-const STATUS_COLORS: Record<CampaignStatus, string> = {
+const STATUS_COLORS: Record<DBCampaignStatus, string> = {
   DRAFT: 'bg-gray-500/20 text-gray-300',
-  READY: 'bg-blue-500/20 text-blue-300',
-  RUNNING: 'bg-amber-500/20 text-amber-300',
-  DONE: 'bg-emerald-500/20 text-emerald-300',
+  ACTIVE: 'bg-emerald-500/20 text-emerald-300',
+  COMPLETED: 'bg-blue-500/20 text-blue-300',
+  CANCELLED: 'bg-red-500/20 text-red-300',
 };
 
-const STATUS_ICONS: Record<CampaignStatus, typeof Clock> = {
+const STATUS_ICONS: Record<DBCampaignStatus, typeof Clock> = {
   DRAFT: FileText,
-  READY: CheckCircle2,
-  RUNNING: Play,
-  DONE: CheckCircle2,
+  ACTIVE: Play,
+  COMPLETED: CheckCircle2,
+  CANCELLED: Clock,
 };
+
+// ─── Display campaign type ──────────────────────────────────────────────
+
+interface DisplayCampaign {
+  campaign_id: string;
+  project_id: string;
+  name: string;
+  description: string;
+  target_env: string;
+  network_type: string;
+  area: string;
+  start_date: string;
+  end_date: string;
+  status: DBCampaignStatus;
+  created_by: string;
+}
+
+function mapCampaignRow(row: any): DisplayCampaign {
+  return {
+    campaign_id: row.uid ?? '',
+    project_id: row.projectId ?? row.project_id ?? '',
+    name: row.name ?? '',
+    description: row.description ?? '',
+    target_env: row.targetEnv ?? row.target_env ?? 'DEV',
+    network_type: row.networkType ?? row.network_type ?? '4G',
+    area: row.area ?? '',
+    start_date: row.startDate ?? row.start_date ?? '',
+    end_date: row.endDate ?? row.end_date ?? '',
+    status: (row.status ?? 'DRAFT') as DBCampaignStatus,
+    created_by: row.createdBy ?? row.created_by ?? '',
+  };
+}
 
 // ─── Component ────────────────────────────────────────────────────────────
 
 export default function DriveCampaignsPage() {
+  const { currentProject } = useProject();
   const { hasRole } = useAuth();
   const { can } = usePermission();
-  const canWrite = hasRole('MANAGER') || hasRole('ADMIN');
   const canCreateCampaign = can(PermissionKey.DRIVE_CAMPAIGNS_CREATE);
   const canUpdateCampaign = can(PermissionKey.DRIVE_CAMPAIGNS_UPDATE);
   const canDeleteCampaign = can(PermissionKey.DRIVE_CAMPAIGNS_DELETE);
   const canRunCampaign = can(PermissionKey.DRIVE_CAMPAIGNS_UPDATE);
+  const utils = trpc.useUtils();
 
-  // Project selection
-  const [projects] = useState(() => localProjects.list({ limit: 200 }).data);
-  const [projectId, setProjectId] = useState(projects[0]?.id || '');
+  const projectId = currentProject?.id || '';
 
-  // Campaigns
-  const [campaigns, setCampaigns] = useState<DriveCampaign[]>([]);
+  // Campaigns from tRPC
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [filterNetwork, setFilterNetwork] = useState<string>('ALL');
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
 
+  const { data: campaignsData, isLoading: campaignsLoading } = trpc.driveCampaigns.list.useQuery(
+    {
+      projectId,
+      status: filterStatus !== 'ALL' ? filterStatus as any : undefined,
+    },
+    { enabled: !!projectId },
+  );
+
+  const campaigns = useMemo(() => (campaignsData?.data || []).map(mapCampaignRow), [campaignsData]);
+
+  const filtered = useMemo(() => {
+    let list = campaigns;
+    if (filterNetwork !== 'ALL') list = list.filter(c => c.network_type === filterNetwork);
+    return list;
+  }, [campaigns, filterNetwork]);
+
   // Campaign modal
   const [showCampaignModal, setShowCampaignModal] = useState(false);
-  const [editingCampaign, setEditingCampaign] = useState<DriveCampaign | null>(null);
+  const [editingCampaign, setEditingCampaign] = useState<DisplayCampaign | null>(null);
   const [campaignForm, setCampaignForm] = useState({
     name: '', description: '', network_type: '4G' as NetworkType, target_env: 'DEV' as TargetEnv,
     area: '', start_date: '', end_date: '',
   });
 
-  // Routes
+  // Routes (still localStorage)
   const [routes, setRoutes] = useState<Record<string, DriveRoute[]>>({});
   const [showRouteModal, setShowRouteModal] = useState(false);
   const [routeParentId, setRouteParentId] = useState('');
   const [routeForm, setRouteForm] = useState({ name: '', expected_duration_min: 30, route_geojson_str: '' });
 
-  // Devices
+  // Devices (still localStorage)
   const [devices, setDevices] = useState<TestDevice[]>([]);
   const [showDeviceModal, setShowDeviceModal] = useState(false);
   const [deviceForm, setDeviceForm] = useState({
@@ -141,7 +183,7 @@ export default function DriveCampaignsPage() {
     tools_enabled: [] as DriveToolName[], notes: '',
   });
 
-  // Probe configs
+  // Probe configs (still localStorage)
   const [probeConfigs, setProbeConfigs] = useState<DriveProbeConfig[]>([]);
   const [showProbeModal, setShowProbeModal] = useState(false);
   const [probeForm, setProbeForm] = useState({
@@ -154,118 +196,84 @@ export default function DriveCampaignsPage() {
 
   // Run Campaign
   const [showRunModal, setShowRunModal] = useState(false);
-  const [runCampaign, setRunCampaign] = useState<DriveCampaign | null>(null);
+  const [runCampaignData, setRunCampaignData] = useState<DisplayCampaign | null>(null);
   const [runRouteId, setRunRouteId] = useState('');
   const [runDeviceId, setRunDeviceId] = useState('');
   const [runCapturePcap, setRunCapturePcap] = useState(false);
-  const [runningJobId, setRunningJobId] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
 
-  // Drive Jobs
+  // Drive Jobs (still localStorage)
   const [driveJobs, setDriveJobs] = useState<Record<string, DriveJob[]>>({});
   const [jobSummaries, setJobSummaries] = useState<Record<string, DriveRunSummary | null>>({});
 
-  // ─── Load data ────────────────────────────────────────────────────────
-
-  const loadCampaigns = () => {
-    if (!projectId) return;
-    const result = localDriveCampaigns.list(projectId, { limit: 200 });
-    setCampaigns(result.data);
-  };
+  // ─── Load localStorage data ──────────────────────────────────────────
 
   const loadRoutes = (campaignId: string) => {
-    const r = localDriveRoutes.list(campaignId);
-    setRoutes(prev => ({ ...prev, [campaignId]: r }));
+    try {
+      const r = localDriveRoutes.list(campaignId);
+      setRoutes(prev => ({ ...prev, [campaignId]: r }));
+    } catch { /* ignore */ }
   };
 
   const loadDevices = () => {
     if (!projectId) return;
-    const result = localTestDevices.list(projectId, { limit: 200 });
-    setDevices(result.data);
+    try {
+      const result = localTestDevices.list(projectId, { limit: 200 });
+      setDevices(result.data);
+    } catch { /* ignore */ }
   };
 
   const loadProbeConfigs = () => {
     if (!projectId) return;
-    const p = localDriveProbeConfigs.list(projectId);
-    setProbeConfigs(p);
+    try {
+      const p = localDriveProbeConfigs.list(projectId);
+      setProbeConfigs(p);
+    } catch { /* ignore */ }
   };
 
   const loadDriveJobs = (campaignId: string) => {
-    const result = localDriveJobs.list({ campaign_id: campaignId, limit: 200 });
-    setDriveJobs(prev => ({ ...prev, [campaignId]: result.data }));
-    // Load summaries for each job
-    for (const j of result.data) {
-      const s = localDriveRunSummaries.get(j.drive_job_id);
-      setJobSummaries(prev => ({ ...prev, [j.drive_job_id]: s }));
-    }
-  };
-
-  const openRunCampaign = (c: DriveCampaign) => {
-    setRunCampaign(c);
-    const cRoutes = routes[c.campaign_id] || localDriveRoutes.list(c.campaign_id);
-    if (Array.isArray(cRoutes) && cRoutes.length > 0) setRunRouteId(cRoutes[0].route_id);
-    if (devices.length > 0) setRunDeviceId(devices[0].device_id);
-    setRunCapturePcap(false);
-    setShowRunModal(true);
-  };
-
-  const executeRun = () => {
-    if (!runCampaign || !runRouteId || !runDeviceId) {
-      toast.error('Sélectionnez une route et un équipement');
-      return;
-    }
     try {
-      setIsRunning(true);
-      // Créer le job
-      const job = localDriveJobs.create({
-        campaign_id: runCampaign.campaign_id,
-        route_id: runRouteId,
-        device_id: runDeviceId,
-        target_env: runCampaign.target_env,
-      });
-      setRunningJobId(job.drive_job_id);
-      toast.info(`Job ${job.drive_job_id.slice(0, 8)} créé (PENDING)`);
-
-      // Simuler l'exécution
-      const route = localDriveRoutes.list(runCampaign.campaign_id).find(r => r.route_id === runRouteId);
-      if (!route) throw new Error('Route introuvable');
-
-      // Seuils par défaut
-      const thresholds: Record<string, number> = {
-        RSRP: -100, RSRQ: -12, SINR: 5,
-        THROUGHPUT_DL: 20, THROUGHPUT_UL: 5,
-        LATENCY: 50, JITTER: 20, PACKET_LOSS: 1,
-      };
-
-      const result = localDriveJobs.simulateExecution(job.drive_job_id, route, thresholds);
-      toast.success(`Exécution terminée : ${result.status}`);
-
-      // Refresh
-      loadCampaigns();
-      loadDriveJobs(runCampaign.campaign_id);
-      setShowRunModal(false);
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setIsRunning(false);
-      setRunningJobId(null);
-    }
+      const result = localDriveJobs.list({ campaign_id: campaignId, limit: 200 });
+      setDriveJobs(prev => ({ ...prev, [campaignId]: result.data }));
+      for (const j of result.data) {
+        const s = localDriveRunSummaries.get(j.drive_job_id);
+        setJobSummaries(prev => ({ ...prev, [j.drive_job_id]: s }));
+      }
+    } catch { /* ignore */ }
   };
 
   useEffect(() => {
-    loadCampaigns();
     loadDevices();
     loadProbeConfigs();
   }, [projectId]);
 
-  // ─── Filtered campaigns ───────────────────────────────────────────────
+  // ─── tRPC Mutations ──────────────────────────────────────────────────
 
-  const filtered = useMemo(() => {
-    let list = campaigns;
-    if (filterStatus !== 'ALL') list = list.filter(c => c.status === filterStatus);
-    if (filterNetwork !== 'ALL') list = list.filter(c => c.network_type === filterNetwork);
-    return list;
-  }, [campaigns, filterStatus, filterNetwork]);
+  const createCampaignMutation = trpc.driveCampaigns.create.useMutation({
+    onSuccess: () => {
+      utils.driveCampaigns.list.invalidate();
+      setShowCampaignModal(false);
+      toast.success('Campagne créée');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const updateCampaignMutation = trpc.driveCampaigns.update.useMutation({
+    onSuccess: () => {
+      utils.driveCampaigns.list.invalidate();
+      setShowCampaignModal(false);
+      toast.success('Campagne mise à jour');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const deleteCampaignMutation = trpc.driveCampaigns.delete.useMutation({
+    onSuccess: () => {
+      utils.driveCampaigns.list.invalidate();
+      toast.success('Campagne supprimée');
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   // ─── Campaign CRUD ────────────────────────────────────────────────────
 
@@ -275,44 +283,99 @@ export default function DriveCampaignsPage() {
     setShowCampaignModal(true);
   };
 
-  const openEditCampaign = (c: DriveCampaign) => {
+  const openEditCampaign = (c: DisplayCampaign) => {
     setEditingCampaign(c);
     setCampaignForm({
-      name: c.name, description: c.description, network_type: c.network_type,
-      target_env: c.target_env, area: c.area, start_date: c.start_date, end_date: c.end_date,
+      name: c.name, description: c.description, network_type: c.network_type as NetworkType,
+      target_env: c.target_env as TargetEnv, area: c.area, start_date: c.start_date, end_date: c.end_date,
     });
     setShowCampaignModal(true);
   };
 
   const saveCampaign = () => {
-    try {
-      if (editingCampaign) {
-        localDriveCampaigns.update(editingCampaign.campaign_id, campaignForm);
-        toast.success('Campagne mise à jour');
-      } else {
-        localDriveCampaigns.create(projectId, campaignForm);
-        toast.success('Campagne créée');
-      }
-      setShowCampaignModal(false);
-      loadCampaigns();
-    } catch (e: any) {
-      toast.error(e.message);
+    if (editingCampaign) {
+      updateCampaignMutation.mutate({
+        campaignId: editingCampaign.campaign_id,
+        name: campaignForm.name || undefined,
+        description: campaignForm.description || undefined,
+        targetEnv: campaignForm.target_env as any || undefined,
+        networkType: campaignForm.network_type || undefined,
+        area: campaignForm.area || undefined,
+        startDate: campaignForm.start_date || undefined,
+        endDate: campaignForm.end_date || undefined,
+      });
+    } else {
+      createCampaignMutation.mutate({
+        projectId,
+        name: campaignForm.name,
+        description: campaignForm.description || undefined,
+        targetEnv: campaignForm.target_env as any || undefined,
+        networkType: campaignForm.network_type || undefined,
+        area: campaignForm.area || undefined,
+        startDate: campaignForm.start_date || undefined,
+        endDate: campaignForm.end_date || undefined,
+      });
     }
   };
 
   const deleteCampaign = (id: string) => {
-    localDriveCampaigns.delete(id);
-    toast.success('Campagne supprimée');
-    loadCampaigns();
+    deleteCampaignMutation.mutate({ campaignId: id });
   };
 
-  const updateCampaignStatus = (id: string, status: CampaignStatus) => {
-    localDriveCampaigns.updateStatus(id, status);
+  const updateCampaignStatus = (id: string, status: DBCampaignStatus) => {
+    updateCampaignMutation.mutate({ campaignId: id, status: status as any });
     toast.success(`Statut → ${status}`);
-    loadCampaigns();
   };
 
-  // ─── Route CRUD ───────────────────────────────────────────────────────
+  // ─── Run Campaign (still localStorage simulation) ─────────────────────
+
+  const openRunCampaign = (c: DisplayCampaign) => {
+    setRunCampaignData(c);
+    const cRoutes = routes[c.campaign_id] || [];
+    if (cRoutes.length === 0) loadRoutes(c.campaign_id);
+    if (cRoutes.length > 0) setRunRouteId(cRoutes[0].route_id);
+    if (devices.length > 0) setRunDeviceId(devices[0].device_id);
+    setRunCapturePcap(false);
+    setShowRunModal(true);
+  };
+
+  const executeRun = () => {
+    if (!runCampaignData || !runRouteId || !runDeviceId) {
+      toast.error('Sélectionnez une route et un équipement');
+      return;
+    }
+    try {
+      setIsRunning(true);
+      const job = localDriveJobs.create({
+        campaign_id: runCampaignData.campaign_id,
+        route_id: runRouteId,
+        device_id: runDeviceId,
+        target_env: runCampaignData.target_env as TargetEnv,
+      });
+      toast.info(`Job ${job.drive_job_id.slice(0, 8)} créé (PENDING)`);
+
+      const route = localDriveRoutes.list(runCampaignData.campaign_id).find(r => r.route_id === runRouteId);
+      if (!route) throw new Error('Route introuvable');
+
+      const thresholds: Record<string, number> = {
+        RSRP: -100, RSRQ: -12, SINR: 5,
+        THROUGHPUT_DL: 20, THROUGHPUT_UL: 5,
+        LATENCY: 50, JITTER: 20, PACKET_LOSS: 1,
+      };
+
+      const result = localDriveJobs.simulateExecution(job.drive_job_id, route, thresholds);
+      toast.success(`Exécution terminée : ${result.status}`);
+
+      loadDriveJobs(runCampaignData.campaign_id);
+      setShowRunModal(false);
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
+  // ─── Route CRUD (localStorage) ────────────────────────────────────────
 
   const openNewRoute = (campaignId: string) => {
     setRouteParentId(campaignId);
@@ -345,7 +408,7 @@ export default function DriveCampaignsPage() {
     loadRoutes(campaignId);
   };
 
-  // ─── Device CRUD ──────────────────────────────────────────────────────
+  // ─── Device CRUD (localStorage) ──────────────────────────────────────
 
   const openNewDevice = () => {
     setDeviceForm({ type: 'ANDROID', model: '', os_version: '', diag_capable: false, tools_enabled: [], notes: '' });
@@ -369,7 +432,7 @@ export default function DriveCampaignsPage() {
     loadDevices();
   };
 
-  // ─── Probe Config CRUD ────────────────────────────────────────────────
+  // ─── Probe Config CRUD (localStorage) ─────────────────────────────────
 
   const openNewProbe = () => {
     setProbeForm({ name: '', location: 'RUNNER_HOST', capture_type: 'PCAP', retention_days: 30, max_size_mb: 500, rotation: true, output_target: 'MINIO', enabled: true });
@@ -410,7 +473,7 @@ export default function DriveCampaignsPage() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-4">Drive Test — Campagnes</h1>
-        <p className="text-muted-foreground">Aucun projet disponible. Créez d'abord un projet avec le domaine DRIVE_TEST.</p>
+        <p className="text-muted-foreground">Aucun projet sélectionné. Sélectionnez un projet dans la barre latérale.</p>
       </div>
     );
   }
@@ -424,19 +487,9 @@ export default function DriveCampaignsPage() {
             <Signal className="w-6 h-6 text-emerald-400" />
             Drive Test
           </h1>
-          <p className="text-muted-foreground text-sm mt-1">Campagnes de test terrain, routes, équipements et sondes</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Select value={projectId} onValueChange={setProjectId}>
-            <SelectTrigger className="w-[220px]">
-              <SelectValue placeholder="Projet" />
-            </SelectTrigger>
-            <SelectContent>
-              {projects.map(p => (
-                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <p className="text-muted-foreground text-sm mt-1">
+            Campagnes de test terrain pour <strong className="text-foreground">{currentProject?.name}</strong>
+          </p>
         </div>
       </div>
 
@@ -494,7 +547,11 @@ export default function DriveCampaignsPage() {
           </div>
 
           {/* Campaign list */}
-          {filtered.length === 0 ? (
+          {campaignsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 text-primary animate-spin" />
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Navigation className="w-12 h-12 mx-auto mb-3 opacity-40" />
               <p>Aucune campagne drive test</p>
@@ -530,17 +587,14 @@ export default function DriveCampaignsPage() {
                       </div>
                       <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                         {canUpdateCampaign && c.status === 'DRAFT' && (
-                          <Button size="sm" variant="ghost" onClick={() => updateCampaignStatus(c.campaign_id, 'READY')}>
-                            <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Ready
+                          <Button size="sm" variant="ghost" onClick={() => updateCampaignStatus(c.campaign_id, 'ACTIVE')}>
+                            <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Activer
                           </Button>
                         )}
-                        {canRunCampaign && (c.status === 'READY' || c.status === 'DONE') && (
+                        {canRunCampaign && c.status === 'ACTIVE' && (
                           <Button size="sm" variant="ghost" className="text-emerald-400" onClick={() => openRunCampaign(c)}>
-                            <Play className="w-3.5 h-3.5 mr-1" /> {c.status === 'DONE' ? 'Relancer' : 'Run'}
+                            <Play className="w-3.5 h-3.5 mr-1" /> Run
                           </Button>
-                        )}
-                        {c.status === 'RUNNING' && (
-                          <Badge className="bg-amber-500/20 text-amber-300 animate-pulse"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> En cours</Badge>
                         )}
                         {canUpdateCampaign && (
                           <>
@@ -627,7 +681,7 @@ export default function DriveCampaignsPage() {
                                     <div className="flex items-center gap-2">
                                       {summary && (
                                         <span className={`text-xs ${summary.overall_pass ? 'text-emerald-400' : 'text-red-400'}`}>
-                                          {summary.overall_pass ? 'PASS' : `${summary.threshold_violations.length} violation(s)`}
+                                          {summary.overall_pass ? 'PASS' : 'FAIL'} — {summary.total_samples} samples
                                         </span>
                                       )}
                                       {j.artifacts_manifest.length > 0 && (
@@ -678,7 +732,7 @@ export default function DriveCampaignsPage() {
       {activeTab === 'devices' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">{devices.length} équipement(s) enregistré(s)</p>
+            <p className="text-sm text-muted-foreground">{devices.length} équipement(s)</p>
             {canCreateCampaign && (
               <Button size="sm" onClick={openNewDevice}>
                 <Plus className="w-4 h-4 mr-1" /> Nouvel équipement
@@ -688,12 +742,12 @@ export default function DriveCampaignsPage() {
           {devices.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Smartphone className="w-12 h-12 mx-auto mb-3 opacity-40" />
-              <p>Aucun équipement de test</p>
+              <p>Aucun équipement enregistré</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="space-y-2">
               {devices.map(d => (
-                <div key={d.device_id} className="border border-border rounded-lg p-4 space-y-2">
+                <div key={d.device_id} className="border border-border rounded-lg p-3 space-y-1">
                   <div className="flex items-center justify-between">
                     <Badge variant="outline">{d.type}</Badge>
                     {canDeleteCampaign && (
@@ -852,7 +906,10 @@ export default function DriveCampaignsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCampaignModal(false)}>Annuler</Button>
-            <Button onClick={saveCampaign}>{editingCampaign ? 'Enregistrer' : 'Créer'}</Button>
+            <Button onClick={saveCampaign} disabled={createCampaignMutation.isPending || updateCampaignMutation.isPending}>
+              {(createCampaignMutation.isPending || updateCampaignMutation.isPending) && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
+              {editingCampaign ? 'Enregistrer' : 'Créer'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -942,12 +999,12 @@ export default function DriveCampaignsPage() {
               Lancer une exécution Drive
             </DialogTitle>
           </DialogHeader>
-          {runCampaign && (
+          {runCampaignData && (
             <div className="space-y-4">
               <div className="p-3 rounded bg-muted/30 text-sm">
-                <div className="font-medium">{runCampaign.name}</div>
+                <div className="font-medium">{runCampaignData.name}</div>
                 <div className="text-xs text-muted-foreground mt-1">
-                  {runCampaign.network_type} · {runCampaign.target_env} · {runCampaign.area}
+                  {runCampaignData.network_type} · {runCampaignData.target_env} · {runCampaignData.area}
                 </div>
               </div>
 
@@ -956,7 +1013,7 @@ export default function DriveCampaignsPage() {
                 <Select value={runRouteId} onValueChange={setRunRouteId}>
                   <SelectTrigger><SelectValue placeholder="Sélectionner une route" /></SelectTrigger>
                   <SelectContent>
-                    {(routes[runCampaign.campaign_id] || localDriveRoutes.list(runCampaign.campaign_id)).map(r => (
+                    {(routes[runCampaignData.campaign_id] || []).map(r => (
                       <SelectItem key={r.route_id} value={r.route_id}>{r.name} (~{r.expected_duration_min} min)</SelectItem>
                     ))}
                   </SelectContent>

@@ -416,3 +416,25 @@ export const bundleItems = mysqlTable("bundle_items", {
 
 export type BundleItemRow = typeof bundleItems.$inferSelect;
 export type InsertBundleItem = typeof bundleItems.$inferInsert;
+
+// ─── Drive Campaigns (campagnes de test terrain) ────────────────────────────
+// DB columns: id, uid, project_id, name, description, target_env, network_type, area, start_date, end_date, status, created_by, created_at, updated_at
+export const driveCampaigns = mysqlTable("drive_campaigns", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  projectId: varchar("project_id", { length: 36 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  targetEnv: mysqlEnum("target_env", ["DEV", "PREPROD", "PILOT_ORANGE", "PROD"]),
+  networkType: varchar("network_type", { length: 50 }),
+  area: varchar("area", { length: 255 }),
+  startDate: varchar("start_date", { length: 30 }),
+  endDate: varchar("end_date", { length: 30 }),
+  status: mysqlEnum("status", ["DRAFT", "ACTIVE", "COMPLETED", "CANCELLED"]).default("DRAFT").notNull(),
+  createdBy: varchar("created_by", { length: 64 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DriveCampaignRow = typeof driveCampaigns.$inferSelect;
+export type InsertDriveCampaign = typeof driveCampaigns.$inferInsert;
