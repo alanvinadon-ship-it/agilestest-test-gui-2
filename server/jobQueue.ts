@@ -418,7 +418,7 @@ registerHandler("generateExecutionPdf", async (payload) => {
       execution.scenarioId ? db.select().from(testScenarios).where(eq(testScenarios.uid, execution.scenarioId)).limit(1) : Promise.resolve([]),
       execution.profileId ? db.select().from(testProfiles).where(eq(testProfiles.uid, execution.profileId)).limit(1) : Promise.resolve([]),
       db.select().from(artifacts).where(eq(artifacts.executionId, execution.uid)),
-      db.select().from(incidents).where(eq(incidents.executionId, executionId)),
+      db.select().from(incidents).where(eq(incidents.executionId, String(executionId))),
       db.select().from(aiAnalyses).where(eq(aiAnalyses.executionId, executionId)),
     ]);
 

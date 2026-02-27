@@ -380,3 +380,18 @@
 - [x] Sprint Analytics 3C: Tests alertes (13 tests: threshold, cooldown, reset, probe health, webhook types)
 - [x] Sprint Analytics Final: 596 tests verts, 0 TS errors + checkpoint
 - [x] Fix: Schéma Drizzle invites — colonnes camelCase vs snake_case (invite_role, invite_status, invited_by, invited_by_name, expires_at, accepted_at, created_at) + ajout uid
+- [ ] Audit DB: Extraire colonnes réelles de toutes les tables DB
+- [ ] Audit DB: Comparer avec schéma Drizzle et lister les décalages
+- [ ] Audit DB: Corriger tous les schémas Drizzle décalés
+- [ ] Audit DB: Vérification TS=0, tests verts, checkpoint
+- [x] Schema Audit: Fix invites table (camelCase → snake_case mapping for invite_role, invite_status, invited_by, etc.)
+- [x] Schema Audit: Fix incidents table (rewrite with correct DB columns: execution_id, project_id, severity, step_name, etc.)
+- [x] Schema Audit: Fix drive_run_summaries (remove non-existent uid, orgId, createdAt columns)
+- [x] Schema Audit: Fix kpi_samples (remove non-existent orgId column from bulkInsert)
+- [x] Schema Audit: Fix users table (add full_name, status, password_hash mappings)
+- [x] Schema Audit: Fix kpiData.ts router (remove uid/orgId/createdAt references, pagination by id)
+- [x] Schema Audit: Fix jobQueue.ts (String cast for incidents.executionId varchar vs number)
+- [x] Schema Audit: Create missing captures table in DB (CREATE TABLE captures)
+- [x] Schema Audit: Update kpiData.test.ts (remove uid assertion for driveRunSummaries)
+- [x] Schema Audit: Document results in docs/SCHEMA_AUDIT.md
+- [x] Schema Audit: Verify 0 TS errors, 596 tests passing

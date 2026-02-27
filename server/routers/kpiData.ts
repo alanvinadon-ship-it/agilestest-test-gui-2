@@ -95,12 +95,10 @@ export const kpiSamplesRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const db = await dbOrThrow();
-      const orgId = ctx.user?.openId ?? "system";
       if (input.samples.length === 0) return { inserted: 0 };
 
       const rows = input.samples.map((s) => ({
         uid: randomUUID(),
-        orgId,
         driveJobId: s.driveJobId,
         campaignId: s.campaignId,
         routeId: s.routeId,
@@ -152,18 +150,18 @@ export const driveRunSummariesRouter = router({
       const conditions: SQL[] = [];
 
       if (input.campaignId) conditions.push(eq(driveRunSummaries.campaignId, input.campaignId));
-      if (input.cursor) conditions.push(lt(driveRunSummaries.uid, input.cursor));
+      if (input.cursor) conditions.push(lt(driveRunSummaries.id, Number(input.cursor)));
 
       const rows = await db
         .select()
         .from(driveRunSummaries)
         .where(conditions.length ? and(...conditions) : undefined)
-        .orderBy(desc(driveRunSummaries.createdAt))
+        .orderBy(desc(driveRunSummaries.id))
         .limit(input.pageSize + 1);
 
       const hasMore = rows.length > input.pageSize;
       const data = hasMore ? rows.slice(0, input.pageSize) : rows;
-      const nextCursor = hasMore ? data[data.length - 1]?.uid : undefined;
+      const nextCursor = hasMore ? String(data[data.length - 1]?.id) : undefined;
 
       return { data, hasMore, nextCursor };
     }),
@@ -199,8 +197,6 @@ export const driveRunSummariesRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const db = await dbOrThrow();
-      const orgId = ctx.user?.openId ?? "system";
-
       // Check if exists
       const [existing] = await db
         .select()
@@ -222,13 +218,10 @@ export const driveRunSummariesRouter = router({
             overallPass: input.overallPass,
           })
           .where(eq(driveRunSummaries.id, existing.id));
-        return { uid: existing.uid, driveJobId: input.driveJobId };
+        return { uid: String(existing.id), driveJobId: input.driveJobId };
       }
 
-      const uid = randomUUID();
       await db.insert(driveRunSummaries).values({
-        uid,
-        orgId,
         driveJobId: input.driveJobId,
         campaignId: input.campaignId,
         totalSamples: input.totalSamples,
@@ -241,7 +234,8 @@ export const driveRunSummariesRouter = router({
         overallPass: input.overallPass,
       });
 
-      return { uid, driveJobId: input.driveJobId };
+      const [inserted] = await db.select({ id: driveRunSummaries.id }).from(driveRunSummaries).where(eq(driveRunSummaries.driveJobId, input.driveJobId)).limit(1);
+      return { uid: String(inserted?.id ?? 0), driveJobId: input.driveJobId };
     }),
 
   /** Delete summary by job ID */

@@ -4,6 +4,7 @@ import {
 } from "drizzle-orm/mysql-core";
 
 // ─── Users ──────────────────────────────────────────────────────────────────
+// DB columns: id, openId, name, email, loginMethod, role, createdAt, updatedAt, lastSignedIn, full_name, status, password_hash
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
   openId: varchar("openId", { length: 64 }).notNull().unique(),
@@ -14,6 +15,9 @@ export const users = mysqlTable("users", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
+  fullName: varchar("full_name", { length: 255 }),
+  status: varchar("status", { length: 32 }),
+  passwordHash: varchar("password_hash", { length: 255 }),
 });
 
 export type User = typeof users.$inferSelect;
@@ -214,14 +218,19 @@ export type Artifact = typeof artifacts.$inferSelect;
 export type InsertArtifact = typeof artifacts.$inferInsert;
 
 // ─── Incidents ──────────────────────────────────────────────────────────────
+// DB columns: id, uid, execution_id, project_id, title, description, severity, step_name, expected_result, actual_result, detected_at
 export const incidents = mysqlTable("incidents", {
   id: int("id").autoincrement().primaryKey(),
-  executionId: int("executionId").notNull(),
-  severity: mysqlEnum("severity", ["CRITICAL", "MAJOR", "MINOR", "INFO"]).default("INFO").notNull(),
+  uid: varchar("uid", { length: 36 }),
+  executionId: varchar("execution_id", { length: 36 }),
+  projectId: varchar("project_id", { length: 36 }),
   title: varchar("title", { length: 512 }).notNull(),
   description: text("description"),
-  stepIndex: int("stepIndex"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  severity: mysqlEnum("severity", ["CRITICAL", "MAJOR", "MINOR", "INFO"]).default("INFO").notNull(),
+  stepName: varchar("step_name", { length: 255 }),
+  expectedResult: text("expected_result"),
+  actualResult: text("actual_result"),
+  detectedAt: timestamp("detected_at").defaultNow().notNull(),
 });
 
 export type IncidentRow = typeof incidents.$inferSelect;
@@ -575,10 +584,10 @@ export type CapturePolicyRow = typeof capturePolicies.$inferSelect;
 export type InsertCapturePolicyRow = typeof capturePolicies.$inferInsert;
 
 // ─── KPI Samples (Drive Test measurements) ─────────────────────────────────
+// DB columns: id, uid, drive_job_id, campaign_id, route_id, timestamp, lat, lon, kpi_name, value, unit, cell_id, technology
 export const kpiSamples = mysqlTable("kpi_samples", {
   id: int("id").autoincrement().primaryKey(),
   uid: varchar("uid", { length: 36 }).notNull(),
-  orgId: varchar("org_id", { length: 64 }).notNull(),
   driveJobId: varchar("drive_job_id", { length: 36 }).notNull(),
   campaignId: varchar("campaign_id", { length: 36 }).notNull(),
   routeId: varchar("route_id", { length: 36 }).notNull(),
@@ -590,17 +599,15 @@ export const kpiSamples = mysqlTable("kpi_samples", {
   unit: varchar("unit", { length: 20 }).default("").notNull(),
   cellId: varchar("cell_id", { length: 50 }),
   technology: varchar("technology", { length: 20 }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export type KpiSampleRow = typeof kpiSamples.$inferSelect;
 export type InsertKpiSampleRow = typeof kpiSamples.$inferInsert;
 
 // ─── Drive Run Summaries ────────────────────────────────────────────────────
+// DB columns: id, drive_job_id, campaign_id, total_samples, duration_sec, distance_km, kpi_averages, kpi_min, kpi_max, threshold_violations, overall_pass
 export const driveRunSummaries = mysqlTable("drive_run_summaries", {
   id: int("id").autoincrement().primaryKey(),
-  uid: varchar("uid", { length: 36 }).notNull(),
-  orgId: varchar("org_id", { length: 64 }).notNull(),
   driveJobId: varchar("drive_job_id", { length: 36 }).notNull().unique(),
   campaignId: varchar("campaign_id", { length: 36 }).notNull(),
   totalSamples: int("total_samples").default(0).notNull(),
@@ -611,7 +618,6 @@ export const driveRunSummaries = mysqlTable("drive_run_summaries", {
   kpiMax: json("kpi_max"),           // Record<string, number>
   thresholdViolations: json("threshold_violations"), // ThresholdViolation[]
   overallPass: boolean("overall_pass").default(true).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export type DriveRunSummaryRow = typeof driveRunSummaries.$inferSelect;

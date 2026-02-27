@@ -463,7 +463,7 @@ export const executionsRouter = router({
     const exec = r[0];
     const [arts, incs, analyses, scenario, profile] = await Promise.all([
       db.select().from(artifacts).where(eq(artifacts.executionId, exec.uid)),
-      db.select().from(incidents).where(eq(incidents.executionId, input.executionId)).orderBy(desc(incidents.createdAt)),
+      db.select().from(incidents).where(eq(incidents.executionId, exec.uid)).orderBy(desc(incidents.detectedAt)),
       db.select().from(aiAnalyses).where(eq(aiAnalyses.executionId, input.executionId)).orderBy(desc(aiAnalyses.createdAt)),
       exec.scenarioId ? db.select().from(testScenarios).where(eq(testScenarios.uid, exec.scenarioId)).limit(1) : Promise.resolve([]),
       exec.profileId ? db.select().from(testProfiles).where(eq(testProfiles.uid, exec.profileId)).limit(1) : Promise.resolve([]),
@@ -560,7 +560,7 @@ export const executionsRouter = router({
       if (!exec) throw new TRPCError({ code: "NOT_FOUND", message: `Exécution #${execId} introuvable` });
       const [arts, incs, scenario, profile] = await Promise.all([
         db.select().from(artifacts).where(eq(artifacts.executionId, exec.uid)),
-        db.select().from(incidents).where(eq(incidents.executionId, execId)).orderBy(desc(incidents.createdAt)),
+        db.select().from(incidents).where(eq(incidents.executionId, exec.uid)).orderBy(desc(incidents.detectedAt)),
         exec.scenarioId ? db.select().from(testScenarios).where(eq(testScenarios.uid, exec.scenarioId)).limit(1) : Promise.resolve([]),
         exec.profileId ? db.select().from(testProfiles).where(eq(testProfiles.uid, exec.profileId)).limit(1) : Promise.resolve([]),
       ]);

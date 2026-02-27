@@ -116,7 +116,6 @@ describe("kpiData schema tables", () => {
   it("driveRunSummaries has expected columns", async () => {
     const schema = await import("../drizzle/schema");
     const cols = Object.keys(schema.driveRunSummaries);
-    expect(cols).toContain("uid");
     expect(cols).toContain("driveJobId");
     expect(cols).toContain("campaignId");
     expect(cols).toContain("totalSamples");
