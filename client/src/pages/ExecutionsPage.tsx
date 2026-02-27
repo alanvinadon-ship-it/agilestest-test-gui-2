@@ -3,7 +3,7 @@
  * Données réelles via tRPC (MySQL) — branchement direct sur le backend.
  * Boutons Analyser IA + Parser JMeter intégrés.
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
 import { usePermission } from '../hooks/usePermission';
@@ -139,6 +139,10 @@ export default function ExecutionsPage() {
   const [page, setPage] = useState(1);
   const pageSize = 25;
 
+  const EXEC_PAGE_SIZE = 30;
+  const [execCursor, setExecCursor] = useState<number | undefined>(undefined);
+  const [allExecItems, setAllExecItems] = useState<any[]>([]);
+
   // Fetch scenarios for filter dropdown
   const { data: scenariosData } = trpc.scenarios.list.useQuery(
     { projectId: String(currentProject?.id || ''), page: 1, pageSize: 100 },
@@ -146,21 +150,45 @@ export default function ExecutionsPage() {
   );
   const scenariosList = scenariosData?.data ?? [];
 
-  const { data, isLoading } = trpc.executions.list.useQuery(
+  const { data, isLoading, isFetching } = trpc.executions.list.useQuery(
     {
       projectId: String(currentProject?.id || ''),
-      page,
-      pageSize,
+      page: 1,
+      pageSize: EXEC_PAGE_SIZE,
+      cursor: execCursor,
       ...(statusFilter ? { status: statusFilter as ExecutionStatus } : {}),
       ...(scenarioFilter ? { scenarioId: String(scenarioFilter) } : {}),
     },
     {
       enabled: !!currentProject,
-      refetchInterval: 10000,
+      refetchInterval: 15000,
     },
   );
 
-  const executions = data?.data ?? [];
+  // Accumulate execution items as cursor changes
+  useEffect(() => {
+    if (data?.data) {
+      if (execCursor === undefined) {
+        setAllExecItems(data.data);
+      } else {
+        setAllExecItems(prev => {
+          const ids = new Set(prev.map((r: any) => r.id));
+          const fresh = data.data.filter((r: any) => !ids.has(r.id));
+          return [...prev, ...fresh];
+        });
+      }
+    }
+  }, [data, execCursor]);
+
+  // Reset accumulator when filters change
+  useEffect(() => {
+    setExecCursor(undefined);
+    setAllExecItems([]);
+  }, [statusFilter, scenarioFilter, currentProject?.id]);
+
+  const execHasMore = data?.hasMore ?? false;
+  const execNextCursor = data?.nextCursor;
+  const executions = allExecItems;
   const pagination = data?.pagination;
 
   const filteredExecutions = useMemo(() => {
@@ -336,28 +364,22 @@ export default function ExecutionsPage() {
             </tbody>
           </table>
 
-          {/* Pagination */}
-          {pagination && pagination.totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-              <p className="text-xs text-muted-foreground">
-                Page {pagination.page} / {pagination.totalPages} — {pagination.total} exécution(s)
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page <= 1}
-                  className="rounded-md border border-border px-3 py-1 text-xs text-foreground hover:bg-secondary disabled:opacity-50 transition-colors"
-                >
-                  Précédent
-                </button>
-                <button
-                  onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
-                  disabled={page >= pagination.totalPages}
-                  className="rounded-md border border-border px-3 py-1 text-xs text-foreground hover:bg-secondary disabled:opacity-50 transition-colors"
-                >
-                  Suivant
-                </button>
-              </div>
+          {/* Charger plus */}
+          {execHasMore && (
+            <div className="flex justify-center py-3 border-t border-border">
+              <button
+                onClick={() => execNextCursor && setExecCursor(execNextCursor)}
+                disabled={isFetching}
+                className="rounded-md border border-border px-4 py-1.5 text-xs text-foreground hover:bg-secondary disabled:opacity-50 transition-colors inline-flex items-center gap-2"
+              >
+                {isFetching && <Loader2 className="w-3 h-3 animate-spin" />}
+                Charger plus
+              </button>
+            </div>
+          )}
+          {pagination && (
+            <div className="px-4 py-2 text-xs text-muted-foreground">
+              {executions.length} exécution(s) affichée(s) sur {pagination.total}
             </div>
           )}
         </div>

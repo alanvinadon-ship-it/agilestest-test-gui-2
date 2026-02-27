@@ -6,14 +6,19 @@
  *
  * Usage CI : pnpm lint   (échoue si import interdit détecté)
  *
- * Pages migrées (surveillées) :
+ * Pages migrées (surveillées) — 10 pages :
  *   ProfilesPage, DatasetTypesPage, DatasetsPage, DriveCampaignsPage,
- *   ProjectsPage, ProbesPage, ExecutionsPage, CapturesPage, BundlesPage
+ *   ProjectsPage, ProbesPage, ExecutionsPage, CapturesPage, BundlesPage,
+ *   ScenariosPage
  *
- * Pages NON migrées (exclues pour l'instant) :
- *   ScenariosPage (localScenarios, localDatasetTypes, localCapturePolicies)
- *   AdminProjectAccessPage, ProjectSettingsPage, DriveIncidentReportPage,
- *   DriveReportingPage (encore sur localStorage)
+ * Pages NON migrées (exclues pour l'instant) — 4 pages :
+ *   AdminProjectAccessPage (localProjects)
+ *   ProjectSettingsPage (localCapturePolicies)
+ *   DriveIncidentReportPage (localDriveRunSummaries, localDriveCampaigns)
+ *   DriveReportingPage (localDriveRunSummaries, localDriveCampaigns)
+ *
+ * Pages sans import localStore (pas de surveillance nécessaire) :
+ *   Home, NotFound, ComponentShowcase, ExecutionDetailPage, etc.
  */
 import tsParser from "typescript-eslint";
 
@@ -29,6 +34,7 @@ export default [
       "client/src/pages/ExecutionsPage.tsx",
       "client/src/pages/CapturesPage.tsx",
       "client/src/pages/BundlesPage.tsx",
+      "client/src/pages/ScenariosPage.tsx",
     ],
     languageOptions: {
       parser: tsParser.parser,

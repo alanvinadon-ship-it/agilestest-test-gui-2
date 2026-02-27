@@ -15,29 +15,29 @@ pnpm lint
 # Le script échoue si un import interdit est détecté
 ```
 
-## Pages migrées (surveillées)
+## Pages migrées (gate ESLint active) — 10 pages
 
-| Page | Routeur tRPC | Statut |
-|------|-------------|--------|
-| `ProfilesPage.tsx` | `trpc.profiles.*` | Migré |
-| `DatasetTypesPage.tsx` | `trpc.datasetTypes.*` | Migré |
-| `DatasetsPage.tsx` | `trpc.datasetTypes.*` + `trpc.datasetInstances.*` | Migré |
-| `DriveCampaignsPage.tsx` | `trpc.driveCampaigns.*` + `trpc.driveRoutes.*` + `trpc.driveDevices.*` + `trpc.driveProbeLinks.*` + `trpc.driveJobs.*` | Migré (sauf `localCapturePolicies` — exception documentée) |
-| `ProjectsPage.tsx` | `trpc.projects.*` | Migré |
-| `ProbesPage.tsx` | `trpc.probes.*` | Migré |
-| `ExecutionsPage.tsx` | `trpc.executions.*` | Migré |
-| `CapturesPage.tsx` | `trpc.captures.*` | Migré |
-| `BundlesPage.tsx` | `trpc.bundles.*` | Migré |
+| Page | Routeur(s) tRPC | Cursor pagination |
+|------|----------------|:-----------------:|
+| `ProfilesPage.tsx` | `trpc.profiles.*` | Charger plus |
+| `DatasetTypesPage.tsx` | `trpc.datasetTypes.*` | — |
+| `DatasetsPage.tsx` | `trpc.datasetTypes.*` + `trpc.datasetInstances.*` | — |
+| `DriveCampaignsPage.tsx` | `trpc.driveCampaigns.*` + `trpc.driveRoutes.*` + `trpc.driveDevices.*` + `trpc.driveProbeLinks.*` + `trpc.driveJobs.*` + `trpc.capturePolicies.*` | Charger plus |
+| `ScenariosPage.tsx` | `trpc.scenarios.*` + `trpc.capturePolicies.*` | Charger plus |
+| `ProjectsPage.tsx` | `trpc.projects.*` | — |
+| `ProbesPage.tsx` | `trpc.probes.*` | — |
+| `ExecutionsPage.tsx` | `trpc.executions.*` | Charger plus |
+| `CapturesPage.tsx` | `trpc.captures.*` | Charger plus |
+| `BundlesPage.tsx` | `trpc.bundles.*` | — |
 
-## Pages non encore migrées
+## Pages non encore migrées (exclues de la gate) — 4 pages
 
 | Page | Dépendances localStorage | Priorité |
 |------|--------------------------|----------|
-| `ScenariosPage.tsx` | `localScenarios`, `localDatasetTypes`, `localCapturePolicies` | Haute |
-| `AdminProjectAccessPage.tsx` | `localStore` | Moyenne |
-| `ProjectSettingsPage.tsx` | `localStore` | Moyenne |
-| `DriveIncidentReportPage.tsx` | `localStore` | Basse |
-| `DriveReportingPage.tsx` | `localStore` | Basse |
+| `AdminProjectAccessPage.tsx` | `localProjects` | Moyenne |
+| `ProjectSettingsPage.tsx` | `localCapturePolicies` | Moyenne |
+| `DriveIncidentReportPage.tsx` | `localDriveRunSummaries`, `localDriveCampaigns` | Basse |
+| `DriveReportingPage.tsx` | `localDriveRunSummaries`, `localDriveCampaigns` | Basse |
 
 ## Comment ajouter une page migrée
 
@@ -47,9 +47,4 @@ pnpm lint
 
 ## Exceptions temporaires
 
-Si une page migrée a encore besoin d'un import `localStore` pour une fonctionnalité non encore migrée (ex: `localCapturePolicies`), utiliser un commentaire d'exception documenté :
-
-```ts
-// eslint-disable-next-line no-restricted-imports -- TODO: migrer capturePolicies vers tRPC/DB
-import { localCapturePolicies } from '@/api/localStore';
-```
+Aucune exception active. Toutes les pages surveillées sont 100% tRPC.

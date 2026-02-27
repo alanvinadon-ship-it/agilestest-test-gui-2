@@ -432,6 +432,7 @@ export const executionsRouter = router({
   list: protectedProcedure.input(projectScopedList.extend({
     status: z.enum(["PENDING", "RUNNING", "PASSED", "FAILED", "ERROR", "CANCELLED"]).optional(),
     scenarioId: z.string().optional(),
+    cursor: z.number().optional(),
   })).query(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
@@ -439,13 +440,17 @@ export const executionsRouter = router({
     const conditions: SQL[] = [eq(executions.projectId, input.projectId)];
     if (input.status) conditions.push(eq(executions.status, input.status));
     if (input.scenarioId) conditions.push(eq(executions.scenarioId, input.scenarioId));
+    // Cursor-based: fetch items with id < cursor (descending order)
+    if (input.cursor) conditions.push(sql`${executions.id} < ${input.cursor}`);
     const where = and(...conditions);
-    const [data, cnt] = await Promise.all([
-      db.select().from(executions).where(where).orderBy(desc(executions.createdAt)).limit(pageSize).offset(offset),
-      countRows(db, executions, where),
-    ]);
-    const total = cnt[0]?.count ?? 0;
-    return { data, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
+    const fetchSize = pageSize + 1;
+    const rows = await db.select().from(executions).where(where).orderBy(desc(executions.id)).limit(fetchSize);
+    const hasMore = rows.length > pageSize;
+    const data = hasMore ? rows.slice(0, pageSize) : rows;
+    const nextCursor = hasMore && data.length > 0 ? data[data.length - 1].id : undefined;
+    const [cnt] = await countRows(db, executions, where);
+    const total = cnt?.count ?? 0;
+    return { data, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) }, nextCursor, hasMore };
   }),
   get: protectedProcedure.input(z.object({ executionId: z.number() })).query(async ({ input }) => {
     const db = await getDb();
@@ -511,6 +516,7 @@ export const capturesRouter = router({
     ]).optional(),
     probeId: z.number().optional(),
     q: z.string().optional(),
+    cursor: z.number().optional(),
   })).query(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
@@ -534,13 +540,17 @@ export const capturesRouter = router({
     if (input.search && input.search.trim()) {
       conditions.push(like(captures.name, `%${input.search.trim()}%`));
     }
+    // Cursor-based: fetch items with id < cursor (descending order)
+    if (input.cursor) conditions.push(sql`${captures.id} < ${input.cursor}`);
     const where = and(...conditions);
-    const [data, cnt] = await Promise.all([
-      db.select().from(captures).where(where).orderBy(desc(captures.createdAt)).limit(pageSize).offset(offset),
-      countRows(db, captures, where),
-    ]);
-    const total = cnt[0]?.count ?? 0;
-    return { data, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
+    const fetchSize = pageSize + 1;
+    const rows = await db.select().from(captures).where(where).orderBy(desc(captures.id)).limit(fetchSize);
+    const hasMore = rows.length > pageSize;
+    const data = hasMore ? rows.slice(0, pageSize) : rows;
+    const nextCursor = hasMore && data.length > 0 ? data[data.length - 1].id : undefined;
+    const [cnt] = await countRows(db, captures, where);
+    const total = cnt?.count ?? 0;
+    return { data, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) }, nextCursor, hasMore };
   }),
   create: protectedProcedure.input(z.object({
     projectId: z.string(), name: z.string().min(1), executionId: z.number().optional(),

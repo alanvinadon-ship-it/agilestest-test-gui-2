@@ -514,3 +514,19 @@ export const driveJobs = mysqlTable("drive_jobs", {
 
 export type DriveJobRow = typeof driveJobs.$inferSelect;
 export type InsertDriveJob = typeof driveJobs.$inferInsert;
+
+// ─── Capture Policies ──────────────────────────────────────────────────────
+// Stocke les politiques de capture réseau (scope: project, campaign, scenario)
+export const capturePolicies = mysqlTable("capture_policies", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull(),
+  scope: mysqlEnum("scope", ["project", "campaign", "scenario"]).notNull(),
+  scopeId: varchar("scope_id", { length: 100 }).notNull(), // project_id, campaign_id, or scenario_id
+  policyJson: json("policy_json"), // CapturePolicy payload
+  createdBy: varchar("created_by", { length: 64 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CapturePolicyRow = typeof capturePolicies.$inferSelect;
+export type InsertCapturePolicyRow = typeof capturePolicies.$inferInsert;

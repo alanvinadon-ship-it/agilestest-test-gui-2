@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '@/auth/AuthContext';
 import { usePermission, PermissionKey } from '@/security';
@@ -50,8 +50,7 @@ import {
 import { toast } from 'sonner';
 import { CapturePolicyEditor, CaptureModeBadge } from '@/capture';
 import type { CapturePolicy } from '@/capture/types';
-// eslint-disable-next-line no-restricted-imports -- TODO: migrer capturePolicies vers tRPC/DB
-import { localCapturePolicies } from '@/api/localStore';
+import { DEFAULT_CAPTURE_POLICY } from '@/capture/types';
 
 // ─── Constants ────────────────────────────────────────────────────────────
 
@@ -135,15 +134,45 @@ export default function DriveCampaignsPage() {
   const [filterNetwork, setFilterNetwork] = useState<string>('ALL');
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
 
-  const { data: campaignsData, isLoading: campaignsLoading } = trpc.driveCampaigns.list.useQuery(
+  const CAMPAIGN_PAGE_SIZE = 30;
+  const [campaignCursor, setCampaignCursor] = useState<number | undefined>(undefined);
+  const [allCampaignItems, setAllCampaignItems] = useState<any[]>([]);
+
+  const { data: campaignsData, isLoading: campaignsLoading, isFetching: campaignsFetching } = trpc.driveCampaigns.list.useQuery(
     {
       projectId,
       status: filterStatus !== 'ALL' ? filterStatus as any : undefined,
+      pageSize: CAMPAIGN_PAGE_SIZE,
+      cursor: campaignCursor,
     },
     { enabled: !!projectId },
   );
 
-  const campaigns = useMemo(() => (campaignsData?.data || []).map(mapCampaignRow), [campaignsData]);
+  // Accumulate campaign items as cursor changes
+  useEffect(() => {
+    if (campaignsData?.data) {
+      if (campaignCursor === undefined) {
+        setAllCampaignItems(campaignsData.data);
+      } else {
+        setAllCampaignItems(prev => {
+          const ids = new Set(prev.map((r: any) => r.uid || r.id));
+          const fresh = campaignsData.data.filter((r: any) => !ids.has(r.uid || r.id));
+          return [...prev, ...fresh];
+        });
+      }
+    }
+  }, [campaignsData, campaignCursor]);
+
+  // Reset accumulator when filters change
+  useEffect(() => {
+    setCampaignCursor(undefined);
+    setAllCampaignItems([]);
+  }, [filterStatus, projectId]);
+
+  const campaignsHasMore = campaignsData?.hasMore ?? false;
+  const campaignsNextCursor = campaignsData?.nextCursor;
+
+  const campaigns = useMemo(() => allCampaignItems.map(mapCampaignRow), [allCampaignItems]);
 
   const filtered = useMemo(() => {
     let list = campaigns;
@@ -212,6 +241,30 @@ export default function DriveCampaignsPage() {
     { enabled: !!expandedCampaign },
   );
   const campaignProbeLinks = probeLinksData?.items || [];
+
+  // ─── tRPC Queries: Capture policy per expanded campaign ─────────────────
+
+  const { data: campaignPolicyRow } = trpc.capturePolicies.getByScope.useQuery(
+    { scope: 'campaign', scopeId: expandedCampaign || '' },
+    { enabled: !!expandedCampaign },
+  );
+  const campaignCapturePolicy = (campaignPolicyRow?.policyJson as any) || null;
+
+  const upsertPolicyMutation = trpc.capturePolicies.upsert.useMutation({
+    onSuccess: () => {
+      utils.capturePolicies.getByScope.invalidate();
+      toast.success('Capture policy mise à jour pour cette campagne');
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const removePolicyMutation = trpc.capturePolicies.remove.useMutation({
+    onSuccess: () => {
+      utils.capturePolicies.getByScope.invalidate();
+      toast.info('Override capture supprimé — retour au défaut projet');
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
 
   // ─── tRPC Queries: Jobs per campaign ────────────────────────────────────
 
@@ -745,15 +798,20 @@ export default function DriveCampaignsPage() {
                         {/* Capture Policy Override */}
                         <div className="border-t border-border pt-3">
                           <CapturePolicyEditor
-                            value={localCapturePolicies.get('campaign', c.campaign_id)}
+                            value={expandedCampaign === c.campaign_id ? campaignCapturePolicy : null}
                             onChange={(p: CapturePolicy) => {
-                              localCapturePolicies.upsert('campaign', c.campaign_id, p);
-                              toast.success('Capture policy mise à jour pour cette campagne');
+                              upsertPolicyMutation.mutate({
+                                scope: 'campaign',
+                                scopeId: c.campaign_id,
+                                policyJson: p,
+                              });
                             }}
-                            showRemoveOverride={!!localCapturePolicies.get('campaign', c.campaign_id)}
+                            showRemoveOverride={expandedCampaign === c.campaign_id && !!campaignCapturePolicy}
                             onRemoveOverride={() => {
-                              localCapturePolicies.remove('campaign', c.campaign_id);
-                              toast.info('Override capture supprimé — retour au défaut projet');
+                              removePolicyMutation.mutate({
+                                scope: 'campaign',
+                                scopeId: c.campaign_id,
+                              });
                             }}
                             scopeLabel="Campagne"
                             readOnly={!canUpdateCampaign}
@@ -765,6 +823,20 @@ export default function DriveCampaignsPage() {
                   </div>
                 );
               })}
+              {/* Charger plus */}
+              {campaignsHasMore && (
+                <div className="flex justify-center pt-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={campaignsFetching}
+                    onClick={() => campaignsNextCursor && setCampaignCursor(campaignsNextCursor)}
+                  >
+                    {campaignsFetching ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                    Charger plus
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </div>

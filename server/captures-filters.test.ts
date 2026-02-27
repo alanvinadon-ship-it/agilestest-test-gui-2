@@ -107,10 +107,11 @@ describe("frontend: CapturesPage advanced filters", () => {
     expect(content).toContain("p.set('page', '1')");
   });
 
-  it("should use placeholderData for keepPreviousData behavior", async () => {
+  it("should use cursor pagination with 'Charger plus' pattern", async () => {
     const fs = await import("fs");
     const content = fs.readFileSync("client/src/pages/CapturesPage.tsx", "utf-8");
-    expect(content).toContain("placeholderData");
+    expect(content).toContain("captureCursor");
+    expect(content).toContain("Charger plus");
   });
 
   it("should have a reset filters button", async () => {

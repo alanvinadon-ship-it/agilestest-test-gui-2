@@ -206,6 +206,10 @@ export default function CapturesPage() {
   const page = Math.max(1, Number(params.get('page')) || 1);
   const pageSize = 25;
 
+  const CAPTURE_PAGE_SIZE = 30;
+  const [captureCursor, setCaptureCursor] = useState<number | undefined>(undefined);
+  const [allCaptureItems, setAllCaptureItems] = useState<any[]>([]);
+
   // Local search input (debounced)
   const [searchInput, setSearchInput] = useState(searchQuery);
   useEffect(() => {
@@ -232,23 +236,46 @@ export default function CapturesPage() {
   );
   const probesLite = probesLiteData ?? [];
 
-  const { data, isLoading, isPlaceholderData } = trpc.captures.list.useQuery(
+  const { data, isLoading, isFetching } = trpc.captures.list.useQuery(
     {
       projectId: String(currentProject?.id || ''),
-      page,
-      pageSize,
+      page: 1,
+      pageSize: CAPTURE_PAGE_SIZE,
+      cursor: captureCursor,
       ...(statusFilter ? { status: statusFilter as CaptureStatus } : {}),
       ...(probeIdFilter ? { probeId: Number(probeIdFilter) } : {}),
       ...(searchQuery ? { q: searchQuery } : {}),
     },
     {
       enabled: !!currentProject,
-      refetchInterval: 10000,
-      placeholderData: (prev) => prev, // keepPreviousData
+      refetchInterval: 15000,
     },
   );
 
-  const captures = data?.data ?? [];
+  // Accumulate capture items as cursor changes
+  useEffect(() => {
+    if (data?.data) {
+      if (captureCursor === undefined) {
+        setAllCaptureItems(data.data);
+      } else {
+        setAllCaptureItems(prev => {
+          const ids = new Set(prev.map((r: any) => r.id));
+          const fresh = data.data.filter((r: any) => !ids.has(r.id));
+          return [...prev, ...fresh];
+        });
+      }
+    }
+  }, [data, captureCursor]);
+
+  // Reset accumulator when filters change
+  useEffect(() => {
+    setCaptureCursor(undefined);
+    setAllCaptureItems([]);
+  }, [statusFilter, probeIdFilter, searchQuery, currentProject?.id]);
+
+  const capturesHasMore = data?.hasMore ?? false;
+  const capturesNextCursor = data?.nextCursor;
+  const captures = allCaptureItems;
   const pagination = data?.pagination;
 
   const deleteMutation = trpc.captures.delete.useMutation({
@@ -328,7 +355,7 @@ export default function CapturesPage() {
             <RotateCcw className="w-3.5 h-3.5" /> Réinitialiser
           </button>
         )}
-        {isPlaceholderData && (
+        {isFetching && !isLoading && (
           <Loader2 className="w-4 h-4 text-primary animate-spin" />
         )}
       </div>
@@ -415,28 +442,22 @@ export default function CapturesPage() {
             </tbody>
           </table>
 
-          {/* Pagination */}
-          {pagination && pagination.totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-              <p className="text-xs text-muted-foreground">
-                Page {pagination.page} / {pagination.totalPages} — {pagination.total} capture(s)
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage(Math.max(1, page - 1))}
-                  disabled={page <= 1}
-                  className="rounded-md border border-border px-3 py-1 text-xs text-foreground hover:bg-secondary disabled:opacity-50 transition-colors"
-                >
-                  Précédent
-                </button>
-                <button
-                  onClick={() => setPage(Math.min(pagination.totalPages, page + 1))}
-                  disabled={page >= pagination.totalPages}
-                  className="rounded-md border border-border px-3 py-1 text-xs text-foreground hover:bg-secondary disabled:opacity-50 transition-colors"
-                >
-                  Suivant
-                </button>
-              </div>
+          {/* Charger plus */}
+          {capturesHasMore && (
+            <div className="flex justify-center py-3 border-t border-border">
+              <button
+                onClick={() => capturesNextCursor && setCaptureCursor(capturesNextCursor)}
+                disabled={isFetching}
+                className="rounded-md border border-border px-4 py-1.5 text-xs text-foreground hover:bg-secondary disabled:opacity-50 transition-colors inline-flex items-center gap-2"
+              >
+                {isFetching && <Loader2 className="w-3 h-3 animate-spin" />}
+                Charger plus
+              </button>
+            </div>
+          )}
+          {pagination && (
+            <div className="px-4 py-2 text-xs text-muted-foreground">
+              {captures.length} capture(s) affichée(s) sur {pagination.total}
             </div>
           )}
         </div>

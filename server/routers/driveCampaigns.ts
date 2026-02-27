@@ -3,7 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import { driveCampaigns } from "../../drizzle/schema";
-import { eq, and, desc, like, sql, SQL } from "drizzle-orm";
+import { eq, and, desc, lt, like, sql, SQL } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 const envEnum = z.enum(["DEV", "PREPROD", "PILOT_ORANGE", "PROD"]);
@@ -17,6 +17,8 @@ export const driveCampaignsRouter = router({
         status: statusEnum.optional(),
         targetEnv: envEnum.optional(),
         search: z.string().optional(),
+        pageSize: z.number().int().min(1).max(100).default(30),
+        cursor: z.number().optional(),
       })
     )
     .query(async ({ input }) => {
@@ -26,6 +28,7 @@ export const driveCampaignsRouter = router({
           code: "INTERNAL_SERVER_ERROR",
           message: "DB unavailable",
         });
+      const pageSize = input.pageSize;
       const conditions: SQL[] = [
         eq(driveCampaigns.projectId, input.projectId),
       ];
@@ -34,14 +37,18 @@ export const driveCampaignsRouter = router({
         conditions.push(eq(driveCampaigns.targetEnv, input.targetEnv));
       if (input.search)
         conditions.push(like(driveCampaigns.name, `%${input.search}%`));
+      if (input.cursor) conditions.push(lt(driveCampaigns.id, input.cursor));
       const where = and(...conditions);
-      const data = await db
+      const rows = await db
         .select()
         .from(driveCampaigns)
         .where(where)
-        .orderBy(desc(driveCampaigns.createdAt))
-        .limit(100);
-      return { data };
+        .orderBy(desc(driveCampaigns.id))
+        .limit(pageSize + 1);
+      const hasMore = rows.length > pageSize;
+      const data = hasMore ? rows.slice(0, pageSize) : rows;
+      const nextCursor = hasMore && data.length > 0 ? data[data.length - 1].id : undefined;
+      return { data, nextCursor, hasMore };
     }),
 
   get: protectedProcedure

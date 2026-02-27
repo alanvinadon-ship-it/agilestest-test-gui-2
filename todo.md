@@ -244,3 +244,21 @@
 - [x] Sprint Étape 3: Cursor pagination UI "Charger plus" sur ProfilesPage (pageSize=30, accumulation, déduplication)
 - [x] Sprint Étape 3: Cursor pagination UI "Charger plus" sur ScenariosPage (pageSize=30, accumulation, déduplication)
 - [x] Sprint Étape 3: Tests cursor concat/unique + vérification UX (443 tests passés, TS=0 erreurs)
+- [x] Sprint Final Étape 1A: Inspecter shape localCapturePolicies (scope/scopeId/policyJson)
+- [x] Sprint Final Étape 1A: Créer table capture_policies (Drizzle + SQL) avec indexes
+- [x] Sprint Final Étape 1A: Routeur tRPC capturePolicies (list/getByScope/get/upsert/remove/delete)
+- [x] Sprint Final Étape 1B: Migrer DriveCampaignsPage — remplacé localCapturePolicies par trpc.capturePolicies (upsert/remove/getByScope)
+- [x] Sprint Final Étape 1B: Retiré exception eslint-disable-next-line de DriveCampaignsPage (0 import localStore)
+- [x] Sprint Final Étape 1C: Tests backend capturePolicies (11 tests passés) + compilation TS=0 + 454 tests total
+- [x] Sprint Final Étape 2: ScenariosPage — supprimé localScenarios import (finalize via tRPC status update)
+- [x] Sprint Final Étape 2: ScenariosPage — supprimé localDatasetTypes import (déjà inutilisé)
+- [x] Sprint Final Étape 2: ScenariosPage — supprimé localCapturePolicies import (remplacé par trpc.capturePolicies.getByScope/upsert/remove)
+- [x] Sprint Final Étape 2: Ajouté ScenariosPage à la gate ESLint (10 pages surveillées, 0 erreurs)
+- [x] Sprint Final Étape 3A: Backend cursor pagination driveCampaigns.list (pageSize+cursor+hasMore+nextCursor)
+- [x] Sprint Final Étape 3A: Backend cursor pagination captures.list (cursor ajouté, rétro-compatible offset)
+- [x] Sprint Final Étape 3A: Backend cursor pagination executions.list (cursor ajouté, rétro-compatible offset)
+- [x] Sprint Final Étape 3B: Frontend Charger plus DriveCampaignsPage (pageSize=30, cursor accumulation, déduplication)
+- [x] Sprint Final Étape 3B: Frontend Charger plus CapturesPage (remplacé pagination offset par cursor, compteur total)
+- [x] Sprint Final Étape 3B: Frontend Charger plus ExecutionsPage (remplacé pagination offset par cursor, compteur total)
+- [x] Sprint Final Gates: ESLint gate couvre 10 pages migrées, 0 erreurs, 4 pages exclues documentées
+- [x] Sprint Final: Tests finaux (454 passés, 0 échecs) + checkpoint

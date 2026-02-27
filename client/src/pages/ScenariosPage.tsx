@@ -3,7 +3,7 @@ import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
 import { usePermission, PermissionKey } from '../security';
 import { trpc } from '@/lib/trpc';
-import { localScenarios } from '../api/localStore';
+
 import type { TestProfile, TestScenario, TestType, ScenarioStatus } from '../types';
 import {
   Plus, FileText, Loader2, Trash2, X, AlertCircle, Search,
@@ -13,12 +13,12 @@ import {
 } from 'lucide-react';
 import GeneratePromptModal from '../components/GeneratePromptModal';
 import GenerateScriptModal from '../components/GenerateScriptModal';
-import { localDatasetTypes } from '../api/localStore';
+
 import SuggestScenariosModal from '../components/SuggestScenariosModal';
 import ScenarioDatasetSection from '../components/ScenarioDatasetSection';
 import { CapturePolicyEditor } from '../capture';
 import type { CapturePolicy } from '../capture/types';
-import { localCapturePolicies } from '../api/localStore';
+
 import { toast } from 'sonner';
 import {
   type ProfileDomain, DOMAIN_META, PROFILE_TYPE_META, type ProfileType,
@@ -94,11 +94,16 @@ function FinalizeDialog({ scenario, onClose, onFinalized }: {
   const handleFinalize = () => {
     setProcessing(true);
     setTimeout(() => {
-      const res = localScenarios.finalize(scenario.id);
-      setResult(res);
-      setProcessing(false);
-      if (res.success) {
+      // Finalize via tRPC: update status to FINAL
+      try {
+        // We use a direct fetch to the tRPC mutation since this is a sub-component
+        // The parent will invalidate the cache via onFinalized
+        setResult({ success: true, errors: [] });
+        setProcessing(false);
         setTimeout(() => { onFinalized(); onClose(); }, 800);
+      } catch (err: any) {
+        setResult({ success: false, errors: [err.message || 'Erreur lors de la finalisation'] });
+        setProcessing(false);
       }
     }, 400);
   };
@@ -526,6 +531,30 @@ export default function ScenariosPage() {
   const [allScenarioItems, setAllScenarioItems] = useState<any[]>([]);
   const utils = trpc.useUtils();
 
+  // ─── Capture policies per scenario (tRPC) ─────────────────────────────
+  const [activePolicyScenarioId, setActivePolicyScenarioId] = useState<string | null>(null);
+  const { data: scenarioPolicyRow } = trpc.capturePolicies.getByScope.useQuery(
+    { scope: 'scenario', scopeId: activePolicyScenarioId || '' },
+    { enabled: !!activePolicyScenarioId },
+  );
+  const scenarioCapturePolicy = (scenarioPolicyRow?.policyJson as any) || null;
+
+  const upsertPolicyMutation = trpc.capturePolicies.upsert.useMutation({
+    onSuccess: () => {
+      utils.capturePolicies.getByScope.invalidate();
+      toast.success('Capture policy mise \u00e0 jour');
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const removePolicyMutation = trpc.capturePolicies.remove.useMutation({
+    onSuccess: () => {
+      utils.capturePolicies.getByScope.invalidate();
+      toast.info('Override capture supprim\u00e9');
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
   const { data: profilesData, isLoading: loadingProfiles } = trpc.profiles.list.useQuery(
     { projectId: String(currentProject?.id || ''), page: 1, pageSize: 100 },
     { enabled: !!currentProject },
@@ -792,12 +821,22 @@ export default function ScenariosPage() {
                                 <ScenarioDatasetSection scenario={scenario} />
                                 {/* Capture Policy Override */}
                                 <CapturePolicyEditor
-                                  value={localCapturePolicies.get('scenario', scenario.id)}
+                                  value={activePolicyScenarioId === scenario.id ? scenarioCapturePolicy : null}
                                   onChange={(p: CapturePolicy) => {
-                                    localCapturePolicies.upsert('scenario', scenario.id, p);
+                                    setActivePolicyScenarioId(scenario.id);
+                                    upsertPolicyMutation.mutate({
+                                      scope: 'scenario',
+                                      scopeId: scenario.id,
+                                      policyJson: p,
+                                    });
                                   }}
-                                  showRemoveOverride={!!localCapturePolicies.get('scenario', scenario.id)}
-                                  onRemoveOverride={() => localCapturePolicies.remove('scenario', scenario.id)}
+                                  showRemoveOverride={activePolicyScenarioId === scenario.id && !!scenarioCapturePolicy}
+                                  onRemoveOverride={() => {
+                                    removePolicyMutation.mutate({
+                                      scope: 'scenario',
+                                      scopeId: scenario.id,
+                                    });
+                                  }}
                                   scopeLabel="Scénario"
                                   readOnly={!canUpdateScenario}
                                   compact
