@@ -380,10 +380,10 @@
 - [x] Sprint Analytics 3C: Tests alertes (13 tests: threshold, cooldown, reset, probe health, webhook types)
 - [x] Sprint Analytics Final: 596 tests verts, 0 TS errors + checkpoint
 - [x] Fix: Schéma Drizzle invites — colonnes camelCase vs snake_case (invite_role, invite_status, invited_by, invited_by_name, expires_at, accepted_at, created_at) + ajout uid
-- [ ] Audit DB: Extraire colonnes réelles de toutes les tables DB
-- [ ] Audit DB: Comparer avec schéma Drizzle et lister les décalages
-- [ ] Audit DB: Corriger tous les schémas Drizzle décalés
-- [ ] Audit DB: Vérification TS=0, tests verts, checkpoint
+- [x] Audit DB: Extraire colonnes réelles de toutes les tables DB
+- [x] Audit DB: Comparer avec schéma Drizzle et lister les décalages
+- [x] Audit DB: Corriger tous les schémas Drizzle décalés
+- [x] Audit DB: Vérification TS=0, tests verts, checkpoint
 - [x] Schema Audit: Fix invites table (camelCase → snake_case mapping for invite_role, invite_status, invited_by, etc.)
 - [x] Schema Audit: Fix incidents table (rewrite with correct DB columns: execution_id, project_id, severity, step_name, etc.)
 - [x] Schema Audit: Fix drive_run_summaries (remove non-existent uid, orgId, createdAt columns)
@@ -399,3 +399,10 @@
 - [x] Bug: Statut "Invité" manquant dans la liste des utilisateurs — corrigé : fusion des invitations PENDING dans la liste avec statut 'invited'
 - [x] Bug: Statut "Invité" manquant dans la liste des utilisateurs — corrigé : fusion des invitations PENDING dans la liste avec statut 'invited'
 - [x] Feature: Bouton "Renvoyer l'invitation" pour les entrées invitées — régénérer token, MAJ expiration, renvoyer email
+- [x] Feature: Script CI audit-schema.mjs — extraction DB (information_schema)
+- [x] Feature: Script CI audit-schema.mjs — extraction Drizzle (getTableConfig)
+- [x] Feature: Script CI audit-schema.mjs — comparaison colonnes/types/nullability avec mapping tolérant
+- [x] Feature: Script CI audit-schema.mjs — sortie lisible + exit code 0/1 + mode --json
+- [x] Feature: pnpm script "audit:schema" dans package.json
+- [x] Feature: GitHub Actions workflow CI pour schema audit
+- [x] Feature: docs/SCHEMA_AUDIT.md — instructions d'exécution et interprétation

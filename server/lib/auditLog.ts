@@ -23,7 +23,7 @@ export async function writeAuditLog(entry: AuditLogEntry) {
       uid: randomUUID(),
       userId: String(entry.userId),
       action: entry.action,
-      entity: entry.entity || null,
+      entity: entry.entity || "SYSTEM",
       entityId: entry.entityId || null,
       details: entry.details || null,
     });

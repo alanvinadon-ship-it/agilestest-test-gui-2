@@ -775,7 +775,7 @@ export const probesRouter = router({
     const uid = (await import('crypto')).randomUUID();
     const res = await db.insert(probes).values({
       uid, site: input.name, probeType: input.probeType, status: "OFFLINE",
-      zone: input.host ?? null,
+      zone: input.host || "default",
       capabilities: input.capabilities ?? null,
     });
     return { success: true, probeId: Number(res[0].insertId) };

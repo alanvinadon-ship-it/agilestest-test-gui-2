@@ -41,10 +41,10 @@ describe("capture_policies Drizzle schema", () => {
     const columnNames = Object.keys(schema.capturePolicies);
     expect(columnNames).toContain("id");
     expect(columnNames).toContain("uid");
-    expect(columnNames).toContain("scope");
-    expect(columnNames).toContain("scopeId");
-    expect(columnNames).toContain("policyJson");
-    expect(columnNames).toContain("createdBy");
+    expect(columnNames).toContain("projectId");
+    expect(columnNames).toContain("name");
+    expect(columnNames).toContain("captureMode");
+    expect(columnNames).toContain("enabled");
     expect(columnNames).toContain("createdAt");
     expect(columnNames).toContain("updatedAt");
   });

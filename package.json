@@ -12,7 +12,8 @@
     "test": "vitest run",
     "lint": "eslint client/src/pages/ --max-warnings 0",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
-    "audit:storage": "node scripts/audit-storage.mjs"
+    "audit:storage": "node scripts/audit-storage.mjs",
+    "audit:schema": "node scripts/audit-schema.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",

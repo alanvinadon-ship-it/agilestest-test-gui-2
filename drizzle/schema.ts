@@ -16,7 +16,7 @@ export const users = mysqlTable("users", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
   fullName: varchar("full_name", { length: 255 }),
-  status: varchar("status", { length: 32 }),
+  status: mysqlEnum("status", ["ACTIVE", "DISABLED", "INVITED"]).default("ACTIVE").notNull(),
   passwordHash: varchar("password_hash", { length: 255 }),
 });
 
@@ -81,12 +81,12 @@ export type InsertInvite = typeof invites.$inferInsert;
 // DB columns: id, uid, timestamp, actor_id, actor_name, actor_email, action, entity_type, entity_id, target_label, metadata, trace_id
 export const auditLogs = mysqlTable("audit_logs", {
   id: int("id").autoincrement().primaryKey(),
-  uid: varchar("uid", { length: 36 }),
+  uid: varchar("uid", { length: 36 }).notNull(),
   userId: varchar("actor_id", { length: 64 }),
   userName: varchar("actor_name", { length: 255 }),
   userEmail: varchar("actor_email", { length: 320 }),
   action: varchar("action", { length: 100 }).notNull(),
-  entity: varchar("entity_type", { length: 50 }),
+  entity: varchar("entity_type", { length: 50 }).notNull(),
   entityId: varchar("entity_id", { length: 36 }),
   targetLabel: varchar("target_label", { length: 500 }),
   details: json("metadata"),
@@ -221,9 +221,9 @@ export type InsertArtifact = typeof artifacts.$inferInsert;
 // DB columns: id, uid, execution_id, project_id, title, description, severity, step_name, expected_result, actual_result, detected_at
 export const incidents = mysqlTable("incidents", {
   id: int("id").autoincrement().primaryKey(),
-  uid: varchar("uid", { length: 36 }),
-  executionId: varchar("execution_id", { length: 36 }),
-  projectId: varchar("project_id", { length: 36 }),
+  uid: varchar("uid", { length: 36 }).notNull(),
+  executionId: varchar("execution_id", { length: 36 }).notNull(),
+  projectId: varchar("project_id", { length: 36 }).notNull(),
   title: varchar("title", { length: 512 }).notNull(),
   description: text("description"),
   severity: mysqlEnum("severity", ["CRITICAL", "MAJOR", "MINOR", "INFO"]).default("INFO").notNull(),
@@ -262,24 +262,24 @@ export type InsertCapture = typeof captures.$inferInsert;
 // last_error, health_status, heartbeat_interval_sec, allowlist_cidrs, tls_enabled, created_at, updated_at, probeToken
 export const probes = mysqlTable("probes", {
   id: int("id").autoincrement().primaryKey(),
-  uid: varchar("uid", { length: 36 }),
-  site: varchar("site", { length: 255 }),
-  zone: varchar("zone", { length: 255 }),
-  probeType: varchar("type", { length: 100 }),
+  uid: varchar("uid", { length: 36 }).notNull(),
+  site: varchar("site", { length: 255 }).notNull(),
+  zone: varchar("zone", { length: 255 }).notNull(),
+  probeType: mysqlEnum("type", ["LINUX_EDGE", "K8S_CLUSTER", "NETWORK_TAP"]).notNull(),
   capabilities: json("capabilities"),
-  status: varchar("status", { length: 50 }).default("OFFLINE").notNull(),
+  status: mysqlEnum("status", ["ONLINE", "OFFLINE", "DEGRADED"]).default("OFFLINE").notNull(),
   authTokenHash: varchar("auth_token_hash", { length: 255 }),
   lastSeenAt: timestamp("last_seen_at"),
   metadata: json("metadata"),
   version: varchar("version", { length: 50 }),
-  uptimeSeconds: bigint("uptime_seconds", { mode: "number" }),
+  uptimeSeconds: int("uptime_seconds"),
   cpuPercent: double("cpu_percent"),
   diskFreeMb: int("disk_free_mb"),
   interfaces: json("interfaces"),
   activeSessions: int("active_sessions").default(0),
   totalCaptures: int("total_captures").default(0),
   lastError: text("last_error"),
-  healthStatus: varchar("health_status", { length: 20 }),
+  healthStatus: mysqlEnum("health_status", ["healthy", "degraded", "unhealthy"]),
   heartbeatIntervalSec: int("heartbeat_interval_sec").default(30),
   allowlistCidrs: json("allowlist_cidrs"),
   tlsEnabled: boolean("tls_enabled").default(false),
@@ -298,7 +298,7 @@ export const generatedScripts = mysqlTable("generated_scripts", {
   uid: varchar("uid", { length: 36 }).notNull(),
   projectId: varchar("project_id", { length: 36 }).notNull(),
   scenarioId: varchar("scenario_id", { length: 36 }).notNull(),
-  framework: varchar("framework", { length: 50 }).default("playwright").notNull(),
+  framework: varchar("framework", { length: 50 }).default("playwright"),
   language: varchar("language", { length: 50 }).default("typescript"),
   code: text("code"),
   version: int("version").default(1),
@@ -427,7 +427,7 @@ export const datasetInstances = mysqlTable("dataset_instances", {
   projectId: varchar("project_id", { length: 36 }).notNull(),
   datasetTypeId: varchar("dataset_type_id", { length: 100 }).notNull(),
   env: mysqlEnum("env", ["DEV", "PREPROD", "PILOT_ORANGE", "PROD"]).default("DEV").notNull(),
-  version: int("version").default(1).notNull(),
+  version: int("version").default(1),
   status: mysqlEnum("status", ["DRAFT", "ACTIVE", "DEPRECATED"]).default("DRAFT").notNull(),
   valuesJson: json("values_json"),
   notes: text("notes"),
@@ -568,14 +568,21 @@ export type DriveJobRow = typeof driveJobs.$inferSelect;
 export type InsertDriveJob = typeof driveJobs.$inferInsert;
 
 // ─── Capture Policies ──────────────────────────────────────────────────────
-// Stocke les politiques de capture réseau (scope: project, campaign, scenario)
+// DB columns: id, uid, project_id, name, capture_mode, trigger_on, auto_capture, duration, max_size, bpf_filter, interface_name, probe_id, enabled, created_at, updated_at
 export const capturePolicies = mysqlTable("capture_policies", {
   id: int("id").autoincrement().primaryKey(),
   uid: varchar("uid", { length: 36 }).notNull(),
-  scope: mysqlEnum("scope", ["project", "campaign", "scenario"]).notNull(),
-  scopeId: varchar("scope_id", { length: 100 }).notNull(), // project_id, campaign_id, or scenario_id
-  policyJson: json("policy_json"), // CapturePolicy payload
-  createdBy: varchar("created_by", { length: 64 }),
+  projectId: varchar("project_id", { length: 36 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  captureMode: mysqlEnum("capture_mode", ["RUNNER", "PROBE"]).notNull(),
+  triggerOn: json("trigger_on"),
+  autoCapture: boolean("auto_capture"),
+  duration: int("duration"),
+  maxSize: int("max_size"),
+  bpfFilter: varchar("bpf_filter", { length: 500 }),
+  interfaceName: varchar("interface_name", { length: 100 }),
+  probeId: varchar("probe_id", { length: 36 }),
+  enabled: boolean("enabled"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
@@ -591,12 +598,12 @@ export const kpiSamples = mysqlTable("kpi_samples", {
   driveJobId: varchar("drive_job_id", { length: 36 }).notNull(),
   campaignId: varchar("campaign_id", { length: 36 }).notNull(),
   routeId: varchar("route_id", { length: 36 }).notNull(),
-  timestamp: varchar("timestamp", { length: 64 }).notNull(),
+  timestamp: timestamp("timestamp").notNull(),
   lat: double("lat").notNull(),
   lon: double("lon").notNull(),
   kpiName: varchar("kpi_name", { length: 50 }).notNull(),
   value: double("value").notNull(),
-  unit: varchar("unit", { length: 20 }).default("").notNull(),
+  unit: varchar("unit", { length: 20 }),
   cellId: varchar("cell_id", { length: 50 }),
   technology: varchar("technology", { length: 20 }),
 });
@@ -610,14 +617,14 @@ export const driveRunSummaries = mysqlTable("drive_run_summaries", {
   id: int("id").autoincrement().primaryKey(),
   driveJobId: varchar("drive_job_id", { length: 36 }).notNull().unique(),
   campaignId: varchar("campaign_id", { length: 36 }).notNull(),
-  totalSamples: int("total_samples").default(0).notNull(),
-  durationSec: double("duration_sec").default(0).notNull(),
-  distanceKm: double("distance_km").default(0).notNull(),
+  totalSamples: int("total_samples"),
+  durationSec: int("duration_sec"),
+  distanceKm: double("distance_km"),
   kpiAverages: json("kpi_averages"), // Record<string, number>
   kpiMin: json("kpi_min"),           // Record<string, number>
   kpiMax: json("kpi_max"),           // Record<string, number>
   thresholdViolations: json("threshold_violations"), // ThresholdViolation[]
-  overallPass: boolean("overall_pass").default(true).notNull(),
+  overallPass: boolean("overall_pass"),
 });
 
 export type DriveRunSummaryRow = typeof driveRunSummaries.$inferSelect;

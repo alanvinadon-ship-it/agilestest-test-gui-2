@@ -102,7 +102,7 @@ export const kpiSamplesRouter = router({
         driveJobId: s.driveJobId,
         campaignId: s.campaignId,
         routeId: s.routeId,
-        timestamp: s.timestamp,
+        timestamp: new Date(s.timestamp),
         lat: s.lat,
         lon: s.lon,
         kpiName: s.kpiName,
