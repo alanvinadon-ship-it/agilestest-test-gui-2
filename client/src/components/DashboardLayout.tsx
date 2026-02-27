@@ -29,6 +29,7 @@ import {
   PanelLeftOpen,
   Activity,
   Webhook,
+  BookTemplate,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -87,6 +88,7 @@ const baseNavSections: NavSection[] = [
       { href: "/bundles", icon: Package, label: "Bundles" },
       { href: "/dataset-types", icon: Database, label: "Gabarits Datasets" },
       { href: "/scripts", icon: Code2, label: "Scripts Générés" },
+      { href: "/templates", icon: BookTemplate, label: "Templates" },
     ],
   },
   {

@@ -619,3 +619,26 @@ export const datasetSecrets = mysqlTable("dataset_secrets", {
 
 export type DatasetSecretRow = typeof datasetSecrets.$inferSelect;
 export type InsertDatasetSecret = typeof datasetSecrets.$inferInsert;
+
+// ─── Scenario Templates (bibliothèque de scénarios pré-configurés) ──────────
+export const scenarioTemplates = mysqlTable("scenario_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  domain: mysqlEnum("domain", ["IMS", "5GC", "API_REST", "VOLTE", "DRIVE_TEST", "SECURITY", "PERFORMANCE"]).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  testType: mysqlEnum("test_type", ["VABF", "VSR", "VABE"]).default("VABF").notNull(),
+  difficulty: mysqlEnum("difficulty", ["BEGINNER", "INTERMEDIATE", "ADVANCED"]).default("INTERMEDIATE").notNull(),
+  tags: json("tags"), // string[]
+  steps: json("steps"), // ScenarioStep[]
+  requiredDatasetTypes: json("required_dataset_types"), // string[]
+  artifactPolicy: json("artifact_policy"),
+  kpiThresholds: json("kpi_thresholds"),
+  profileTemplate: json("profile_template"), // partial profile config for auto-creation
+  isBuiltIn: boolean("is_built_in").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ScenarioTemplateRow = typeof scenarioTemplates.$inferSelect;
+export type InsertScenarioTemplate = typeof scenarioTemplates.$inferInsert;

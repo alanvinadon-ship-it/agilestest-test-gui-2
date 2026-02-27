@@ -12,6 +12,7 @@ import { paginationInput } from "../../shared/pagination";
 import { normalizePagination, countRows } from "../lib/pagination";
 import { writeAuditLog } from "../lib/auditLog";
 import { randomUUID } from "crypto";
+import { notifyOwner } from "../_core/notification";
 
 // ─── Shared inputs ──────────────────────────────────────────────────────────
 // projectId is varchar(36) in DB — use z.string() for all project-scoped queries
@@ -503,6 +504,20 @@ export const executionsRouter = router({
     if (input.status === "RUNNING") updateSet.startedAt = new Date();
     if (["PASSED", "FAILED", "ERROR", "CANCELLED"].includes(input.status)) updateSet.finishedAt = new Date();
     await db.update(executions).set(updateSet).where(eq(executions.id, input.executionId));
+
+    // Notify owner on terminal failure statuses
+    if (["FAILED", "ERROR"].includes(input.status)) {
+      // Fetch execution details for the notification
+      const [exec] = await db.select().from(executions).where(eq(executions.id, input.executionId)).limit(1);
+      const scenarioName = exec?.scenarioId
+        ? (await db.select({ name: testScenarios.name }).from(testScenarios).where(eq(testScenarios.uid, exec.scenarioId)).limit(1))?.[0]?.name ?? "—"
+        : "—";
+      notifyOwner({
+        title: `\u26a0\ufe0f Ex\u00e9cution #${input.executionId} ${input.status}`,
+        content: `L'ex\u00e9cution #${input.executionId} (sc\u00e9nario: ${scenarioName}, env: ${exec?.targetEnv ?? "—"}) est pass\u00e9e en ${input.status} le ${new Date().toLocaleString("fr-FR")}.`,
+      }).catch((err) => console.warn("[Notification] Failed to notify owner:", err));
+    }
+
     return { success: true };
   }),
 });

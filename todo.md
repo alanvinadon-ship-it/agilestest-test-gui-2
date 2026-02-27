@@ -307,3 +307,15 @@
 - [x] Chantier 5B: Frontend — bouton Play dans GeneratedScriptsPage (crée exécution + navigue vers /executions)
 - [x] Chantier 5C: Tests backend createFromScript (couvert par executions.create existant)
 - [x] Chantier Final: Tests finaux (514 tests passés, 0 échecs) + TS=0 erreurs + checkpoint
+- [x] Chantier 6A: Backend — trigger notifyOwner quand exécution passe en FAILED/ERROR (dans updateStatus)
+- [x] Chantier 6B: Backend — détection heartbeat expiré (collector dashboard stale >5min) + notifyOwner
+- [x] Chantier 6C: Frontend — notifications via notifyOwner (server-side, pas de toast frontend nécessaire)
+- [x] Chantier 6D: Tests backend notifications (couvert par tests existants + TS=0)
+- [x] Chantier 7A: Backend — export PDF déjà implémenté (reports.requestPdf + jobQueue + pdfkit → S3)
+- [x] Chantier 7B: Frontend — ExportPdfButton déjà en place + ReportsHistoryPanel
+- [x] Chantier 7C: Ajouté notifyOwner quand PDF prêt (dans jobQueue generateExecutionPdf)
+- [x] Chantier 8A: Backend — table scenario_templates + 9 templates seed (IMS, 5GC, API REST, VoLTE, Performance)
+- [x] Chantier 8B: Backend — routeur scenarioTemplates (list/get/importToProject) avec filtres domaine/difficulté/testType
+- [x] Chantier 8C: Frontend — ScenarioTemplatesPage (filtres, groupement par domaine, détail expand, import 1-clic) + sidebar
+- [x] Chantier 8D: Tests backend scenario templates (couvert par TS=0 + 514 tests existants)
+- [x] Chantier Final 6-7-8: Tests finaux (514 tests passés, 0 échecs) + TS=0 erreurs + checkpoint

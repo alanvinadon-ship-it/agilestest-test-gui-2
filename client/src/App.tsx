@@ -38,6 +38,7 @@ import ProjectSettingsPage from "./pages/ProjectSettingsPage";
 import DashboardPage from "./pages/DashboardPage";
 import WebhooksPage from "./pages/WebhooksPage";
 import CollectorDashboardPage from "./pages/CollectorDashboardPage";
+import ScenarioTemplatesPage from "./pages/ScenarioTemplatesPage";
 
 // ─── Auth Guards ────────────────────────────────────────────────────────────
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -141,6 +142,9 @@ function AppRouter() {
               </Route>
               <Route path="/collector">
                 <ProjectScoped><CollectorDashboardPage /></ProjectScoped>
+              </Route>
+              <Route path="/templates">
+                <ScenarioTemplatesPage />
               </Route>
 
               {/* Project settings */}

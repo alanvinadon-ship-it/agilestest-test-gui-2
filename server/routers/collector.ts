@@ -18,6 +18,7 @@ import { getDb } from "../db";
 import { collectorSessions, collectorEvents, captures, probes } from "../../drizzle/schema";
 import { writeAuditLog } from "../lib/auditLog";
 import { randomUUID } from "crypto";
+import { notifyOwner } from "../_core/notification";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -411,6 +412,15 @@ export const collectorRouter = router({
       const staleSessions = activeSessions.filter(
         s => s.status === 'RUNNING' && s.lastHeartbeatAt && new Date(s.lastHeartbeatAt) < fiveMinAgo
       );
+
+      // Notify owner if stale sessions detected (fire-and-forget)
+      if (staleSessions.length > 0) {
+        const probeNames = staleSessions.map(s => s.probeName ?? `Probe #${s.probeId}`).join(', ');
+        notifyOwner({
+          title: `\u23f0 ${staleSessions.length} session(s) collector sans heartbeat`,
+          content: `Les sessions suivantes n'ont pas envoy\u00e9 de heartbeat depuis plus de 5 minutes : ${probeNames}. V\u00e9rifiez l'\u00e9tat des sondes.`,
+        }).catch((err) => console.warn("[Notification] Stale heartbeat notify failed:", err));
+      }
 
       // 4. Recent events (last 50 across all sessions)
       const recentEvents = await db.select({

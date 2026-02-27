@@ -38,6 +38,7 @@ import { capturePoliciesRouter } from "./routers/capturePolicies";
 import { kpiSamplesRouter, driveRunSummariesRouter } from "./routers/kpiData";
 import { collectorRouter } from "./routers/collector";
 import { aiGenerationRouter } from "./routers/aiGeneration";
+import { scenarioTemplatesRouter } from "./routers/scenarioTemplates";
 
 export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -110,6 +111,9 @@ export const appRouter = router({
 
   // AI Generation (LLM-powered script generation)
   aiGeneration: aiGenerationRouter,
+
+  // Scenario Templates (pre-built library)
+  scenarioTemplates: scenarioTemplatesRouter,
 });
 
 export type AppRouter = typeof appRouter;

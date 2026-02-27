@@ -10,6 +10,7 @@ import { ENV } from "./_core/env";
 import { deleteArtifact } from "./artifactStorage";
 import { evaluateProbesHealthAndAlert } from "./probeAlertService";
 import { processWebhookDeliveries } from "./routers/webhooks";
+import { notifyOwner } from "./_core/notification";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -515,6 +516,12 @@ registerHandler("generateExecutionPdf", async (payload) => {
       filename,
       sizeBytes: pdfBuffer.length,
     }).where(eq(reports.id, reportId));
+
+    // Notify owner that PDF is ready
+    notifyOwner({
+      title: `\ud83d\udcc4 Rapport PDF pr\u00eat \u2014 Ex\u00e9cution #${executionId}`,
+      content: `Le rapport PDF "${filename}" (${Math.round(pdfBuffer.length / 1024)} Ko) est disponible au t\u00e9l\u00e9chargement.`,
+    }).catch((err) => console.warn("[Notification] PDF ready notify failed:", err));
 
     return { reportId, filename, sizeBytes: pdfBuffer.length, url };
   } catch (err: any) {
