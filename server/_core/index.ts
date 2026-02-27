@@ -4,6 +4,7 @@ import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
+import sseStreamRouter from "../routes/sseStream";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -65,7 +66,10 @@ async function startServer() {
   // ── 5. OAuth callback under /api/oauth/callback ─────────────────────
   registerOAuthRoutes(app);
 
-  // ── 6. tRPC API ─────────────────────────────────────────────────────
+  // ── 6. SSE Streaming for AI ──────────────────────────────────────────
+  app.use(sseStreamRouter);
+
+  // ── 7. tRPC API ─────────────────────────────────────────────────────
   app.use(
     "/api/trpc",
     createExpressMiddleware({

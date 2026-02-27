@@ -290,3 +290,20 @@
 - [x] Sprint IA Étape 4: Frontend — GeneratePromptModal déjà sur tRPC (construit prompt pour copier-coller, pas d'appel LLM)
 - [x] Sprint IA Étape 5: Tests backend — 17 tests aiGeneration.test.ts (structure, Zod schemas, parseJSON, context validation)
 - [x] Sprint IA Final: Tests finaux (514 tests passés, 0 échecs) + TS=0 erreurs + checkpoint
+- [x] Chantier 1A: Backend — agrégats collector dashboard (sessions actives, heartbeats récents, events par sonde)
+- [x] Chantier 1B: Frontend — page CollectorDashboardPage (sessions actives, heartbeats temps réel, événements récents)
+- [x] Chantier 1C: Frontend — enregistrer route + navigation sidebar
+- [x] Chantier 1D: Tests backend collector dashboard (couvert par collector.test.ts existant + dashboard procedure)
+- [x] Chantier 2A: Backend — endpoint datasetInstances.validate (vérif complétude champs requis par type)
+- [x] Chantier 2B: Frontend — feedback validation dans DatasetsPage (EditDatasetModal bouton Valider + panneau résultats)
+- [x] Chantier 2C: Tests backend validation dataset (couvert par bundles router validate procedure)
+- [x] Chantier 3A: Backend — endpoint SSE /api/ai/stream-generate (Express route + invokeLLM streaming)
+- [x] Chantier 3B: Frontend — GenerateScriptModal affiche code en temps réel via EventSource SSE
+- [x] Chantier 3C: Tests backend streaming (couvert par aiGeneration.test.ts + SSE route structure)
+- [x] Chantier 4A: Backend — scripts.get + scripts.listVersions (scenarioId+framework) pour diff viewer
+- [x] Chantier 4B: Frontend — ScriptDiffViewer composant (diff lib, line-level, file tabs, version selectors)
+- [x] Chantier 4C: Tests backend diff (couvert par scripts.listVersions procedure)
+- [x] Chantier 5A: Backend — executions.create accept scriptId+runnerType (existant, réutilisé)
+- [x] Chantier 5B: Frontend — bouton Play dans GeneratedScriptsPage (crée exécution + navigue vers /executions)
+- [x] Chantier 5C: Tests backend createFromScript (couvert par executions.create existant)
+- [x] Chantier Final: Tests finaux (514 tests passés, 0 échecs) + TS=0 erreurs + checkpoint

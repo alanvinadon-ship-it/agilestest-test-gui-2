@@ -10,14 +10,15 @@ import { collectorRouter, collectorMetrics } from "./routers/collector";
 describe("collectorRouter structure", () => {
   const procedures = Object.keys((collectorRouter as any)._def.procedures);
 
-  it("exports all 8 procedures", () => {
+  it("exports all 9 procedures", () => {
     expect(procedures).toEqual(
       expect.arrayContaining([
         "start", "stop", "status", "heartbeat",
         "appendEvent", "listSessions", "listEvents", "activeSessions",
+        "dashboard",
       ])
     );
-    expect(procedures.length).toBe(8);
+    expect(procedures.length).toBe(9);
   });
 
   it("start is a mutation", () => {
@@ -178,7 +179,7 @@ describe("collector router registration", () => {
     const routerKeys = Object.keys((appRouter as any)._def.procedures);
     // collector.start, collector.stop, etc. should be present as "collector.start"
     const collectorProcedures = routerKeys.filter(k => k.startsWith("collector."));
-    expect(collectorProcedures.length).toBe(8);
+    expect(collectorProcedures.length).toBe(9);
     expect(collectorProcedures).toContain("collector.start");
     expect(collectorProcedures).toContain("collector.stop");
     expect(collectorProcedures).toContain("collector.status");
@@ -187,6 +188,7 @@ describe("collector router registration", () => {
     expect(collectorProcedures).toContain("collector.listSessions");
     expect(collectorProcedures).toContain("collector.listEvents");
     expect(collectorProcedures).toContain("collector.activeSessions");
+    expect(collectorProcedures).toContain("collector.dashboard");
   });
 });
 

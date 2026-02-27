@@ -12,9 +12,11 @@ import type { ScriptFramework, ScriptStatus } from '../ai/types';
 import {
   Code2, FileCode, Trash2, CheckCircle2, Archive, Download,
   Search, ChevronDown, ChevronRight, Copy, Sparkles,
-  AlertTriangle, Loader2,
+  AlertTriangle, Loader2, GitCompare, Play,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useLocation } from 'wouter';
+import ScriptDiffViewer from '../components/ScriptDiffViewer';
 
 // ─── Metadata ─────────────────────────────────────────────────────────────
 
@@ -71,6 +73,7 @@ export default function GeneratedScriptsPage() {
   const { can } = usePermission();
   const canActivateScript = can(PermissionKey.SCRIPTS_ACTIVATE);
   const canDeleteScript = can(PermissionKey.SCRIPTS_DELETE);
+  const [, navigate] = useLocation();
 
   // Filters
   const [search, setSearch] = useState('');
@@ -80,6 +83,13 @@ export default function GeneratedScriptsPage() {
   // Expanded script (view files)
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [viewFileIdx, setViewFileIdx] = useState(0);
+
+  // Diff viewer state
+  const [diffScenarioId, setDiffScenarioId] = useState<number | null>(null);
+  const [diffFramework, setDiffFramework] = useState<string | null>(null);
+
+  // Execute mutation
+  const executeMutation = trpc.executions.create.useMutation();
 
   // tRPC queries
   const { data: scriptsData, isLoading, refetch } = trpc.scripts.list.useQuery(
@@ -124,6 +134,49 @@ export default function GeneratedScriptsPage() {
         onSuccess: () => {
           toast.success('Script supprimé');
           if (expandedId === scriptId) setExpandedId(null);
+        },
+      },
+    );
+  };
+
+  // Diff viewer: load versions for the selected scenario+framework
+  const { data: versionsData } = trpc.scripts.listVersions.useQuery(
+    {
+      projectId: String(projectId),
+      scenarioId: diffScenarioId!,
+      framework: diffFramework || undefined,
+    },
+    { enabled: !!projectId && diffScenarioId !== null },
+  );
+
+  const handleOpenDiff = (script: any) => {
+    if (!script.scenarioId) {
+      toast.error('Ce script n\'a pas de scénario associé — comparaison impossible');
+      return;
+    }
+    setDiffScenarioId(script.scenarioId);
+    setDiffFramework(script.framework);
+  };
+
+  /** Create an execution from a generated script and navigate to executions page */
+  const handleExecute = (script: any) => {
+    const payload = parseCodePayload(script.code || '');
+    const env = payload.env || 'DEV';
+    executeMutation.mutate(
+      {
+        projectId: String(projectId),
+        scenarioId: script.scenarioId ? String(script.scenarioId) : undefined,
+        scriptId: String(script.id),
+        targetEnv: env as any,
+        runnerType: script.framework,
+      },
+      {
+        onSuccess: (result) => {
+          toast.success(`Exécution #${result.executionId} créée`);
+          navigate('/executions');
+        },
+        onError: (err) => {
+          toast.error(`Erreur : ${err.message}`);
         },
       },
     );
@@ -282,6 +335,21 @@ export default function GeneratedScriptsPage() {
                       </button>
                     )}
                     <button
+                      onClick={() => handleExecute(script)}
+                      disabled={executeMutation.isPending}
+                      className="p-1.5 rounded hover:bg-sky-500/10 text-muted-foreground hover:text-sky-400 transition-colors"
+                      title="Exécuter ce script"
+                    >
+                      <Play className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleOpenDiff(script)}
+                      className="p-1.5 rounded hover:bg-violet-500/10 text-muted-foreground hover:text-violet-400 transition-colors"
+                      title="Comparer les versions"
+                    >
+                      <GitCompare className="w-3.5 h-3.5" />
+                    </button>
+                    <button
                       onClick={() => handleDownloadAll(script, payload.files)}
                       className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
                       title="Télécharger"
@@ -353,6 +421,28 @@ export default function GeneratedScriptsPage() {
               </div>
             );
           })}
+        </div>
+      )}
+      {/* Diff Viewer Modal */}
+      {diffScenarioId !== null && versionsData?.data && versionsData.data.length >= 2 && (
+        <ScriptDiffViewer
+          versions={versionsData.data as any}
+          onClose={() => { setDiffScenarioId(null); setDiffFramework(null); }}
+        />
+      )}
+      {diffScenarioId !== null && versionsData?.data && versionsData.data.length < 2 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setDiffScenarioId(null); setDiffFramework(null); }} />
+          <div className="relative bg-card border border-border rounded-xl shadow-2xl p-8 mx-4 text-center">
+            <GitCompare className="w-10 h-10 text-muted-foreground mx-auto mb-3 opacity-30" />
+            <p className="text-sm text-muted-foreground">Il faut au moins 2 versions du même scénario pour comparer.</p>
+            <button
+              onClick={() => { setDiffScenarioId(null); setDiffFramework(null); }}
+              className="mt-4 px-4 py-2 text-xs font-semibold rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-secondary/30 transition-colors"
+            >
+              Fermer
+            </button>
+          </div>
         </div>
       )}
     </div>

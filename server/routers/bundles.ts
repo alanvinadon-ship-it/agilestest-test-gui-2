@@ -191,6 +191,147 @@ export const datasetInstancesRouter = router({
     await db.delete(datasetInstances).where(eq(datasetInstances.uid, input.datasetId));
     return { success: true };
   }),
+
+  /**
+   * Validate a dataset instance against its type's schemaFields.
+   * Checks: required fields present, type validation, enum membership.
+   * Returns { valid, errors[], warnings[] }.
+   */
+  validate: protectedProcedure.input(z.object({
+    datasetId: z.string(),
+  })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+    // 1. Get the dataset instance
+    const [instance] = await db.select().from(datasetInstances).where(eq(datasetInstances.uid, input.datasetId)).limit(1);
+    if (!instance) throw new TRPCError({ code: "NOT_FOUND", message: "Dataset instance introuvable" });
+
+    // 2. Get the dataset type (for schemaFields)
+    const [dsType] = await db.select().from(datasetTypes).where(eq(datasetTypes.datasetTypeId, instance.datasetTypeId)).limit(1);
+    if (!dsType) {
+      return {
+        valid: false,
+        errors: [{ field: '_type', message: `Type de dataset '${instance.datasetTypeId}' introuvable` }],
+        warnings: [],
+        summary: { total: 0, filled: 0, required: 0, requiredFilled: 0 },
+      };
+    }
+
+    const schemaFields = (dsType.schemaFields ?? []) as Array<{
+      name: string; type: string; required: boolean; description?: string;
+      enum_values?: string[]; min?: number; max?: number; pattern?: string;
+    }>;
+    const values = (instance.valuesJson ?? {}) as Record<string, unknown>;
+
+    const errors: Array<{ field: string; message: string }> = [];
+    const warnings: Array<{ field: string; message: string }> = [];
+    let requiredCount = 0;
+    let requiredFilled = 0;
+    let filledCount = 0;
+
+    for (const field of schemaFields) {
+      const val = values[field.name];
+      const isEmpty = val === undefined || val === null || val === '';
+
+      if (!isEmpty) filledCount++;
+
+      if (field.required) {
+        requiredCount++;
+        if (isEmpty) {
+          errors.push({ field: field.name, message: `Champ requis '${field.name}' manquant` });
+        } else {
+          requiredFilled++;
+        }
+      }
+
+      if (!isEmpty) {
+        // Type validation
+        const strVal = String(val);
+        switch (field.type) {
+          case 'email':
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(strVal)) {
+              errors.push({ field: field.name, message: `'${field.name}' n'est pas un email valide` });
+            }
+            break;
+          case 'number': {
+            const num = Number(val);
+            if (isNaN(num)) {
+              errors.push({ field: field.name, message: `'${field.name}' n'est pas un nombre valide` });
+            } else {
+              if (field.min !== undefined && num < field.min) {
+                errors.push({ field: field.name, message: `'${field.name}' doit être >= ${field.min}` });
+              }
+              if (field.max !== undefined && num > field.max) {
+                errors.push({ field: field.name, message: `'${field.name}' doit être <= ${field.max}` });
+              }
+            }
+            break;
+          }
+          case 'boolean':
+            if (!['true', 'false', '0', '1'].includes(strVal.toLowerCase())) {
+              warnings.push({ field: field.name, message: `'${field.name}' n'est pas un booléen standard` });
+            }
+            break;
+          case 'url':
+            if (!/^https?:\/\/.+/.test(strVal)) {
+              errors.push({ field: field.name, message: `'${field.name}' n'est pas une URL valide` });
+            }
+            break;
+          case 'ip':
+            if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(strVal) && !/^[0-9a-fA-F:]+$/.test(strVal)) {
+              errors.push({ field: field.name, message: `'${field.name}' n'est pas une adresse IP valide` });
+            }
+            break;
+          case 'enum':
+            if (field.enum_values && !field.enum_values.includes(strVal)) {
+              errors.push({ field: field.name, message: `'${field.name}' doit être parmi: ${field.enum_values.join(', ')}` });
+            }
+            break;
+          case 'phone':
+            if (!/^\+?[0-9\s\-()]{6,20}$/.test(strVal)) {
+              warnings.push({ field: field.name, message: `'${field.name}' format téléphone inhabituel` });
+            }
+            break;
+          case 'date':
+            if (isNaN(Date.parse(strVal))) {
+              errors.push({ field: field.name, message: `'${field.name}' n'est pas une date valide` });
+            }
+            break;
+          default:
+            // string type — no specific validation
+            if (field.pattern) {
+              try {
+                if (!new RegExp(field.pattern).test(strVal)) {
+                  warnings.push({ field: field.name, message: `'${field.name}' ne correspond pas au pattern attendu` });
+                }
+              } catch { /* invalid regex, skip */ }
+            }
+            break;
+        }
+      }
+    }
+
+    // Check for extra fields not in schema
+    const schemaFieldNames = new Set(schemaFields.map(f => f.name));
+    for (const key of Object.keys(values)) {
+      if (!schemaFieldNames.has(key)) {
+        warnings.push({ field: key, message: `Champ '${key}' non défini dans le schéma du type` });
+      }
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings,
+      summary: {
+        total: schemaFields.length,
+        filled: filledCount,
+        required: requiredCount,
+        requiredFilled,
+      },
+    };
+  }),
 });
 
 // ─── Dataset Bundles ────────────────────────────────────────────────────────

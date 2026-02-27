@@ -260,6 +260,18 @@ function EditDatasetModal({ instance, onClose }: {
   };
 
   const [rawMode, setRawMode] = useState(false);
+  const [showValidation, setShowValidation] = useState(false);
+
+  // Server-side validation
+  const { data: validation, refetch: refetchValidation, isFetching: isValidating } = trpc.datasetInstances.validate.useQuery(
+    { datasetId: instance.dataset_id },
+    { enabled: showValidation, staleTime: 0 },
+  );
+
+  const handleValidate = () => {
+    setShowValidation(true);
+    if (showValidation) refetchValidation();
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -373,6 +385,53 @@ function EditDatasetModal({ instance, onClose }: {
             </div>
           )}
 
+          {/* Validation Panel */}
+          {showValidation && validation && (
+            <div className={`rounded-lg border p-4 space-y-3 ${
+              validation.valid
+                ? 'border-green-500/20 bg-green-500/5'
+                : 'border-red-500/20 bg-red-500/5'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {validation.valid
+                    ? <CheckCircle2 className="w-4 h-4 text-green-400" />
+                    : <AlertTriangle className="w-4 h-4 text-red-400" />
+                  }
+                  <span className={`text-sm font-semibold ${validation.valid ? 'text-green-400' : 'text-red-400'}`}>
+                    {validation.valid ? 'Validation r\u00e9ussie' : `${validation.errors.length} erreur(s)`}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                  <span>Champs: {validation.summary.filled}/{validation.summary.total}</span>
+                  <span>Requis: {validation.summary.requiredFilled}/{validation.summary.required}</span>
+                </div>
+              </div>
+              {validation.errors.length > 0 && (
+                <div className="space-y-1">
+                  {validation.errors.map((e, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <span className="text-red-400 font-semibold">\u2716</span>
+                      <span className="font-mono text-foreground/80">{e.field}</span>
+                      <span className="text-muted-foreground">{e.message}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {validation.warnings.length > 0 && (
+                <div className="space-y-1">
+                  {validation.warnings.map((w, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <span className="text-amber-400 font-semibold">\u26A0</span>
+                      <span className="font-mono text-foreground/80">{w.field}</span>
+                      <span className="text-muted-foreground">{w.message}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Notes */}
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1">Notes</label>
@@ -385,6 +444,11 @@ function EditDatasetModal({ instance, onClose }: {
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-border shrink-0">
           <div className="flex items-center gap-2">
+            <button onClick={handleValidate} disabled={isValidating}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-cyan-500/30 bg-cyan-500/10 text-xs font-medium text-cyan-400 hover:bg-cyan-500/20 transition-colors disabled:opacity-50">
+              {isValidating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
+              Valider
+            </button>
             {instance.status === 'DRAFT' && (
               <button onClick={() => activateMutation.mutate({ datasetId: instance.dataset_id, status: 'ACTIVE', valuesJson, notes })}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-green-600 text-xs font-medium text-white hover:bg-green-500 transition-colors">

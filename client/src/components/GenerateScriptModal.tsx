@@ -1,18 +1,17 @@
 /**
  * GenerateScriptModal — Génère un script de test via l'IA réelle (LLM server-side)
- * et permet de sauvegarder dans la DB via tRPC.
+ * avec streaming SSE pour la phase de génération de code.
  *
- * Flow: Sélection env+bundle → Plan (LLM) → Génération (LLM) → Affichage fichiers → Save to DB
+ * Flow: Sélection env+bundle → Plan (LLM) → Revue du plan → Génération (LLM streaming) → Résultat
  */
-import { useState, useEffect } from 'react';
-import { X, Sparkles, AlertTriangle, CheckCircle2, Copy, Save, Loader2, FileCode, ChevronRight, Brain, Zap } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { X, Sparkles, AlertTriangle, CheckCircle2, Copy, Save, Loader2, FileCode, ChevronRight, Brain, Zap, Radio } from 'lucide-react';
 import { toast } from 'sonner';
 import { useProject } from '../state/projectStore';
 import { trpc } from '@/lib/trpc';
 import { buildAiScriptContext } from '../ai/buildContext';
-import { ScriptPlanResultSchema, ScriptPackageSchema } from '../ai/types';
 import type { TestProfile, TestScenario, TargetEnv, DatasetInstance, DatasetSecretKey } from '../types';
-import type { AiScriptContext, ScriptPlanResult, ScriptPackage, ScriptFramework, CodeLanguage } from '../ai/types';
+import type { AiScriptContext, ScriptPlanResult, ScriptPackage } from '../ai/types';
 
 const ALL_ENVS: TargetEnv[] = ['DEV', 'PREPROD', 'PILOT_ORANGE', 'PROD'];
 
@@ -23,6 +22,38 @@ interface Props {
   profile: TestProfile;
   onClose: () => void;
   onSaved?: () => void;
+}
+
+/** Parse SSE stream and call onChunk/onDone/onError */
+async function consumeSSEStream(
+  response: Response,
+  onChunk: (text: string) => void,
+  onDone: (fullContent: string) => void,
+  onError: (msg: string) => void,
+) {
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith('data: ')) continue;
+      try {
+        const evt = JSON.parse(trimmed.slice(6));
+        if (evt.type === 'chunk') onChunk(evt.data);
+        else if (evt.type === 'done') onDone(evt.data);
+        else if (evt.type === 'error') onError(evt.data);
+      } catch { /* skip */ }
+    }
+  }
 }
 
 export default function GenerateScriptModal({ scenario, profile, onClose, onSaved }: Props) {
@@ -40,11 +71,15 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
   const [viewFileIdx, setViewFileIdx] = useState(0);
   const [saved, setSaved] = useState(false);
   const [planUsage, setPlanUsage] = useState<{ prompt_tokens: number; completion_tokens: number } | null>(null);
-  const [genUsage, setGenUsage] = useState<{ prompt_tokens: number; completion_tokens: number } | null>(null);
+
+  // Streaming state
+  const [streamingContent, setStreamingContent] = useState('');
+  const [streamingChars, setStreamingChars] = useState(0);
+  const streamRef = useRef<string>('');
+  const codeViewRef = useRef<HTMLPreElement>(null);
 
   // tRPC mutations
   const planMutation = trpc.aiGeneration.planScript.useMutation();
-  const generateMutation = trpc.aiGeneration.generateScript.useMutation();
   const saveMutation = trpc.aiGeneration.saveScript.useMutation();
 
   // Load bundles via tRPC
@@ -91,7 +126,7 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
     });
   };
 
-  /** Phase 1: Call LLM to generate the plan */
+  /** Phase 1: Call LLM to generate the plan (non-streaming, structured JSON) */
   const handleStartPlanning = async () => {
     setError('');
     setStep('planning');
@@ -103,7 +138,6 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
       setPlan(result.plan);
       setPlanUsage(result.usage as any);
 
-      // Check blocking missing inputs
       const blocking = result.plan.missing_inputs.filter((m: any) => m.severity === 'BLOCKING');
       if (blocking.length > 0) {
         setError(`Inputs manquants bloquants: ${blocking.map((b: any) => b.key).join(', ')}`);
@@ -118,21 +152,71 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
     }
   };
 
-  /** Phase 2: Call LLM to generate scripts from the plan */
-  const handleStartGeneration = async () => {
+  /** Phase 2: Call LLM with SSE streaming for code generation */
+  const handleStartGeneration = useCallback(async () => {
     if (!context || !plan) return;
     setError('');
     setStep('generating');
+    setStreamingContent('');
+    setStreamingChars(0);
+    streamRef.current = '';
+
     try {
-      const result = await generateMutation.mutateAsync({ context, plan });
-      setScriptPackage(result.package);
-      setGenUsage(result.usage as any);
-      setStep('result');
+      const response = await fetch('/api/ai/stream-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ context, plan }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Erreur serveur: ${response.status} ${errText}`);
+      }
+
+      if (!response.body) {
+        throw new Error('Pas de body dans la réponse SSE');
+      }
+
+      await consumeSSEStream(
+        response,
+        // onChunk
+        (chunk) => {
+          streamRef.current += chunk;
+          setStreamingContent(streamRef.current);
+          setStreamingChars(prev => prev + chunk.length);
+          // Auto-scroll
+          if (codeViewRef.current) {
+            codeViewRef.current.scrollTop = codeViewRef.current.scrollHeight;
+          }
+        },
+        // onDone
+        (fullContent) => {
+          // Parse the final JSON
+          try {
+            let cleaned = fullContent.trim();
+            if (cleaned.startsWith('```')) {
+              cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+            }
+            const parsed = JSON.parse(cleaned);
+            setScriptPackage(parsed);
+            setStep('result');
+          } catch (parseErr: any) {
+            setError(`Erreur de parsing JSON: ${parseErr.message}`);
+            setStep('plan_review');
+          }
+        },
+        // onError
+        (errMsg) => {
+          setError(errMsg);
+          setStep('plan_review');
+        },
+      );
     } catch (e: any) {
-      setError(e.message || 'Erreur lors de la génération IA');
+      setError(e.message || 'Erreur lors de la génération streaming');
       setStep('plan_review');
     }
-  };
+  }, [context, plan]);
 
   /** Save to DB via tRPC */
   const handleSaveToRepo = async () => {
@@ -188,6 +272,12 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
               {scenario.scenario_code || scenario.name}
             </span>
             <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-semibold">LLM</span>
+            {step === 'generating' && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 font-semibold flex items-center gap-1">
+                <Radio className="w-2.5 h-2.5" />
+                STREAMING
+              </span>
+            )}
           </div>
           <button onClick={onClose} className="p-1.5 rounded hover:bg-secondary/50 text-muted-foreground hover:text-foreground transition-colors">
             <X className="w-5 h-5" />
@@ -251,9 +341,9 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
               <div className="bg-primary/5 border border-primary/10 rounded-md p-3 text-xs text-muted-foreground">
                 <div className="flex items-center gap-1.5 mb-1 text-primary font-semibold">
                   <Brain className="w-3.5 h-3.5" />
-                  Génération IA réelle
+                  Génération IA avec streaming
                 </div>
-                Le script sera généré par un modèle de langage (LLM) en 2 étapes : planification puis génération de code.
+                Le script sera généré par un modèle de langage (LLM) en 2 étapes : planification puis génération de code en temps réel (streaming SSE).
                 Les fichiers produits sont complets et exécutables.
               </div>
 
@@ -371,26 +461,46 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
                 </button>
                 <button
                   onClick={handleStartGeneration}
-                  disabled={generateMutation.isPending}
                   className="px-6 py-2 text-sm font-semibold rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center gap-2"
                 >
                   <Zap className="w-4 h-4" />
-                  Générer les scripts
+                  Générer les scripts (streaming)
                 </button>
               </div>
             </div>
           )}
 
-          {/* Generating step (loading) */}
+          {/* Generating step — streaming live view */}
           {step === 'generating' && (
-            <div className="flex flex-col items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 text-primary animate-spin mb-4" />
-              <p className="text-sm text-muted-foreground">Génération des scripts par l'IA...</p>
-              {plan && (
-                <p className="text-xs text-muted-foreground/60 mt-2">
-                  Framework: {plan.framework_choice} | {plan.file_plan.length} fichier(s) en cours de génération
-                </p>
-              )}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Radio className="w-5 h-5 text-green-400 animate-pulse" />
+                  <span className="text-sm font-semibold text-foreground">Génération en cours...</span>
+                  {plan && (
+                    <span className="text-xs text-muted-foreground font-mono">
+                      {plan.framework_choice} / {plan.code_language}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-mono">
+                  <span>{streamingChars.toLocaleString()} caractères reçus</span>
+                  <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                </div>
+              </div>
+
+              {/* Live streaming code view */}
+              <pre
+                ref={codeViewRef}
+                className="p-4 text-xs font-mono text-green-300/90 overflow-x-auto max-h-[400px] overflow-y-auto bg-black/40 rounded-lg border border-green-500/10"
+              >
+                <code>{streamingContent || 'En attente du premier chunk...'}</code>
+                <span className="inline-block w-2 h-4 bg-green-400 animate-pulse ml-0.5" />
+              </pre>
+
+              <p className="text-[10px] text-muted-foreground text-center">
+                Le code est généré en temps réel par le LLM. Le résultat final sera parsé et affiché par fichier.
+              </p>
             </div>
           )}
 
@@ -411,11 +521,9 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
                   )}
                 </div>
                 <div className="flex items-center gap-3">
-                  {genUsage && (
-                    <span className="text-[10px] text-muted-foreground font-mono">
-                      {(planUsage?.prompt_tokens || 0) + (planUsage?.completion_tokens || 0) + genUsage.prompt_tokens + genUsage.completion_tokens} tokens total
-                    </span>
-                  )}
+                  <span className="text-[10px] text-muted-foreground font-mono">
+                    {streamingChars.toLocaleString()} caractères
+                  </span>
                   <button
                     onClick={handleSaveToRepo}
                     disabled={saved || saveMutation.isPending}

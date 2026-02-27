@@ -122,7 +122,7 @@ const PLAN_JSON_SCHEMA = {
   },
 };
 
-const GENERATE_JSON_SCHEMA = {
+export const GENERATE_JSON_SCHEMA = {
   name: "script_package",
   strict: true,
   schema: {
@@ -275,7 +275,7 @@ ${formatDatasetKeys(ctx.dataset.resolved.merged_json, ctx.dataset.secrets_policy
 Return ONLY the JSON matching the schema.`;
 }
 
-function buildGeneratePrompt(ctx: z.infer<typeof AiContextInput>, plan: z.infer<typeof ScriptPlanResultSchema>): string {
+export function buildGeneratePrompt(ctx: z.infer<typeof AiContextInput>, plan: z.infer<typeof ScriptPlanResultSchema>): string {
   return `You are an expert test automation engineer.
 
 ## TASK

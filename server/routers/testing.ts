@@ -786,4 +786,32 @@ export const scriptsRouter = router({
     await db.delete(generatedScripts).where(eq(generatedScripts.id, input.scriptId));
     return { success: true };
   }),
+
+  /** Get a single script by ID */
+  get: protectedProcedure.input(z.object({ scriptId: z.number() })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const [row] = await db.select().from(generatedScripts).where(eq(generatedScripts.id, input.scriptId)).limit(1);
+    if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Script not found" });
+    return row;
+  }),
+
+  /** List all versions of scripts for the same scenario+framework (for diff viewer) */
+  listVersions: protectedProcedure.input(z.object({
+    projectId: z.string(),
+    scenarioId: z.number(),
+    framework: z.string().optional(),
+  })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const conditions: SQL[] = [
+      eq(generatedScripts.projectId, Number(input.projectId)),
+      eq(generatedScripts.scenarioId, input.scenarioId),
+    ];
+    if (input.framework) conditions.push(eq(generatedScripts.framework, input.framework));
+    const data = await db.select().from(generatedScripts)
+      .where(and(...conditions))
+      .orderBy(desc(generatedScripts.createdAt));
+    return { data };
+  }),
 });

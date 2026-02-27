@@ -98,6 +98,7 @@ const baseNavSections: NavSection[] = [
       { href: "/probes", icon: Radio, label: "Sondes" },
       { href: "/probes/monitoring", icon: Activity, label: "Monitoring" },
       { href: "/webhooks", icon: Webhook, label: "Webhooks" },
+      { href: "/collector", icon: Activity, label: "Collector" },
     ],
   },
   {

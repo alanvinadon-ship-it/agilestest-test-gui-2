@@ -364,4 +364,100 @@ export const collectorRouter = router({
         .where(sql`${collectorSessions.status} IN ('QUEUED', 'RUNNING')`);
       return { count: result?.count ?? 0 };
     }),
+
+  /**
+   * Dashboard — aggregated view for collector monitoring.
+   * Returns: active sessions with probe info, status breakdown, recent events, stale sessions.
+   */
+  dashboard: protectedProcedure
+    .input(z.object({
+      projectId: z.string().optional(),
+    }))
+    .query(async ({ input }) => {
+      const db = await requireDb();
+
+      // 1. Status breakdown (count by status)
+      const statusBreakdown = await db.select({
+        status: collectorSessions.status,
+        count: sql<number>`count(*)`,
+      })
+        .from(collectorSessions)
+        .groupBy(collectorSessions.status);
+
+      // 2. Active sessions with probe + capture info
+      const activeSessions = await db.select({
+        sessionId: collectorSessions.id,
+        sessionUid: collectorSessions.uid,
+        status: collectorSessions.status,
+        startedAt: collectorSessions.startedAt,
+        lastHeartbeatAt: collectorSessions.lastHeartbeatAt,
+        metaJson: collectorSessions.metaJson,
+        captureId: collectorSessions.captureId,
+        probeId: collectorSessions.probeId,
+        probeName: probes.name,
+        probeHost: probes.host,
+        probeStatus: probes.status,
+        captureName: captures.name,
+      })
+        .from(collectorSessions)
+        .leftJoin(probes, eq(collectorSessions.probeId, probes.id))
+        .leftJoin(captures, eq(collectorSessions.captureId, captures.id))
+        .where(sql`${collectorSessions.status} IN ('QUEUED', 'RUNNING')`)
+        .orderBy(desc(collectorSessions.startedAt))
+        .limit(50);
+
+      // 3. Stale sessions (RUNNING but no heartbeat in last 5 min)
+      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const staleSessions = activeSessions.filter(
+        s => s.status === 'RUNNING' && s.lastHeartbeatAt && new Date(s.lastHeartbeatAt) < fiveMinAgo
+      );
+
+      // 4. Recent events (last 50 across all sessions)
+      const recentEvents = await db.select({
+        eventId: collectorEvents.id,
+        eventUid: collectorEvents.uid,
+        sessionId: collectorEvents.sessionId,
+        level: collectorEvents.level,
+        eventType: collectorEvents.eventType,
+        message: collectorEvents.message,
+        createdAt: collectorEvents.createdAt,
+      })
+        .from(collectorEvents)
+        .orderBy(desc(collectorEvents.id))
+        .limit(50);
+
+      // 5. Events per probe (top 10 probes by event count in last 24h)
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const eventsPerProbe = await db.select({
+        probeId: collectorSessions.probeId,
+        probeName: probes.name,
+        eventCount: sql<number>`count(${collectorEvents.id})`,
+      })
+        .from(collectorEvents)
+        .innerJoin(collectorSessions, eq(collectorEvents.sessionId, collectorSessions.id))
+        .leftJoin(probes, eq(collectorSessions.probeId, probes.id))
+        .where(sql`${collectorEvents.createdAt} >= ${oneDayAgo}`)
+        .groupBy(collectorSessions.probeId, probes.name)
+        .orderBy(sql`count(${collectorEvents.id}) DESC`)
+        .limit(10);
+
+      // 6. Totals
+      const [totalSessions] = await db.select({ count: sql<number>`count(*)` }).from(collectorSessions);
+      const [totalEvents] = await db.select({ count: sql<number>`count(*)` }).from(collectorEvents);
+
+      return {
+        statusBreakdown: statusBreakdown.map(r => ({ status: r.status, count: Number(r.count) })),
+        activeSessions,
+        staleSessions,
+        recentEvents,
+        eventsPerProbe: eventsPerProbe.map(r => ({ probeId: r.probeId, probeName: r.probeName, eventCount: Number(r.eventCount) })),
+        totals: {
+          sessions: Number(totalSessions?.count ?? 0),
+          events: Number(totalEvents?.count ?? 0),
+          active: activeSessions.length,
+          stale: staleSessions.length,
+        },
+        metrics: collectorMetrics,
+      };
+    }),
 });
