@@ -406,3 +406,8 @@
 - [x] Feature: pnpm script "audit:schema" dans package.json
 - [x] Feature: GitHub Actions workflow CI pour schema audit
 - [x] Feature: docs/SCHEMA_AUDIT.md — instructions d'exécution et interprétation
+- [x] E2E Invites: Setup — créer org/project/admin user, créer invite, vérifier DB status=PENDING
+- [x] E2E Invites: Send — déclencher envoi email mock, vérifier payload
+- [x] E2E Invites: Accept — simuler acceptation, vérifier status=ACCEPTED, user créé, audit log
+- [x] E2E Invites: Edge cases — token invalide, token expiré, double accept, cross-org
+- [x] E2E Invites: Tests verts + 0 régressions + checkpoint

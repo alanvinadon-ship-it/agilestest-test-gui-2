@@ -367,11 +367,11 @@ export const adminRouter = router({
       userId: ctx.user!.id,
       action: "INVITE_CREATED",
       entity: "invite",
-      entityId: input.email,
-      details: { role: input.role },
+      entityId: uid,
+      details: { email: input.email, role: input.role },
     });
 
-    return { success: true, token };
+    return { success: true, token, uid };
   }),
 
   revokeInvite: adminProcedure.input(revokeInviteInput).mutation(async ({ input, ctx }) => {
