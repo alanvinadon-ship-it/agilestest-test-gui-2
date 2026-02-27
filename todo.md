@@ -228,3 +228,19 @@
 - [ ] Sprint 3 Étape 3: DB — Index (project_id, created_at DESC, id DESC) sur test_profiles
 - [ ] Sprint 3 Étape 3: DB — Index (project_id, created_at DESC, id DESC) sur test_scenarios
 - [ ] Sprint 3: Tests verts + TS OK + vérification navigateur
+- [x] Sprint Drive Étape 1A: Tables Drizzle drive_routes, drive_devices, drive_probe_links, drive_jobs + indexes
+- [x] Sprint Drive Étape 1A: Migrations DB (SQL direct, tables créées)
+- [x] Sprint Drive Étape 1B: Routeur tRPC driveRoutes (list/create/update/delete) avec cursor pagination
+- [x] Sprint Drive Étape 1B: Routeur tRPC driveDevices (list/create/update/delete) avec cursor pagination
+- [x] Sprint Drive Étape 1B: Routeur tRPC driveProbeLinks (list/attach/detach/updateRole)
+- [x] Sprint Drive Étape 1B: Routeur tRPC driveJobs (list/create/get/updateStatus/delete) avec cursor pagination + filtres status/type
+- [x] Sprint Drive Étape 1C: Frontend — Migrer routes/devices/probes/jobs dans DriveCampaignsPage vers tRPC
+- [x] Sprint Drive Étape 1C: Frontend — Supprimé imports localDriveRoutes/localTestDevices/localDriveProbeConfigs/localDriveJobs/localDriveRunSummaries (conservé localCapturePolicies)
+- [x] Sprint Drive Étape 1D: Tests backend CRUD + org scope + pagination cursor (21 tests passés)
+- [x] Sprint Drive Étape 1D: Vérification compilation TS=0 + 443 tests verts
+- [x] Sprint Étape 2: Gate ESLint no-restricted-imports (localStore, repositoryApi) sur 9 pages migrées
+- [x] Sprint Étape 2: Script CI pnpm lint échoue si import interdit (0 erreurs actuellement)
+- [x] Sprint Étape 2: Doc FRONTEND_STORAGE_POLICY.md créé (pages migrées, exceptions, workflow)
+- [x] Sprint Étape 3: Cursor pagination UI "Charger plus" sur ProfilesPage (pageSize=30, accumulation, déduplication)
+- [x] Sprint Étape 3: Cursor pagination UI "Charger plus" sur ScenariosPage (pageSize=30, accumulation, déduplication)
+- [x] Sprint Étape 3: Tests cursor concat/unique + vérification UX (443 tests passés, TS=0 erreurs)

@@ -27,6 +27,12 @@ import {
   datasetTypesRouter,
 } from "./routers/bundles";
 import { driveCampaignsRouter } from "./routers/driveCampaigns";
+import {
+  driveRoutesRouter,
+  driveDevicesRouter,
+  driveProbeLinksRouter,
+  driveJobsRouter,
+} from "./routers/driveEntities";
 
 export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -79,6 +85,12 @@ export const appRouter = router({
 
   // Drive campaigns
   driveCampaigns: driveCampaignsRouter,
+
+  // Drive sub-entities (routes, devices, probe links, jobs)
+  driveRoutes: driveRoutesRouter,
+  driveDevices: driveDevicesRouter,
+  driveProbeLinks: driveProbeLinksRouter,
+  driveJobs: driveJobsRouter,
 });
 
 export type AppRouter = typeof appRouter;

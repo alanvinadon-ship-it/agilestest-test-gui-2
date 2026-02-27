@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
 import { usePermission, PermissionKey } from '../security';
@@ -522,6 +522,8 @@ export default function ScenariosPage() {
   const [testTypeFilter, setTestTypeFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [expandedProfile, setExpandedProfile] = useState<string | null>(null);
+  const [scenarioCursor, setScenarioCursor] = useState<number | undefined>(undefined);
+  const [allScenarioItems, setAllScenarioItems] = useState<any[]>([]);
   const utils = trpc.useUtils();
 
   const { data: profilesData, isLoading: loadingProfiles } = trpc.profiles.list.useQuery(
@@ -559,13 +561,42 @@ export default function ScenariosPage() {
     return result;
   }, [profiles, testTypeFilter, search]);
 
-  const { data: scenariosData, isLoading: loadingScenarios } = trpc.scenarios.list.useQuery(
-    { projectId: String(currentProject?.id || ''), page: 1, pageSize: 100 },
+  const SCENARIO_PAGE_SIZE = 30;
+
+  const { data: scenariosData, isLoading: loadingScenarios, isFetching: fetchingScenarios } = trpc.scenarios.list.useQuery(
+    { projectId: String(currentProject?.id || ''), page: 1, pageSize: SCENARIO_PAGE_SIZE, cursor: scenarioCursor },
     { enabled: !!currentProject },
   );
 
+  // Accumulate scenario items as cursor changes
+  useEffect(() => {
+    if (scenariosData?.data) {
+      if (scenarioCursor === undefined) {
+        setAllScenarioItems(scenariosData.data);
+      } else {
+        setAllScenarioItems(prev => {
+          const existingIds = new Set(prev.map((s: any) => s.id));
+          const newItems = scenariosData.data.filter((s: any) => !existingIds.has(s.id));
+          return [...prev, ...newItems];
+        });
+      }
+    }
+  }, [scenariosData, scenarioCursor]);
+
+  // Reset when project changes
+  useEffect(() => {
+    setScenarioCursor(undefined);
+    setAllScenarioItems([]);
+  }, [currentProject?.id]);
+
+  const handleLoadMoreScenarios = () => {
+    if (scenariosData?.nextCursor) {
+      setScenarioCursor(scenariosData.nextCursor);
+    }
+  };
+
   const allScenarios = useMemo(() => {
-    return (scenariosData?.data || []).map((s: any): TestScenario => ({
+    return allScenarioItems.map((s: any): TestScenario => ({
       id: String(s.id),
       profile_id: s.profileId || '',
       project_id: s.projectId || '',
@@ -579,7 +610,7 @@ export default function ScenariosPage() {
       created_at: s.createdAt ? new Date(s.createdAt).toISOString() : '',
       updated_at: s.updatedAt ? new Date(s.updatedAt).toISOString() : '',
     }));
-  }, [scenariosData]);
+  }, [allScenarioItems]);
   const scenarios = useMemo(() => {
     let result = allScenarios;
     if (expandedProfile) result = result.filter(s => s.profile_id === expandedProfile);
@@ -588,7 +619,11 @@ export default function ScenariosPage() {
   }, [allScenarios, expandedProfile, statusFilter]);
 
   const deleteMutation = trpc.scenarios.delete.useMutation({
-    onSuccess: () => utils.scenarios.list.invalidate(),
+    onSuccess: () => {
+      setScenarioCursor(undefined);
+      setAllScenarioItems([]);
+      utils.scenarios.list.invalidate();
+    },
   });
 
   const deprecateMutation = trpc.scenarios.update.useMutation({
@@ -836,6 +871,23 @@ export default function ScenariosPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Charger plus scénarios */}
+      {scenariosData?.hasMore && !loadingScenarios && scenarios.length > 0 && (
+        <div className="flex justify-center py-4">
+          <button
+            onClick={handleLoadMoreScenarios}
+            disabled={fetchingScenarios}
+            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-md border border-border text-sm font-medium text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+          >
+            {fetchingScenarios ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Chargement...</>
+            ) : (
+              <>Charger plus ({scenariosData?.pagination?.total ? `${allScenarioItems.length} / ${scenariosData.pagination.total}` : '...'})</>
+            )}
+          </button>
         </div>
       )}
 

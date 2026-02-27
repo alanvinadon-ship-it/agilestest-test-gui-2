@@ -438,3 +438,79 @@ export const driveCampaigns = mysqlTable("drive_campaigns", {
 
 export type DriveCampaignRow = typeof driveCampaigns.$inferSelect;
 export type InsertDriveCampaign = typeof driveCampaigns.$inferInsert;
+
+// ─── Drive Routes (parcours terrain) ──────────────────────────────────────
+// DB columns: id, uid, campaign_id, name, geojson_json, checkpoints_json, expected_duration_min, distance_km, created_at, updated_at
+export const driveRoutes = mysqlTable("drive_routes", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  campaignId: varchar("campaign_id", { length: 36 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  routeGeojson: json("route_geojson"),
+  checkpointsGeojson: json("checkpoints_geojson"),
+  expectedDurationMin: int("expected_duration_min").default(30),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DriveRouteRow = typeof driveRoutes.$inferSelect;
+export type InsertDriveRoute = typeof driveRoutes.$inferInsert;
+
+// ─── Drive Devices (équipements de test terrain) ──────────────────────────
+// DB columns: id, uid, campaign_id, name, device_type, model, os_version, imei, phone_number, diag_capable, tools_enabled, notes, meta_json, created_at, updated_at
+export const driveDevices = mysqlTable("drive_devices", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  campaignId: varchar("campaign_id", { length: 36 }).notNull(),
+  name: varchar("name", { length: 255 }),
+  deviceType: mysqlEnum("device_type", ["ANDROID", "MODEM", "CPE", "LAPTOP"]).default("ANDROID").notNull(),
+  model: varchar("model", { length: 255 }),
+  osVersion: varchar("os_version", { length: 100 }),
+  imei: varchar("imei", { length: 50 }),
+  phoneNumber: varchar("phone_number", { length: 50 }),
+  diagCapable: boolean("diag_capable").default(false),
+  toolsEnabled: json("tools_enabled"),
+  notes: text("notes"),
+  metaJson: json("meta_json"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DriveDeviceRow = typeof driveDevices.$inferSelect;
+export type InsertDriveDevice = typeof driveDevices.$inferInsert;
+
+// ─── Drive Probe Links (liaison sondes ↔ campagnes) ──────────────────────
+// DB columns: id, uid, campaign_id, probe_id, role, created_at
+export const driveProbeLinks = mysqlTable("drive_probe_links", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  campaignId: varchar("campaign_id", { length: 36 }).notNull(),
+  probeId: int("probe_id").notNull(),
+  role: mysqlEnum("role", ["COLLECTOR", "MONITOR", "SPAN_TAP"]).default("COLLECTOR").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type DriveProbeLinkRow = typeof driveProbeLinks.$inferSelect;
+export type InsertDriveProbeLink = typeof driveProbeLinks.$inferInsert;
+
+// ─── Drive Jobs (exécutions terrain) ──────────────────────────────────────
+// DB columns: id, uid, campaign_id, route_id, device_id, target_env, runner_id, status, progress_pct, error_message, artifacts_manifest, created_at, started_at, finished_at
+export const driveJobs = mysqlTable("drive_jobs", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  campaignId: varchar("campaign_id", { length: 36 }).notNull(),
+  routeId: varchar("route_id", { length: 36 }).notNull(),
+  deviceId: varchar("device_id", { length: 36 }).notNull(),
+  targetEnv: mysqlEnum("target_env", ["DEV", "PREPROD", "PILOT_ORANGE", "PROD"]),
+  runnerId: varchar("runner_id", { length: 64 }),
+  status: mysqlEnum("status", ["PENDING", "RUNNING", "DONE", "FAILED"]).default("PENDING").notNull(),
+  progressPct: int("progress_pct").default(0),
+  errorMessage: text("error_message"),
+  artifactsManifest: json("artifacts_manifest"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  startedAt: timestamp("started_at"),
+  finishedAt: timestamp("finished_at"),
+});
+
+export type DriveJobRow = typeof driveJobs.$inferSelect;
+export type InsertDriveJob = typeof driveJobs.$inferInsert;

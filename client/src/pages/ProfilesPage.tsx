@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
 import { usePermission, PermissionKey } from '../security';
@@ -532,6 +532,8 @@ export default function ProfilesPage() {
   const [search, setSearch] = useState('');
   const [domainFilter, setDomainFilter] = useState<string>('ALL');
   const [testTypeFilter, setTestTypeFilter] = useState<string>('ALL');
+  const [cursor, setCursor] = useState<number | undefined>(undefined);
+  const [allItems, setAllItems] = useState<any[]>([]);
   const utils = trpc.useUtils();
 
   const enabledDomains = useMemo(
@@ -539,18 +541,53 @@ export default function ProfilesPage() {
     [currentProject?.domain]
   );
 
-  const { data, isLoading } = trpc.profiles.list.useQuery(
-    { projectId: String(currentProject?.id || ''), page: 1, pageSize: 100 },
+  const PAGE_SIZE = 30;
+
+  const { data, isLoading, isFetching } = trpc.profiles.list.useQuery(
+    { projectId: String(currentProject?.id || ''), page: 1, pageSize: PAGE_SIZE, cursor },
     { enabled: !!currentProject },
   );
 
+  // Accumulate items as cursor changes
+  useEffect(() => {
+    if (data?.data) {
+      if (cursor === undefined) {
+        // First page: replace
+        setAllItems(data.data);
+      } else {
+        // Subsequent pages: append, deduplicate by id
+        setAllItems(prev => {
+          const existingIds = new Set(prev.map((p: any) => p.id));
+          const newItems = data.data.filter((p: any) => !existingIds.has(p.id));
+          return [...prev, ...newItems];
+        });
+      }
+    }
+  }, [data, cursor]);
+
+  // Reset when project changes
+  useEffect(() => {
+    setCursor(undefined);
+    setAllItems([]);
+  }, [currentProject?.id]);
+
+  const handleLoadMore = () => {
+    if (data?.nextCursor) {
+      setCursor(data.nextCursor);
+    }
+  };
+
   const deleteMutation = trpc.profiles.delete.useMutation({
-    onSuccess: () => utils.profiles.list.invalidate(),
+    onSuccess: () => {
+      setCursor(undefined);
+      setAllItems([]);
+      utils.profiles.list.invalidate();
+    },
   });
 
   // Map DB camelCase to frontend snake_case and apply filters
   const profiles = useMemo(() => {
-    const raw = data?.data || [];
+    const raw = allItems;
     return raw.map((p: any): TestProfile => {
       const mapped: TestProfile = {
         id: String(p.id),
@@ -577,7 +614,7 @@ export default function ProfilesPage() {
       }
       return mapped;
     });
-  }, [data]);
+  }, [allItems]);
 
   const filtered = useMemo(() => {
     let result = profiles;
@@ -763,6 +800,23 @@ export default function ProfilesPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Charger plus */}
+      {data?.hasMore && !isLoading && filtered.length > 0 && (
+        <div className="flex justify-center py-4">
+          <button
+            onClick={handleLoadMore}
+            disabled={isFetching}
+            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-md border border-border text-sm font-medium text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+          >
+            {isFetching ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Chargement...</>
+            ) : (
+              <>Charger plus ({data?.pagination?.total ? `${allItems.length} / ${data.pagination.total}` : '...'})</>
+            )}
+          </button>
         </div>
       )}
 

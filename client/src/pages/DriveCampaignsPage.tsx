@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '@/auth/AuthContext';
 import { usePermission, PermissionKey } from '@/security';
@@ -21,26 +21,11 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import {
-  localDriveRoutes,
-  localTestDevices,
-  localDriveProbeConfigs,
-  localDriveJobs,
-  localDriveRunSummaries,
-} from '@/api/localStore';
 import type {
-  DriveRoute,
-  TestDevice,
-  DriveProbeConfig,
-  DriveJob,
-  DriveRunSummary,
   NetworkType,
   TargetEnv,
   DeviceType,
   DriveToolName,
-  ProbeLocation,
-  DriveCaptureType,
-  ProbeOutputTarget,
 } from '@/types';
 import { DRIVE_SCENARIO_TEMPLATES } from '@/config/driveTestCatalog';
 import {
@@ -65,20 +50,17 @@ import {
 import { toast } from 'sonner';
 import { CapturePolicyEditor, CaptureModeBadge } from '@/capture';
 import type { CapturePolicy } from '@/capture/types';
+// eslint-disable-next-line no-restricted-imports -- TODO: migrer capturePolicies vers tRPC/DB
 import { localCapturePolicies } from '@/api/localStore';
 
 // ─── Constants ────────────────────────────────────────────────────────────
 
 const NETWORK_TYPES: NetworkType[] = ['4G', '5G_SA', '5G_NSA', 'IMS', 'IP'];
 const ENVS: TargetEnv[] = ['DEV', 'PREPROD', 'PILOT_ORANGE', 'PROD'];
-// DB status values
 type DBCampaignStatus = 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
 const CAMPAIGN_STATUSES: DBCampaignStatus[] = ['DRAFT', 'ACTIVE', 'COMPLETED', 'CANCELLED'];
 const DEVICE_TYPES: DeviceType[] = ['ANDROID', 'MODEM', 'CPE', 'LAPTOP'];
 const TOOL_NAMES: DriveToolName[] = ['GNetTrack', 'NSG', 'QXDM', 'Wireshark', 'iperf3', 'ping', 'traceroute', 'tcpdump'];
-const PROBE_LOCATIONS: ProbeLocation[] = ['RUNNER_HOST', 'EDGE_VM', 'K8S_NODE', 'SPAN_PORT', 'MIRROR_TAP'];
-const CAPTURE_TYPES: DriveCaptureType[] = ['PCAP', 'SIP_TRACE', 'DIAMETER', 'GTPU', 'NGAP', 'NAS', 'HTTP', 'DNS', 'SYSLOG'];
-const OUTPUT_TARGETS: ProbeOutputTarget[] = ['MINIO', 'LOCAL', 'BOTH'];
 
 const STATUS_COLORS: Record<DBCampaignStatus, string> = {
   DRAFT: 'bg-gray-500/20 text-gray-300',
@@ -92,6 +74,14 @@ const STATUS_ICONS: Record<DBCampaignStatus, typeof Clock> = {
   ACTIVE: Play,
   COMPLETED: CheckCircle2,
   CANCELLED: Clock,
+};
+
+const JOB_STATUS_COLORS: Record<string, string> = {
+  QUEUED: 'text-gray-400',
+  RUNNING: 'text-amber-400',
+  COMPLETED: 'text-emerald-400',
+  FAILED: 'text-red-400',
+  CANCELED: 'text-gray-500',
 };
 
 // ─── Display campaign type ──────────────────────────────────────────────
@@ -169,26 +159,16 @@ export default function DriveCampaignsPage() {
     area: '', start_date: '', end_date: '',
   });
 
-  // Routes (still localStorage)
-  const [routes, setRoutes] = useState<Record<string, DriveRoute[]>>({});
+  // Route modal
   const [showRouteModal, setShowRouteModal] = useState(false);
   const [routeParentId, setRouteParentId] = useState('');
   const [routeForm, setRouteForm] = useState({ name: '', expected_duration_min: 30, route_geojson_str: '' });
 
-  // Devices (still localStorage)
-  const [devices, setDevices] = useState<TestDevice[]>([]);
+  // Device modal
   const [showDeviceModal, setShowDeviceModal] = useState(false);
   const [deviceForm, setDeviceForm] = useState({
     type: 'ANDROID' as DeviceType, model: '', os_version: '', diag_capable: false,
     tools_enabled: [] as DriveToolName[], notes: '',
-  });
-
-  // Probe configs (still localStorage)
-  const [probeConfigs, setProbeConfigs] = useState<DriveProbeConfig[]>([]);
-  const [showProbeModal, setShowProbeModal] = useState(false);
-  const [probeForm, setProbeForm] = useState({
-    name: '', location: 'RUNNER_HOST' as ProbeLocation, capture_type: 'PCAP' as DriveCaptureType,
-    retention_days: 30, max_size_mb: 500, rotation: true, output_target: 'MINIO' as ProbeOutputTarget, enabled: true,
   });
 
   // Active tab
@@ -200,54 +180,48 @@ export default function DriveCampaignsPage() {
   const [runRouteId, setRunRouteId] = useState('');
   const [runDeviceId, setRunDeviceId] = useState('');
   const [runCapturePcap, setRunCapturePcap] = useState(false);
-  const [isRunning, setIsRunning] = useState(false);
 
-  // Drive Jobs (still localStorage)
-  const [driveJobs, setDriveJobs] = useState<Record<string, DriveJob[]>>({});
-  const [jobSummaries, setJobSummaries] = useState<Record<string, DriveRunSummary | null>>({});
+  // ─── tRPC Queries: Routes per campaign ──────────────────────────────────
 
-  // ─── Load localStorage data ──────────────────────────────────────────
+  const { data: routesData } = trpc.driveRoutes.list.useQuery(
+    { campaignId: expandedCampaign || '', limit: 100 },
+    { enabled: !!expandedCampaign },
+  );
+  const campaignRoutes = routesData?.items || [];
 
-  const loadRoutes = (campaignId: string) => {
-    try {
-      const r = localDriveRoutes.list(campaignId);
-      setRoutes(prev => ({ ...prev, [campaignId]: r }));
-    } catch { /* ignore */ }
-  };
+  // ─── tRPC Queries: Devices per campaign (all devices for the expanded campaign) ─
 
-  const loadDevices = () => {
-    if (!projectId) return;
-    try {
-      const result = localTestDevices.list(projectId, { limit: 200 });
-      setDevices(result.data);
-    } catch { /* ignore */ }
-  };
+  // Devices are now per-campaign (not per-project)
+  // For the devices tab, we show devices for all campaigns (we use a special "all" query or the expanded one)
+  // Actually, devices in the DB are per-campaign. For the "Devices" tab we need to pick a campaign.
+  // Let's use a project-level approach: list devices for all campaigns of the project.
+  // For simplicity, we'll list devices for the expanded campaign in the campaigns tab,
+  // and for the devices tab, we'll show a message to select a campaign or list all.
 
-  const loadProbeConfigs = () => {
-    if (!projectId) return;
-    try {
-      const p = localDriveProbeConfigs.list(projectId);
-      setProbeConfigs(p);
-    } catch { /* ignore */ }
-  };
+  // For the run modal, we need devices for the selected campaign
+  const { data: runDevicesData } = trpc.driveDevices.list.useQuery(
+    { campaignId: runCampaignData?.campaign_id || expandedCampaign || '', limit: 100 },
+    { enabled: !!(runCampaignData?.campaign_id || expandedCampaign) },
+  );
+  const availableDevices = runDevicesData?.items || [];
 
-  const loadDriveJobs = (campaignId: string) => {
-    try {
-      const result = localDriveJobs.list({ campaign_id: campaignId, limit: 200 });
-      setDriveJobs(prev => ({ ...prev, [campaignId]: result.data }));
-      for (const j of result.data) {
-        const s = localDriveRunSummaries.get(j.drive_job_id);
-        setJobSummaries(prev => ({ ...prev, [j.drive_job_id]: s }));
-      }
-    } catch { /* ignore */ }
-  };
+  // ─── tRPC Queries: Probe links per campaign ────────────────────────────
 
-  useEffect(() => {
-    loadDevices();
-    loadProbeConfigs();
-  }, [projectId]);
+  const { data: probeLinksData } = trpc.driveProbeLinks.list.useQuery(
+    { campaignId: expandedCampaign || '' },
+    { enabled: !!expandedCampaign },
+  );
+  const campaignProbeLinks = probeLinksData?.items || [];
 
-  // ─── tRPC Mutations ──────────────────────────────────────────────────
+  // ─── tRPC Queries: Jobs per campaign ────────────────────────────────────
+
+  const { data: jobsData } = trpc.driveJobs.list.useQuery(
+    { campaignId: expandedCampaign || '', limit: 100 },
+    { enabled: !!expandedCampaign },
+  );
+  const campaignJobs = jobsData?.items || [];
+
+  // ─── tRPC Mutations: Campaigns ──────────────────────────────────────────
 
   const createCampaignMutation = trpc.driveCampaigns.create.useMutation({
     onSuccess: () => {
@@ -271,6 +245,55 @@ export default function DriveCampaignsPage() {
     onSuccess: () => {
       utils.driveCampaigns.list.invalidate();
       toast.success('Campagne supprimée');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  // ─── tRPC Mutations: Routes ─────────────────────────────────────────────
+
+  const createRouteMutation = trpc.driveRoutes.create.useMutation({
+    onSuccess: () => {
+      utils.driveRoutes.list.invalidate();
+      setShowRouteModal(false);
+      toast.success('Route ajoutée');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const deleteRouteMutation = trpc.driveRoutes.delete.useMutation({
+    onSuccess: () => {
+      utils.driveRoutes.list.invalidate();
+      toast.success('Route supprimée');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  // ─── tRPC Mutations: Devices ────────────────────────────────────────────
+
+  const createDeviceMutation = trpc.driveDevices.create.useMutation({
+    onSuccess: () => {
+      utils.driveDevices.list.invalidate();
+      setShowDeviceModal(false);
+      toast.success('Équipement ajouté');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const deleteDeviceMutation = trpc.driveDevices.delete.useMutation({
+    onSuccess: () => {
+      utils.driveDevices.list.invalidate();
+      toast.success('Équipement supprimé');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  // ─── tRPC Mutations: Jobs ──────────────────────────────────────────────
+
+  const createJobMutation = trpc.driveJobs.create.useMutation({
+    onSuccess: (data) => {
+      utils.driveJobs.list.invalidate();
+      toast.success(`Job ${data.jobId.slice(0, 8)} créé (QUEUED)`);
+      setShowRunModal(false);
     },
     onError: (err) => toast.error(err.message),
   });
@@ -327,55 +350,7 @@ export default function DriveCampaignsPage() {
     toast.success(`Statut → ${status}`);
   };
 
-  // ─── Run Campaign (still localStorage simulation) ─────────────────────
-
-  const openRunCampaign = (c: DisplayCampaign) => {
-    setRunCampaignData(c);
-    const cRoutes = routes[c.campaign_id] || [];
-    if (cRoutes.length === 0) loadRoutes(c.campaign_id);
-    if (cRoutes.length > 0) setRunRouteId(cRoutes[0].route_id);
-    if (devices.length > 0) setRunDeviceId(devices[0].device_id);
-    setRunCapturePcap(false);
-    setShowRunModal(true);
-  };
-
-  const executeRun = () => {
-    if (!runCampaignData || !runRouteId || !runDeviceId) {
-      toast.error('Sélectionnez une route et un équipement');
-      return;
-    }
-    try {
-      setIsRunning(true);
-      const job = localDriveJobs.create({
-        campaign_id: runCampaignData.campaign_id,
-        route_id: runRouteId,
-        device_id: runDeviceId,
-        target_env: runCampaignData.target_env as TargetEnv,
-      });
-      toast.info(`Job ${job.drive_job_id.slice(0, 8)} créé (PENDING)`);
-
-      const route = localDriveRoutes.list(runCampaignData.campaign_id).find(r => r.route_id === runRouteId);
-      if (!route) throw new Error('Route introuvable');
-
-      const thresholds: Record<string, number> = {
-        RSRP: -100, RSRQ: -12, SINR: 5,
-        THROUGHPUT_DL: 20, THROUGHPUT_UL: 5,
-        LATENCY: 50, JITTER: 20, PACKET_LOSS: 1,
-      };
-
-      const result = localDriveJobs.simulateExecution(job.drive_job_id, route, thresholds);
-      toast.success(`Exécution terminée : ${result.status}`);
-
-      loadDriveJobs(runCampaignData.campaign_id);
-      setShowRunModal(false);
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setIsRunning(false);
-    }
-  };
-
-  // ─── Route CRUD (localStorage) ────────────────────────────────────────
+  // ─── Route CRUD (tRPC) ────────────────────────────────────────────────
 
   const openNewRoute = (campaignId: string) => {
     setRouteParentId(campaignId);
@@ -389,71 +364,73 @@ export default function DriveCampaignsPage() {
       if (routeForm.route_geojson_str.trim()) {
         geojson = JSON.parse(routeForm.route_geojson_str);
       }
-      localDriveRoutes.create(routeParentId, {
+      createRouteMutation.mutate({
+        campaignId: routeParentId,
         name: routeForm.name,
-        expected_duration_min: routeForm.expected_duration_min,
-        route_geojson: geojson,
+        expectedDurationMin: routeForm.expected_duration_min,
+        routeGeojson: geojson,
       });
-      toast.success('Route ajoutée');
-      setShowRouteModal(false);
-      loadRoutes(routeParentId);
     } catch (e: any) {
       toast.error(e.message || 'GeoJSON invalide');
     }
   };
 
-  const deleteRoute = (routeId: string, campaignId: string) => {
-    localDriveRoutes.delete(routeId);
-    toast.success('Route supprimée');
-    loadRoutes(campaignId);
+  const deleteRoute = (routeId: string) => {
+    deleteRouteMutation.mutate({ routeId });
   };
 
-  // ─── Device CRUD (localStorage) ──────────────────────────────────────
+  // ─── Device CRUD (tRPC) ──────────────────────────────────────────────
 
-  const openNewDevice = () => {
+  const [deviceCampaignId, setDeviceCampaignId] = useState('');
+
+  const openNewDevice = (campaignId?: string) => {
+    setDeviceCampaignId(campaignId || expandedCampaign || '');
     setDeviceForm({ type: 'ANDROID', model: '', os_version: '', diag_capable: false, tools_enabled: [], notes: '' });
     setShowDeviceModal(true);
   };
 
   const saveDevice = () => {
-    try {
-      localTestDevices.create(projectId, deviceForm);
-      toast.success('Équipement ajouté');
-      setShowDeviceModal(false);
-      loadDevices();
-    } catch (e: any) {
-      toast.error(e.message);
+    if (!deviceCampaignId) {
+      toast.error('Aucune campagne sélectionnée');
+      return;
     }
+    createDeviceMutation.mutate({
+      campaignId: deviceCampaignId,
+      name: `${deviceForm.model} (${deviceForm.type})`,
+      deviceType: deviceForm.type,
+      model: deviceForm.model || undefined,
+      osVersion: deviceForm.os_version || undefined,
+      diagCapable: deviceForm.diag_capable,
+      toolsEnabled: deviceForm.tools_enabled,
+      notes: deviceForm.notes || undefined,
+    });
   };
 
-  const deleteDevice = (id: string) => {
-    localTestDevices.delete(id);
-    toast.success('Équipement supprimé');
-    loadDevices();
+  const deleteDevice = (deviceId: string) => {
+    deleteDeviceMutation.mutate({ deviceId });
   };
 
-  // ─── Probe Config CRUD (localStorage) ─────────────────────────────────
+  // ─── Run Campaign (tRPC) ──────────────────────────────────────────────
 
-  const openNewProbe = () => {
-    setProbeForm({ name: '', location: 'RUNNER_HOST', capture_type: 'PCAP', retention_days: 30, max_size_mb: 500, rotation: true, output_target: 'MINIO', enabled: true });
-    setShowProbeModal(true);
+  const openRunCampaign = (c: DisplayCampaign) => {
+    setRunCampaignData(c);
+    setExpandedCampaign(c.campaign_id); // ensure routes/devices are loaded
+    setRunRouteId('');
+    setRunDeviceId('');
+    setRunCapturePcap(false);
+    setShowRunModal(true);
   };
 
-  const saveProbe = () => {
-    try {
-      localDriveProbeConfigs.create(projectId, probeForm);
-      toast.success('Sonde ajoutée');
-      setShowProbeModal(false);
-      loadProbeConfigs();
-    } catch (e: any) {
-      toast.error(e.message);
+  const executeRun = () => {
+    if (!runCampaignData || !runRouteId || !runDeviceId) {
+      toast.error('Sélectionnez une route et un équipement');
+      return;
     }
-  };
-
-  const deleteProbe = (id: string) => {
-    localDriveProbeConfigs.delete(id);
-    toast.success('Sonde supprimée');
-    loadProbeConfigs();
+    createJobMutation.mutate({
+      campaignId: runCampaignData.campaign_id,
+      routeId: runRouteId,
+      deviceId: runDeviceId,
+    });
   };
 
   // ─── Toggle expand ────────────────────────────────────────────────────
@@ -463,7 +440,6 @@ export default function DriveCampaignsPage() {
       setExpandedCampaign(null);
     } else {
       setExpandedCampaign(id);
-      if (!routes[id]) loadRoutes(id);
     }
   };
 
@@ -562,7 +538,6 @@ export default function DriveCampaignsPage() {
               {filtered.map(c => {
                 const StatusIcon = STATUS_ICONS[c.status];
                 const isExpanded = expandedCampaign === c.campaign_id;
-                const campaignRoutes = routes[c.campaign_id] || [];
 
                 return (
                   <div key={c.campaign_id} className="border border-border rounded-lg overflow-hidden">
@@ -609,9 +584,10 @@ export default function DriveCampaignsPage() {
                       </div>
                     </div>
 
-                    {/* Expanded: Routes */}
+                    {/* Expanded: Routes + Jobs + Devices + Probes */}
                     {isExpanded && (
                       <div className="border-t border-border bg-muted/10 px-4 py-3 space-y-3">
+                        {/* Routes */}
                         <div className="flex items-center justify-between">
                           <h3 className="text-sm font-medium flex items-center gap-1.5">
                             <MapPin className="w-4 h-4 text-emerald-400" />
@@ -627,17 +603,20 @@ export default function DriveCampaignsPage() {
                           <p className="text-xs text-muted-foreground">Aucune route définie</p>
                         ) : (
                           <div className="space-y-1">
-                            {campaignRoutes.map(r => (
-                              <div key={r.route_id} className="flex items-center justify-between px-3 py-2 rounded bg-background/50">
+                            {campaignRoutes.map((r: any) => (
+                              <div key={r.uid} className="flex items-center justify-between px-3 py-2 rounded bg-background/50">
                                 <div>
                                   <span className="text-sm font-medium">{r.name}</span>
-                                  <span className="text-xs text-muted-foreground ml-2">~{r.expected_duration_min} min</span>
-                                  {r.route_geojson && (
+                                  <span className="text-xs text-muted-foreground ml-2">~{r.expectedDurationMin ?? 30} min</span>
+                                  {r.geojsonJson && (
                                     <Badge variant="outline" className="ml-2 text-xs">GeoJSON</Badge>
+                                  )}
+                                  {r.distanceKm && (
+                                    <span className="text-xs text-muted-foreground ml-2">{r.distanceKm} km</span>
                                   )}
                                 </div>
                                 {canDeleteCampaign && (
-                                  <Button size="sm" variant="ghost" className="text-red-400" onClick={() => deleteRoute(r.route_id, c.campaign_id)}>
+                                  <Button size="sm" variant="ghost" className="text-red-400" onClick={() => deleteRoute(r.uid)}>
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </Button>
                                 )}
@@ -645,6 +624,74 @@ export default function DriveCampaignsPage() {
                             ))}
                           </div>
                         )}
+
+                        {/* Devices for this campaign */}
+                        <div className="mt-3 pt-3 border-t border-border/50">
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-sm font-medium flex items-center gap-1.5">
+                              <Smartphone className="w-4 h-4 text-blue-400" />
+                              Équipements ({availableDevices.length})
+                            </h3>
+                            {canUpdateCampaign && (
+                              <Button size="sm" variant="outline" onClick={() => openNewDevice(c.campaign_id)}>
+                                <Plus className="w-3.5 h-3.5 mr-1" /> Équipement
+                              </Button>
+                            )}
+                          </div>
+                          {availableDevices.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">Aucun équipement rattaché</p>
+                          ) : (
+                            <div className="space-y-1">
+                              {availableDevices.map((d: any) => (
+                                <div key={d.uid} className="flex items-center justify-between px-3 py-2 rounded bg-background/50">
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline">{d.deviceType}</Badge>
+                                    <span className="text-sm font-medium">{d.model || d.name || 'Sans nom'}</span>
+                                    {d.osVersion && <span className="text-xs text-muted-foreground">{d.osVersion}</span>}
+                                    {d.diagCapable && <Badge className="bg-emerald-500/20 text-emerald-300 text-xs">Diag</Badge>}
+                                  </div>
+                                  {canDeleteCampaign && (
+                                    <Button size="sm" variant="ghost" className="text-red-400" onClick={() => deleteDevice(d.uid)}>
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Probe Links */}
+                        <div className="mt-3 pt-3 border-t border-border/50">
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-sm font-medium flex items-center gap-1.5">
+                              <Radio className="w-4 h-4 text-purple-400" />
+                              Sondes liées ({campaignProbeLinks.length})
+                            </h3>
+                          </div>
+                          {campaignProbeLinks.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">Aucune sonde liée. Utilisez l'onglet Sondes pour gérer les sondes système.</p>
+                          ) : (
+                            <div className="space-y-1">
+                              {campaignProbeLinks.map((pl: any) => (
+                                <div key={pl.uid} className="flex items-center justify-between px-3 py-2 rounded bg-background/50">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium">{pl.probeName || `Probe #${pl.probeId}`}</span>
+                                    <Badge variant="outline">{pl.probeType || 'N/A'}</Badge>
+                                    <Badge variant="outline">{pl.role}</Badge>
+                                    {pl.probeStatus && (
+                                      <Badge className={
+                                        pl.probeStatus === 'ONLINE' ? 'bg-emerald-500/20 text-emerald-300' :
+                                        pl.probeStatus === 'DEGRADED' ? 'bg-amber-500/20 text-amber-300' :
+                                        'bg-red-500/20 text-red-300'
+                                      }>{pl.probeStatus}</Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
 
                         {/* Campaign description */}
                         {c.description && (
@@ -658,37 +705,32 @@ export default function DriveCampaignsPage() {
                           <div className="flex items-center justify-between mb-2">
                             <h3 className="text-sm font-medium flex items-center gap-1.5">
                               <Activity className="w-4 h-4 text-blue-400" />
-                              Exécutions ({(driveJobs[c.campaign_id] || []).length})
+                              Exécutions ({campaignJobs.length})
                             </h3>
-                            <Button size="sm" variant="ghost" onClick={() => loadDriveJobs(c.campaign_id)}>
+                            <Button size="sm" variant="ghost" onClick={() => utils.driveJobs.list.invalidate()}>
                               Rafraîchir
                             </Button>
                           </div>
-                          {(driveJobs[c.campaign_id] || []).length === 0 ? (
+                          {campaignJobs.length === 0 ? (
                             <p className="text-xs text-muted-foreground">Aucune exécution. Cliquez sur Run pour lancer.</p>
                           ) : (
                             <div className="space-y-1">
-                              {(driveJobs[c.campaign_id] || []).map(j => {
-                                const summary = jobSummaries[j.drive_job_id];
-                                const jobStatusColor = j.status === 'DONE' ? 'text-emerald-400' : j.status === 'FAILED' ? 'text-red-400' : j.status === 'RUNNING' ? 'text-amber-400' : 'text-gray-400';
+                              {campaignJobs.map((j: any) => {
+                                const jobStatusColor = JOB_STATUS_COLORS[j.status] || 'text-gray-400';
                                 return (
-                                  <div key={j.drive_job_id} className="flex items-center justify-between px-3 py-2 rounded bg-background/50">
+                                  <div key={j.uid} className="flex items-center justify-between px-3 py-2 rounded bg-background/50">
                                     <div className="flex items-center gap-2">
                                       <span className={`text-xs font-mono ${jobStatusColor}`}>{j.status}</span>
-                                      <span className="text-xs text-muted-foreground">{j.drive_job_id.slice(0, 8)}</span>
-                                      <span className="text-xs text-muted-foreground">{new Date(j.created_at).toLocaleString('fr-FR')}</span>
+                                      <span className="text-xs text-muted-foreground">{j.uid.slice(0, 8)}</span>
+                                      <Badge variant="outline" className="text-xs">{j.jobType}</Badge>
+                                      <span className="text-xs text-muted-foreground">{new Date(j.createdAt).toLocaleString('fr-FR')}</span>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                      {summary && (
-                                        <span className={`text-xs ${summary.overall_pass ? 'text-emerald-400' : 'text-red-400'}`}>
-                                          {summary.overall_pass ? 'PASS' : 'FAIL'} — {summary.total_samples} samples
-                                        </span>
+                                      {j.progress > 0 && j.progress < 100 && (
+                                        <span className="text-xs text-amber-400">{j.progress}%</span>
                                       )}
-                                      {j.artifacts_manifest.length > 0 && (
-                                        <Badge variant="outline" className="text-xs">{j.artifacts_manifest.length} artefacts</Badge>
-                                      )}
-                                      {summary && (
-                                        <Button size="sm" variant="ghost" onClick={() => window.location.href = `/drive-reporting?campaign=${c.campaign_id}&job=${j.drive_job_id}`}>
+                                      {j.status === 'COMPLETED' && (
+                                        <Button size="sm" variant="ghost" onClick={() => window.location.href = `/drive-reporting?campaign=${c.campaign_id}&job=${j.uid}`}>
                                           <BarChart3 className="w-3.5 h-3.5" />
                                         </Button>
                                       )}
@@ -731,42 +773,56 @@ export default function DriveCampaignsPage() {
       {/* ═══ TAB: Devices ═══ */}
       {activeTab === 'devices' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">{devices.length} équipement(s)</p>
-            {canCreateCampaign && (
-              <Button size="sm" onClick={openNewDevice}>
-                <Plus className="w-4 h-4 mr-1" /> Nouvel équipement
-              </Button>
-            )}
+          <div className="text-sm text-muted-foreground">
+            Les équipements sont rattachés par campagne. Sélectionnez une campagne dans l'onglet Campagnes pour voir et gérer ses équipements.
           </div>
-          {devices.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <Smartphone className="w-12 h-12 mx-auto mb-3 opacity-40" />
-              <p>Aucun équipement enregistré</p>
-            </div>
-          ) : (
+          {campaigns.length > 0 && (
             <div className="space-y-2">
-              {devices.map(d => (
-                <div key={d.device_id} className="border border-border rounded-lg p-3 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <Badge variant="outline">{d.type}</Badge>
-                    {canDeleteCampaign && (
-                      <Button size="sm" variant="ghost" className="text-red-400" onClick={() => deleteDevice(d.device_id)}>
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
+              {campaigns.map(c => {
+                const isExpanded = expandedCampaign === c.campaign_id;
+                return (
+                  <div key={c.campaign_id} className="border border-border rounded-lg p-3">
+                    <div className="flex items-center justify-between cursor-pointer" onClick={() => toggleExpand(c.campaign_id)}>
+                      <div className="flex items-center gap-2">
+                        {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                        <span className="font-medium text-sm">{c.name}</span>
+                        <Badge className={STATUS_COLORS[c.status]}>{c.status}</Badge>
+                      </div>
+                      {canCreateCampaign && (
+                        <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openNewDevice(c.campaign_id); }}>
+                          <Plus className="w-3.5 h-3.5 mr-1" /> Équipement
+                        </Button>
+                      )}
+                    </div>
+                    {isExpanded && (
+                      <div className="mt-3 space-y-1">
+                        {availableDevices.length === 0 ? (
+                          <p className="text-xs text-muted-foreground pl-6">Aucun équipement</p>
+                        ) : (
+                          availableDevices.map((d: any) => (
+                            <div key={d.uid} className="flex items-center justify-between px-3 py-2 rounded bg-muted/20 ml-6">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline">{d.deviceType}</Badge>
+                                <span className="text-sm">{d.model || d.name || 'Sans nom'}</span>
+                                {d.osVersion && <span className="text-xs text-muted-foreground">{d.osVersion}</span>}
+                                {d.diagCapable && <Badge className="bg-emerald-500/20 text-emerald-300 text-xs">Diag</Badge>}
+                                {Array.isArray(d.toolsEnabled) && d.toolsEnabled.map((t: string) => (
+                                  <Badge key={t} variant="outline" className="text-xs">{t}</Badge>
+                                ))}
+                              </div>
+                              {canDeleteCampaign && (
+                                <Button size="sm" variant="ghost" className="text-red-400" onClick={() => deleteDevice(d.uid)}>
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
                     )}
                   </div>
-                  <div className="font-medium">{d.model}</div>
-                  <div className="text-xs text-muted-foreground">{d.os_version}</div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {d.diag_capable && <Badge className="bg-emerald-500/20 text-emerald-300 text-xs">Diag</Badge>}
-                    {d.tools_enabled.map(t => (
-                      <Badge key={t} variant="outline" className="text-xs">{t}</Badge>
-                    ))}
-                  </div>
-                  {d.notes && <p className="text-xs text-muted-foreground">{d.notes}</p>}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -775,59 +831,34 @@ export default function DriveCampaignsPage() {
       {/* ═══ TAB: Probes ═══ */}
       {activeTab === 'probes' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">{probeConfigs.length} sonde(s) configurée(s)</p>
-            {canCreateCampaign && (
-              <Button size="sm" onClick={openNewProbe}>
-                <Plus className="w-4 h-4 mr-1" /> Nouvelle sonde
-              </Button>
-            )}
+          <div className="text-sm text-muted-foreground">
+            Les sondes sont gérées dans la page <a href="/probes" className="text-primary hover:underline">Sondes</a> et peuvent être liées aux campagnes Drive via l'onglet Campagnes.
           </div>
-          {probeConfigs.length === 0 ? (
+          {expandedCampaign && campaignProbeLinks.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium">Sondes liées à la campagne sélectionnée</h3>
+              {campaignProbeLinks.map((pl: any) => (
+                <div key={pl.uid} className="border border-border rounded-lg p-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{pl.probeName || `Probe #${pl.probeId}`}</span>
+                    <Badge variant="outline">{pl.probeType || 'N/A'}</Badge>
+                    <Badge variant="outline">{pl.role}</Badge>
+                    {pl.probeStatus && (
+                      <Badge className={
+                        pl.probeStatus === 'ONLINE' ? 'bg-emerald-500/20 text-emerald-300' :
+                        pl.probeStatus === 'DEGRADED' ? 'bg-amber-500/20 text-amber-300' :
+                        'bg-red-500/20 text-red-300'
+                      }>{pl.probeStatus}</Badge>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {!expandedCampaign && (
             <div className="text-center py-12 text-muted-foreground">
               <Radio className="w-12 h-12 mx-auto mb-3 opacity-40" />
-              <p>Aucune sonde configurée</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-muted-foreground">
-                    <th className="py-2 px-3">Nom</th>
-                    <th className="py-2 px-3">Emplacement</th>
-                    <th className="py-2 px-3">Type capture</th>
-                    <th className="py-2 px-3">Rétention</th>
-                    <th className="py-2 px-3">Max</th>
-                    <th className="py-2 px-3">Sortie</th>
-                    <th className="py-2 px-3">État</th>
-                    <th className="py-2 px-3"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {probeConfigs.map(p => (
-                    <tr key={p.probe_id} className="border-b border-border/50 hover:bg-muted/20">
-                      <td className="py-2 px-3 font-medium">{p.name}</td>
-                      <td className="py-2 px-3"><Badge variant="outline">{p.location}</Badge></td>
-                      <td className="py-2 px-3"><Badge variant="outline">{p.capture_type}</Badge></td>
-                      <td className="py-2 px-3">{p.retention_days}j</td>
-                      <td className="py-2 px-3">{p.max_size_mb} MB</td>
-                      <td className="py-2 px-3">{p.output_target}</td>
-                      <td className="py-2 px-3">
-                        <Badge className={p.enabled ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}>
-                          {p.enabled ? 'ON' : 'OFF'}
-                        </Badge>
-                      </td>
-                      <td className="py-2 px-3">
-                        {canDeleteCampaign && (
-                          <Button size="sm" variant="ghost" className="text-red-400" onClick={() => deleteProbe(p.probe_id)}>
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <p>Sélectionnez une campagne dans l'onglet Campagnes pour voir ses sondes liées</p>
             </div>
           )}
         </div>
@@ -936,7 +967,10 @@ export default function DriveCampaignsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowRouteModal(false)}>Annuler</Button>
-            <Button onClick={saveRoute}>Ajouter</Button>
+            <Button onClick={saveRoute} disabled={createRouteMutation.isPending}>
+              {createRouteMutation.isPending && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
+              Ajouter
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -985,7 +1019,10 @@ export default function DriveCampaignsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDeviceModal(false)}>Annuler</Button>
-            <Button onClick={saveDevice}>Ajouter</Button>
+            <Button onClick={saveDevice} disabled={createDeviceMutation.isPending}>
+              {createDeviceMutation.isPending && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
+              Ajouter
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1013,8 +1050,8 @@ export default function DriveCampaignsPage() {
                 <Select value={runRouteId} onValueChange={setRunRouteId}>
                   <SelectTrigger><SelectValue placeholder="Sélectionner une route" /></SelectTrigger>
                   <SelectContent>
-                    {(routes[runCampaignData.campaign_id] || []).map(r => (
-                      <SelectItem key={r.route_id} value={r.route_id}>{r.name} (~{r.expected_duration_min} min)</SelectItem>
+                    {campaignRoutes.map((r: any) => (
+                      <SelectItem key={r.uid} value={r.uid}>{r.name} (~{r.expectedDurationMin ?? 30} min)</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -1025,8 +1062,8 @@ export default function DriveCampaignsPage() {
                 <Select value={runDeviceId} onValueChange={setRunDeviceId}>
                   <SelectTrigger><SelectValue placeholder="Sélectionner un équipement" /></SelectTrigger>
                   <SelectContent>
-                    {devices.map(d => (
-                      <SelectItem key={d.device_id} value={d.device_id}>{d.model} ({d.type})</SelectItem>
+                    {availableDevices.map((d: any) => (
+                      <SelectItem key={d.uid} value={d.uid}>{d.model || d.name || 'Sans nom'} ({d.deviceType})</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -1037,69 +1074,19 @@ export default function DriveCampaignsPage() {
                 Capturer PCAP (tcpdump)
               </label>
 
-              {isRunning && (
+              {createJobMutation.isPending && (
                 <div className="flex items-center gap-2 text-sm text-amber-400">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Exécution en cours...
+                  Création du job...
                 </div>
               )}
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowRunModal(false)} disabled={isRunning}>Annuler</Button>
-            <Button onClick={executeRun} disabled={isRunning || !runRouteId || !runDeviceId} className="bg-emerald-600 hover:bg-emerald-700">
-              {isRunning ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Exécution...</> : <><Play className="w-4 h-4 mr-1" /> Lancer</>}
+            <Button variant="outline" onClick={() => setShowRunModal(false)} disabled={createJobMutation.isPending}>Annuler</Button>
+            <Button onClick={executeRun} disabled={createJobMutation.isPending || !runRouteId || !runDeviceId} className="bg-emerald-600 hover:bg-emerald-700">
+              {createJobMutation.isPending ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Création...</> : <><Play className="w-4 h-4 mr-1" /> Lancer</>}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Probe Modal */}
-      <Dialog open={showProbeModal} onOpenChange={setShowProbeModal}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Nouvelle sonde</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <Input placeholder="Nom de la sonde" value={probeForm.name} onChange={e => setProbeForm(f => ({ ...f, name: e.target.value }))} />
-            <div className="grid grid-cols-2 gap-3">
-              <Select value={probeForm.location} onValueChange={v => setProbeForm(f => ({ ...f, location: v as ProbeLocation }))}>
-                <SelectTrigger><SelectValue placeholder="Emplacement" /></SelectTrigger>
-                <SelectContent>
-                  {PROBE_LOCATIONS.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Select value={probeForm.capture_type} onValueChange={v => setProbeForm(f => ({ ...f, capture_type: v as DriveCaptureType }))}>
-                <SelectTrigger><SelectValue placeholder="Type capture" /></SelectTrigger>
-                <SelectContent>
-                  {CAPTURE_TYPES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Input type="number" placeholder="Rétention (jours)" value={probeForm.retention_days} onChange={e => setProbeForm(f => ({ ...f, retention_days: parseInt(e.target.value) || 0 }))} />
-              <Input type="number" placeholder="Max taille (MB)" value={probeForm.max_size_mb} onChange={e => setProbeForm(f => ({ ...f, max_size_mb: parseInt(e.target.value) || 0 }))} />
-            </div>
-            <Select value={probeForm.output_target} onValueChange={v => setProbeForm(f => ({ ...f, output_target: v as ProbeOutputTarget }))}>
-              <SelectTrigger><SelectValue placeholder="Cible sortie" /></SelectTrigger>
-              <SelectContent>
-                {OUTPUT_TARGETS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={probeForm.rotation} onChange={e => setProbeForm(f => ({ ...f, rotation: e.target.checked }))} />
-                Rotation
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={probeForm.enabled} onChange={e => setProbeForm(f => ({ ...f, enabled: e.target.checked }))} />
-                Activée
-              </label>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowProbeModal(false)}>Annuler</Button>
-            <Button onClick={saveProbe}>Ajouter</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
