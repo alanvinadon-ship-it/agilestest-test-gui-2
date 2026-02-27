@@ -338,14 +338,14 @@
 - [x] Chantier 12A: Frontend — bouton Publier dans ScenariosPage (ouvre modal avec nom/description/tags)
 - [x] Chantier 12B: Backend — endpoint scenarioTemplates.publishFromScenario (crée template depuis scénario existant)
 - [x] Chantier 12C: Tests + vérification TS
-- [ ] Chantier 13A: Backend — endpoint analytics.globalDashboard (agrégats cross-projets)
-- [ ] Chantier 13B: Frontend — page AnalyticsDashboardPage (Chart.js: taux succès, temps moyen, top échecs)
-- [ ] Chantier 13C: Frontend — route + sidebar + tests
+- [x] Chantier 13A: Backend — endpoint analytics.globalDashboard (agrégats cross-projets)
+- [x] Chantier 13B: Frontend — page AnalyticsDashboardPage (Chart.js: taux succès, temps moyen, top échecs)
+- [x] Chantier 13C: Frontend — route + sidebar + tests
 - [x] Chantier 14A: Backend — endpoint projects.export (JSON complet: scénarios + profils + datasets + templates)
 - [x] Chantier 14B: Backend — endpoint projects.import (JSON → création projet + entités)
 - [x] Chantier 14C: Frontend — page Import/Export dédiée avec export JSON + import JSON + validation
 - [x] Chantier 14D: Tests backend export/import (9 tests importExport.test.ts: export, import new/existing, empty, roundtrip)
-- [ ] Chantier Final 12-13-14: Tests finaux + TS=0 + checkpoint
+- [x] Chantier Final 12-13-14: Tests finaux (554 tests, TS=0) + checkpoint
 - [x] Fix: Aligner schéma generatedScripts avec DB réelle (snake_case: project_id, scenario_id, script_status, generated_by, created_at, updated_at, uid)
 - [x] Fix: Aligner schéma auditLogs avec DB réelle (actor_id, actor_name, actor_email, entity_type, entity_id, target_label, metadata, trace_id, timestamp)
 - [x] Fix: Corriger aiGeneration.ts pour types varchar (projectId, scenarioId, createdBy)
@@ -358,3 +358,9 @@
 - [x] Chantier 12E: Frontend — Page Templates (explorer listPublic + fork vers projet) + route + sidebar
 - [x] Chantier 12F: Documentation docs/TEMPLATES.md (format JSON, versioning, RBAC, endpoints)
 - [x] Chantier 12 Final: Tests finaux (539 tests, TS=0) + checkpoint
+- [x] Chantier 13A: Backend — Routeur tRPC analytics.globalDashboard (agrégats SQL cross-projets: runs, incidents, probes, KPIs)
+- [x] Chantier 13B: Backend — Tests Vitest analytics (agrégats corrects, org scope)
+- [x] Chantier 13C: Frontend — Page GlobalAnalyticsDashboard (Chart.js: stacked bar runs, line successRate, stacked bar incidents, doughnut probes)
+- [x] Chantier 13D: Frontend — KPI cards (9 cards: totalRuns, successRate, passedRuns, failedRuns, avgDuration, projectCount, openIncidents, redProbes, jobsBacklog) + period selector + auto-refresh 60s
+- [x] Chantier 13E: Documentation docs/ANALYTICS.md (endpoints, périodes, formules)
+- [x] Chantier 13 Final: Tests finaux (554 tests, TS=0) + checkpoint

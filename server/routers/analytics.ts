@@ -19,26 +19,25 @@ function setCache(key: string, data: unknown) {
 }
 
 // ─── SQL helpers ────────────────────────────────────────────────────────────
-// Real DB uses snake_case columns: project_id, created_at, status, severity, etc.
-// TiDB/MySQL DATE_FORMAT for week/month grouping
-
-function periodFormat(period: "week" | "month"): string {
-  if (period === "week") return "%x-W%v"; // ISO year-week: 2026-W08
-  return "%Y-%m"; // 2026-02
-}
-
 function periodTrunc(period: "week" | "month", col: string): string {
   if (period === "week") return `DATE_FORMAT(${col}, '%x-W%v')`;
   return `DATE_FORMAT(${col}, '%Y-%m')`;
 }
 
+function escSql(v: string): string {
+  return v.replace(/'/g, "''");
+}
+
 // ─── Analytics Router ───────────────────────────────────────────────────────
 export const analyticsRouter = router({
+  /**
+   * Per-project dashboard (used by AnalyticsPage when a project is selected)
+   */
   dashboard: protectedProcedure
     .input(z.object({
       period: z.enum(["week", "month"]).default("week"),
-      projectId: z.string().optional(), // filter by project (varchar uid)
-      from: z.string().optional(), // ISO date string
+      projectId: z.string().optional(),
+      from: z.string().optional(),
       to: z.string().optional(),
     }))
     .query(async ({ input }) => {
@@ -49,28 +48,26 @@ export const analyticsRouter = router({
       const cached = getCached<DashboardResult>(cacheKey);
       if (cached) return cached;
 
-      const periodFmt = periodFormat(input.period);
       const pTrunc = (col: string) => periodTrunc(input.period, col);
 
       // Build WHERE clauses
       const execWhere: string[] = [];
       const incWhere: string[] = [];
       if (input.projectId) {
-        execWhere.push(`e.project_id = '${input.projectId.replace(/'/g, "''")}'`);
-        incWhere.push(`i.project_id = '${input.projectId.replace(/'/g, "''")}'`);
+        execWhere.push(`e.project_id = '${escSql(input.projectId)}'`);
+        incWhere.push(`i.project_id = '${escSql(input.projectId)}'`);
       }
       if (input.from) {
-        execWhere.push(`e.created_at >= '${input.from.replace(/'/g, "''")}'`);
-        incWhere.push(`i.detected_at >= '${input.from.replace(/'/g, "''")}'`);
+        execWhere.push(`e.created_at >= '${escSql(input.from)}'`);
+        incWhere.push(`i.detected_at >= '${escSql(input.from)}'`);
       }
       if (input.to) {
-        execWhere.push(`e.created_at <= '${input.to.replace(/'/g, "''")}'`);
-        incWhere.push(`i.detected_at <= '${input.to.replace(/'/g, "''")}'`);
+        execWhere.push(`e.created_at <= '${escSql(input.to)}'`);
+        incWhere.push(`i.detected_at <= '${escSql(input.to)}'`);
       }
       const execWhereClause = execWhere.length ? `WHERE ${execWhere.join(" AND ")}` : "";
       const incWhereClause = incWhere.length ? `WHERE ${incWhere.join(" AND ")}` : "";
 
-      // 1) Execution series: PASSED/FAILED/ERROR+CANCELLED grouped by period
       const execSeriesQuery = sql.raw(`
         SELECT ${pTrunc("e.created_at")} AS period_label,
           SUM(CASE WHEN e.status = 'PASSED' THEN 1 ELSE 0 END) AS passed,
@@ -83,7 +80,6 @@ export const analyticsRouter = router({
         ORDER BY period_label
       `);
 
-      // 2) Incident series: by severity grouped by period
       const incSeriesQuery = sql.raw(`
         SELECT ${pTrunc("i.detected_at")} AS period_label,
           SUM(CASE WHEN i.severity = 'CRITICAL' THEN 1 ELSE 0 END) AS critical_count,
@@ -96,7 +92,6 @@ export const analyticsRouter = router({
         ORDER BY period_label
       `);
 
-      // 3) Probes snapshot (current state, not time-series since probes don't have historical data)
       const probesSnapshotQuery = sql.raw(`
         SELECT
           SUM(CASE WHEN p.status = 'ONLINE' AND p.last_seen_at IS NOT NULL AND TIMESTAMPDIFF(SECOND, p.last_seen_at, NOW()) <= 60 THEN 1 ELSE 0 END) AS green_count,
@@ -106,7 +101,6 @@ export const analyticsRouter = router({
         FROM probes p
       `);
 
-      // 4) KPIs
       const kpiQuery = sql.raw(`
         SELECT
           (SELECT COUNT(*) FROM executions ${execWhereClause.replace(/\be\./g, "executions.")}) AS total_runs,
@@ -114,13 +108,11 @@ export const analyticsRouter = router({
           (SELECT COUNT(*) FROM incidents ${incWhereClause.replace(/\bi\./g, "incidents.")}) AS total_incidents
       `);
 
-      // Execute all queries
       const [execRows] = await db.execute(execSeriesQuery) as any;
       const [incRows] = await db.execute(incSeriesQuery) as any;
       const [probeRows] = await db.execute(probesSnapshotQuery) as any;
       const [kpiRows] = await db.execute(kpiQuery) as any;
 
-      // Format execution series
       const execSeries = {
         labels: (execRows as any[]).map((r: any) => r.period_label),
         passed: (execRows as any[]).map((r: any) => Number(r.passed)),
@@ -132,7 +124,6 @@ export const analyticsRouter = router({
         }),
       };
 
-      // Format incident series
       const incidentSeries = {
         labels: (incRows as any[]).map((r: any) => r.period_label),
         critical: (incRows as any[]).map((r: any) => Number(r.critical_count)),
@@ -141,7 +132,6 @@ export const analyticsRouter = router({
         low: (incRows as any[]).map((r: any) => Number(r.low_count)),
       };
 
-      // Format probes snapshot
       const probeSnapshot = probeRows[0] ?? { green_count: 0, orange_count: 0, red_count: 0, total_probes: 0 };
       const probesSeries = {
         labels: ["Actuel"],
@@ -150,7 +140,6 @@ export const analyticsRouter = router({
         red: [Number(probeSnapshot.red_count)],
       };
 
-      // Format KPIs
       const kpi = kpiRows[0] ?? { total_runs: 0, passed_runs: 0, total_incidents: 0 };
       const totalRuns = Number(kpi.total_runs);
       const passedRuns = Number(kpi.passed_runs);
@@ -167,30 +156,43 @@ export const analyticsRouter = router({
     }),
 
   /**
-   * Global dashboard:: cross-project analytics with top failed scenarios,
-   * avg execution time, and per-project breakdown.
+   * Global dashboard: cross-project analytics with runs, incidents by severity,
+   * probes health, top failed scenarios, per-project breakdown, and jobs backlog.
    */
   globalDashboard: protectedProcedure
     .input(z.object({
       period: z.enum(["week", "month"]).default("week"),
       from: z.string().optional(),
       to: z.string().optional(),
+      projectUid: z.string().optional(),
     }))
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
 
-      const cacheKey = `global-analytics:${input.period}:${input.from ?? ""}:${input.to ?? ""}`;
+      const cacheKey = `global-analytics:${input.period}:${input.projectUid ?? "all"}:${input.from ?? ""}:${input.to ?? ""}`;
       const cached = getCached<GlobalDashboardResult>(cacheKey);
       if (cached) return cached;
 
       const pTrunc = (col: string) => periodTrunc(input.period, col);
 
-      // Build WHERE clauses
-      const dateWhere: string[] = [];
-      if (input.from) dateWhere.push(`e.created_at >= '${input.from.replace(/'/g, "''")}'`);
-      if (input.to) dateWhere.push(`e.created_at <= '${input.to.replace(/'/g, "''")}'`);
-      const dateClause = dateWhere.length ? `WHERE ${dateWhere.join(" AND ")}` : "";
+      // Build WHERE clauses for executions
+      const execWhere: string[] = [];
+      const incWhere: string[] = [];
+      if (input.projectUid) {
+        execWhere.push(`e.project_id = '${escSql(input.projectUid)}'`);
+        incWhere.push(`i.project_id = '${escSql(input.projectUid)}'`);
+      }
+      if (input.from) {
+        execWhere.push(`e.created_at >= '${escSql(input.from)}'`);
+        incWhere.push(`i.detected_at >= '${escSql(input.from)}'`);
+      }
+      if (input.to) {
+        execWhere.push(`e.created_at <= '${escSql(input.to)}'`);
+        incWhere.push(`i.detected_at <= '${escSql(input.to)}'`);
+      }
+      const execClause = execWhere.length ? `WHERE ${execWhere.join(" AND ")}` : "";
+      const incClause = incWhere.length ? `WHERE ${incWhere.join(" AND ")}` : "";
 
       // 1) Global KPIs
       const globalKpiQuery = sql.raw(`
@@ -201,35 +203,59 @@ export const analyticsRouter = router({
           AVG(CASE WHEN e.duration_ms IS NOT NULL AND e.duration_ms > 0 THEN e.duration_ms ELSE NULL END) AS avg_duration_ms,
           COUNT(DISTINCT e.project_id) AS project_count
         FROM executions e
-        ${dateClause}
+        ${execClause}
       `);
 
-      // 2) Success rate trend by period
-      const trendQuery = sql.raw(`
+      // 2) Runs series: PASSED/FAILED/ABORTED by period (stacked bar)
+      const runsSeriesQuery = sql.raw(`
         SELECT ${pTrunc("e.created_at")} AS period_label,
-          COUNT(*) AS total,
           SUM(CASE WHEN e.status = 'PASSED' THEN 1 ELSE 0 END) AS passed,
-          SUM(CASE WHEN e.status = 'FAILED' THEN 1 ELSE 0 END) AS failed
+          SUM(CASE WHEN e.status = 'FAILED' THEN 1 ELSE 0 END) AS failed,
+          SUM(CASE WHEN e.status IN ('ERROR','CANCELLED') THEN 1 ELSE 0 END) AS aborted,
+          COUNT(*) AS total
         FROM executions e
-        ${dateClause}
+        ${execClause}
         GROUP BY period_label
         ORDER BY period_label
       `);
 
-      // 3) Top 10 failed scenarios
+      // 3) Incidents series: by severity by period (stacked bar)
+      const incSeriesQuery = sql.raw(`
+        SELECT ${pTrunc("i.detected_at")} AS period_label,
+          SUM(CASE WHEN i.severity = 'CRITICAL' THEN 1 ELSE 0 END) AS critical_count,
+          SUM(CASE WHEN i.severity = 'MAJOR' THEN 1 ELSE 0 END) AS high_count,
+          SUM(CASE WHEN i.severity = 'MINOR' THEN 1 ELSE 0 END) AS med_count,
+          SUM(CASE WHEN i.severity = 'INFO' THEN 1 ELSE 0 END) AS low_count
+        FROM incidents i
+        ${incClause}
+        GROUP BY period_label
+        ORDER BY period_label
+      `);
+
+      // 4) Probes health snapshot (doughnut)
+      const probesQuery = sql.raw(`
+        SELECT
+          SUM(CASE WHEN p.status = 'ONLINE' AND p.last_seen_at IS NOT NULL AND TIMESTAMPDIFF(SECOND, p.last_seen_at, NOW()) <= 60 THEN 1 ELSE 0 END) AS green_count,
+          SUM(CASE WHEN p.status = 'ONLINE' AND (p.last_seen_at IS NULL OR (TIMESTAMPDIFF(SECOND, p.last_seen_at, NOW()) > 60 AND TIMESTAMPDIFF(SECOND, p.last_seen_at, NOW()) <= 300)) THEN 1 ELSE 0 END) AS orange_count,
+          SUM(CASE WHEN p.status = 'OFFLINE' OR p.status = 'DEGRADED' OR (p.status = 'ONLINE' AND (p.last_seen_at IS NULL OR TIMESTAMPDIFF(SECOND, p.last_seen_at, NOW()) > 300)) THEN 1 ELSE 0 END) AS red_count,
+          COUNT(*) AS total_probes
+        FROM probes p
+      `);
+
+      // 5) Top 10 failed scenarios
       const topFailedQuery = sql.raw(`
         SELECT s.name AS scenario_name, p.name AS project_name,
           COUNT(*) AS fail_count
         FROM executions e
         LEFT JOIN test_scenarios s ON s.uid = e.scenario_id
         LEFT JOIN projects p ON p.id = e.project_id
-        ${dateClause ? dateClause + " AND" : "WHERE"} e.status = 'FAILED'
+        ${execClause ? execClause + " AND" : "WHERE"} e.status = 'FAILED'
         GROUP BY s.name, p.name
         ORDER BY fail_count DESC
         LIMIT 10
       `);
 
-      // 4) Per-project breakdown
+      // 6) Per-project breakdown
       const perProjectQuery = sql.raw(`
         SELECT p.name AS project_name, e.project_id,
           COUNT(*) AS total_runs,
@@ -238,20 +264,85 @@ export const analyticsRouter = router({
           AVG(CASE WHEN e.duration_ms IS NOT NULL AND e.duration_ms > 0 THEN e.duration_ms ELSE NULL END) AS avg_duration_ms
         FROM executions e
         LEFT JOIN projects p ON p.id = e.project_id
-        ${dateClause}
+        ${execClause}
         GROUP BY p.name, e.project_id
         ORDER BY total_runs DESC
         LIMIT 20
       `);
 
-      const [globalKpiRows] = await db.execute(globalKpiQuery) as any;
-      const [trendRows] = await db.execute(trendQuery) as any;
-      const [topFailedRows] = await db.execute(topFailedQuery) as any;
-      const [perProjectRows] = await db.execute(perProjectQuery) as any;
+      // 7) Jobs backlog (pending/running)
+      let jobsBacklog = 0;
+      try {
+        const jobsQuery = sql.raw(`
+          SELECT COUNT(*) AS backlog
+          FROM jobs
+          WHERE status IN ('QUEUED', 'RUNNING')
+        `);
+        const [jobsRows] = await db.execute(jobsQuery) as any;
+        jobsBacklog = Number((jobsRows as any[])[0]?.backlog ?? 0);
+      } catch {
+        // jobs table may not exist
+      }
 
+      // 8) Open incidents count
+      const openIncidentsQuery = sql.raw(`
+        SELECT COUNT(*) AS cnt FROM incidents i ${incClause}
+      `);
+
+      // Execute all queries in parallel
+      const [
+        [globalKpiRows],
+        [runsRows],
+        [incRows],
+        [probeRows],
+        [topFailedRows],
+        [perProjectRows],
+        [openIncRows],
+      ] = await Promise.all([
+        db.execute(globalKpiQuery),
+        db.execute(runsSeriesQuery),
+        db.execute(incSeriesQuery),
+        db.execute(probesQuery),
+        db.execute(topFailedQuery),
+        db.execute(perProjectQuery),
+        db.execute(openIncidentsQuery),
+      ]) as any;
+
+      // Format global KPIs
       const gk = globalKpiRows[0] ?? { total_runs: 0, passed_runs: 0, failed_runs: 0, avg_duration_ms: null, project_count: 0 };
       const totalRuns = Number(gk.total_runs);
       const passedRuns = Number(gk.passed_runs);
+      const probeSnapshot = probeRows[0] ?? { green_count: 0, orange_count: 0, red_count: 0, total_probes: 0 };
+
+      // Format runs series
+      const runsSeries = {
+        labels: (runsRows as any[]).map((r: any) => r.period_label),
+        passed: (runsRows as any[]).map((r: any) => Number(r.passed)),
+        failed: (runsRows as any[]).map((r: any) => Number(r.failed)),
+        aborted: (runsRows as any[]).map((r: any) => Number(r.aborted)),
+        total: (runsRows as any[]).map((r: any) => Number(r.total)),
+        successRate: (runsRows as any[]).map((r: any) => {
+          const t = Number(r.total);
+          return t > 0 ? Math.round((Number(r.passed) / t) * 100) : 0;
+        }),
+      };
+
+      // Format incidents series
+      const incidentsSeries = {
+        labels: (incRows as any[]).map((r: any) => r.period_label),
+        critical: (incRows as any[]).map((r: any) => Number(r.critical_count)),
+        high: (incRows as any[]).map((r: any) => Number(r.high_count)),
+        med: (incRows as any[]).map((r: any) => Number(r.med_count)),
+        low: (incRows as any[]).map((r: any) => Number(r.low_count)),
+      };
+
+      // Format probes snapshot
+      const probesSeries = {
+        green: Number(probeSnapshot.green_count),
+        orange: Number(probeSnapshot.orange_count),
+        red: Number(probeSnapshot.red_count),
+        total: Number(probeSnapshot.total_probes),
+      };
 
       const result: GlobalDashboardResult = {
         kpis: {
@@ -261,16 +352,19 @@ export const analyticsRouter = router({
           successRate: totalRuns > 0 ? Math.round((passedRuns / totalRuns) * 100) : 0,
           avgDurationMs: gk.avg_duration_ms ? Math.round(Number(gk.avg_duration_ms)) : null,
           projectCount: Number(gk.project_count),
+          openIncidents: Number((openIncRows as any[])[0]?.cnt ?? 0),
+          redProbes: Number(probeSnapshot.red_count),
+          jobsBacklog,
         },
+        runs: runsSeries,
+        incidents: incidentsSeries,
+        probes: probesSeries,
         trend: {
-          labels: (trendRows as any[]).map((r: any) => r.period_label),
-          total: (trendRows as any[]).map((r: any) => Number(r.total)),
-          passed: (trendRows as any[]).map((r: any) => Number(r.passed)),
-          failed: (trendRows as any[]).map((r: any) => Number(r.failed)),
-          successRate: (trendRows as any[]).map((r: any) => {
-            const t = Number(r.total);
-            return t > 0 ? Math.round((Number(r.passed) / t) * 100) : 0;
-          }),
+          labels: runsSeries.labels,
+          total: runsSeries.total,
+          passed: runsSeries.passed,
+          failed: runsSeries.failed,
+          successRate: runsSeries.successRate,
         },
         topFailed: (topFailedRows as any[]).map((r: any) => ({
           scenarioName: r.scenario_name || "(inconnu)",
@@ -309,6 +403,30 @@ interface GlobalDashboardResult {
     successRate: number;
     avgDurationMs: number | null;
     projectCount: number;
+    openIncidents: number;
+    redProbes: number;
+    jobsBacklog: number;
+  };
+  runs: {
+    labels: string[];
+    passed: number[];
+    failed: number[];
+    aborted: number[];
+    total: number[];
+    successRate: number[];
+  };
+  incidents: {
+    labels: string[];
+    critical: number[];
+    high: number[];
+    med: number[];
+    low: number[];
+  };
+  probes: {
+    green: number;
+    orange: number;
+    red: number;
+    total: number;
   };
   trend: {
     labels: string[];
