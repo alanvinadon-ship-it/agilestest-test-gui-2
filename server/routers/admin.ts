@@ -42,6 +42,7 @@ const listInvitesInput = z.object({
 });
 
 const revokeInviteInput = z.object({ inviteId: z.number() });
+const resendInviteInput = z.object({ inviteId: z.number() });
 
 const listAuditLogsInput = z.object({
   ...paginationInput.shape,
@@ -394,6 +395,36 @@ export const adminRouter = router({
     });
 
     return { success: true };
+  }),
+
+  /** Resend an invite — regenerate token, extend expiry, return new token */
+  resendInvite: adminProcedure.input(resendInviteInput).mutation(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+    const existing = await db.select().from(invites).where(eq(invites.id, input.inviteId)).limit(1);
+    if (existing.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Invitation introuvable" });
+    if (existing[0].status !== "PENDING") {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Seules les invitations en attente peuvent \u00eatre renvoy\u00e9es" });
+    }
+
+    const newToken = crypto.randomBytes(48).toString("hex");
+    const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await db.update(invites).set({
+      token: newToken,
+      expiresAt: newExpiresAt,
+    }).where(eq(invites.id, input.inviteId));
+
+    await writeAuditLog({
+      userId: ctx.user!.id,
+      action: "INVITE_RESENT",
+      entity: "invite",
+      entityId: String(input.inviteId),
+      details: { email: existing[0].email },
+    });
+
+    return { success: true, token: newToken, email: existing[0].email, role: existing[0].role };
   }),
 
   // ── Audit Logs ──────────────────────────────────────────────────────────

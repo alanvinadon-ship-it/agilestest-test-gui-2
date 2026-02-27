@@ -107,8 +107,60 @@ export default function AdminUsersPage() {
   const updateUserMutation = trpc.admin.updateUser.useMutation({
     onSuccess: () => {
       utils.admin.listUsers.invalidate();
-      toast.success('Utilisateur mis à jour');
+      toast.success('Utilisateur mis \u00e0 jour');
       setEditUser(null);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  // Resend invite mutation
+  const sendInviteEmailMutation = (trpc.notifications as any).sendInviteEmail?.useMutation?.() ?? { mutateAsync: async () => ({ success: false, error: 'Not available' }), isPending: false };
+
+  const resendInviteMutation = trpc.admin.resendInvite.useMutation({
+    onSuccess: async (data) => {
+      utils.admin.listInvites.invalidate();
+
+      // Attempt to send email via SMTP if Live mode is active
+      const rawEmail = localNotifSettings.getRawEmailSettings();
+      const isSmtpLive = rawEmail.enabled && rawEmail.provider === 'SMTP' && rawEmail.host && rawEmail.username && rawEmail.password;
+
+      if (isSmtpLive) {
+        try {
+          const baseUrl = window.location.origin;
+          const inviteLink = `${baseUrl}/invite/accept?token=${data.token}`;
+          const ROLE_LABELS: Record<string, string> = { ADMIN: 'Administrateur', MANAGER: 'Manager', VIEWER: 'Lecteur' };
+
+          const result = await sendInviteEmailMutation.mutateAsync({
+            smtp: {
+              host: rawEmail.host!,
+              port: rawEmail.port,
+              secure: rawEmail.secure,
+              username: rawEmail.username!,
+              password: rawEmail.password!,
+              from_email: rawEmail.from_email || 'noreply@agilestest.io',
+              from_name: rawEmail.from_name || 'AgilesTest',
+              reply_to: rawEmail.reply_to || undefined,
+              timeout_ms: rawEmail.timeout_ms,
+            },
+            invitee_email: data.email,
+            inviter_name: 'Administrateur',
+            role: ROLE_LABELS[data.role] || data.role,
+            invite_link: inviteLink,
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            app_name: 'AgilesTest',
+          });
+
+          if (result.success) {
+            toast.success(`Invitation renvoy\u00e9e \u00e0 ${data.email} \u2014 email d\u00e9livr\u00e9 via SMTP`);
+          } else {
+            toast.warning(`Invitation renvoy\u00e9e mais l'email n'a pas pu \u00eatre envoy\u00e9 : ${result.error}`);
+          }
+        } catch (smtpErr: any) {
+          toast.warning(`Invitation renvoy\u00e9e mais erreur SMTP : ${smtpErr.message}`);
+        }
+      } else {
+        toast.success(`Invitation renvoy\u00e9e pour ${data.email} (email non envoy\u00e9 \u2014 activez le mode Live dans Admin > Notifications > Email)`);
+      }
     },
     onError: (err) => toast.error(err.message),
   });
@@ -313,10 +365,19 @@ export default function AdminUsersPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         {u.isInvite ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs text-indigo-400 bg-indigo-500/10 rounded border border-indigo-500/20">
-                            <Mail className="w-3 h-3" />
-                            En attente
-                          </span>
+                          <button
+                            onClick={() => resendInviteMutation.mutate({ inviteId: u.inviteId })}
+                            disabled={resendInviteMutation.isPending}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs text-indigo-400 bg-indigo-500/10 rounded border border-indigo-500/20 hover:bg-indigo-500/20 transition-colors cursor-pointer disabled:opacity-50"
+                            title="Renvoyer l'invitation"
+                          >
+                            {resendInviteMutation.isPending ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <RefreshCw className="w-3 h-3" />
+                            )}
+                            Renvoyer
+                          </button>
                         ) : (
                           <>
                             <button

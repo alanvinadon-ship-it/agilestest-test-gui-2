@@ -398,3 +398,4 @@
 - [x] Bug: Lien d'invitation invalide — corrigé : AcceptInvitePage utilise maintenant tRPC (invite.verifyToken + invite.accept) au lieu du localStorage
 - [x] Bug: Statut "Invité" manquant dans la liste des utilisateurs — corrigé : fusion des invitations PENDING dans la liste avec statut 'invited'
 - [x] Bug: Statut "Invité" manquant dans la liste des utilisateurs — corrigé : fusion des invitations PENDING dans la liste avec statut 'invited'
+- [x] Feature: Bouton "Renvoyer l'invitation" pour les entrées invitées — régénérer token, MAJ expiration, renvoyer email
