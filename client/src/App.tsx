@@ -39,6 +39,7 @@ import DashboardPage from "./pages/DashboardPage";
 import WebhooksPage from "./pages/WebhooksPage";
 import CollectorDashboardPage from "./pages/CollectorDashboardPage";
 import ScenarioTemplatesPage from "./pages/ScenarioTemplatesPage";
+import CompareExecutionsPage from "./pages/CompareExecutionsPage";
 
 // ─── Auth Guards ────────────────────────────────────────────────────────────
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -127,6 +128,9 @@ function AppRouter() {
               </Route>
               <Route path="/executions/:id">
                 <ProjectScoped><ExecutionDetailPage /></ProjectScoped>
+              </Route>
+              <Route path="/executions-compare">
+                <ProjectScoped><CompareExecutionsPage /></ProjectScoped>
               </Route>
               <Route path="/captures">
                 <ProjectScoped><CapturesPage /></ProjectScoped>

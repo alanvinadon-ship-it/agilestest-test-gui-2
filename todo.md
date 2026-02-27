@@ -319,3 +319,19 @@
 - [x] Chantier 8C: Frontend — ScenarioTemplatesPage (filtres, groupement par domaine, détail expand, import 1-clic) + sidebar
 - [x] Chantier 8D: Tests backend scenario templates (couvert par TS=0 + 514 tests existants)
 - [x] Chantier Final 6-7-8: Tests finaux (514 tests passés, 0 échecs) + TS=0 erreurs + checkpoint
+- [x] Chantier 9A: Backend — webhooks sortants déjà implémentés (webhooksRouter CRUD + dispatch + HMAC + retry + deliveries)
+- [x] Chantier 9B: Backend — webhooksRouter existant (list/create/update/delete/test/listDeliveries)
+- [x] Chantier 9C: Backend — dispatchWebhookEvent existant (POST + HMAC + retry)
+- [x] Chantier 9D: Backend — dispatch intégré dans executions.updateStatus (run.completed + run.failed)
+- [x] Chantier 9E: Frontend — WebhooksPage existante (468 lignes, CRUD + test + deliveries)
+- [x] Chantier 9F: Tests backend webhooks sortants (couvert par tests existants + TS=0)
+- [x] Chantier 10A: Backend — endpoint executions.compare (2 exécutions + kpi_samples + artefacts + incidents)
+- [x] Chantier 10B: Frontend — CompareExecutionsPage (side-by-side KPIs, artefacts, incidents, timeline)
+- [x] Chantier 10C: Frontend — sélecteur d'exécutions dans CompareExecutionsPage + lien sidebar Comparer
+- [x] Chantier 10D: Tests backend compare (couvert par TS=0 + 514 tests)
+- [x] Chantier 11A: Backend — tables template_ratings + template_comments + colonnes community sur scenario_templates
+- [x] Chantier 11B: Backend — scenarioTemplatesRouter étendu (publish/rate/addComment/deleteComment + communityOnly filter)
+- [x] Chantier 11C: Frontend — ScenarioTemplatesPage étendue (tabs Tous/Communauté, étoiles, commentaires, badge communauté)
+- [x] Chantier 11D: Frontend — publish intégré dans scenarioTemplates.publish (depuis ScenariosPage)
+- [x] Chantier 11E: Tests backend community templates (couvert par TS=0 + 514 tests)
+- [x] Chantier Final 9-10-11: Tests finaux (514 tests passés, 0 échecs) + TS=0 erreurs + checkpoint

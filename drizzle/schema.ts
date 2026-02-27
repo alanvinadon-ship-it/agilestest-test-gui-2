@@ -636,9 +636,42 @@ export const scenarioTemplates = mysqlTable("scenario_templates", {
   kpiThresholds: json("kpi_thresholds"),
   profileTemplate: json("profile_template"), // partial profile config for auto-creation
   isBuiltIn: boolean("is_built_in").default(true).notNull(),
+  publishedByOpenId: varchar("published_by_open_id", { length: 128 }),
+  publishedByName: varchar("published_by_name", { length: 255 }),
+  publishedAt: timestamp("published_at"),
+  avgRating: double("avg_rating").default(0),
+  ratingCount: int("rating_count").default(0),
+  usageCount: int("usage_count").default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
 export type ScenarioTemplateRow = typeof scenarioTemplates.$inferSelect;
 export type InsertScenarioTemplate = typeof scenarioTemplates.$inferInsert;
+
+// ─── Template Ratings ───────────────────────────────────────────────────────
+export const templateRatings = mysqlTable("template_ratings", {
+  id: int("id").autoincrement().primaryKey(),
+  templateUid: varchar("template_uid", { length: 36 }).notNull(),
+  userOpenId: varchar("user_open_id", { length: 128 }).notNull(),
+  userName: varchar("user_name", { length: 255 }),
+  rating: int("rating").notNull(), // 1-5
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+export type TemplateRatingRow = typeof templateRatings.$inferSelect;
+export type InsertTemplateRating = typeof templateRatings.$inferInsert;
+
+// ─── Template Comments ──────────────────────────────────────────────────────
+export const templateComments = mysqlTable("template_comments", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  templateUid: varchar("template_uid", { length: 36 }).notNull(),
+  userOpenId: varchar("user_open_id", { length: 128 }).notNull(),
+  userName: varchar("user_name", { length: 255 }),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+export type TemplateCommentRow = typeof templateComments.$inferSelect;
+export type InsertTemplateComment = typeof templateComments.$inferInsert;

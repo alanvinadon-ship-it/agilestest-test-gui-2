@@ -13,6 +13,7 @@ import { normalizePagination, countRows } from "../lib/pagination";
 import { writeAuditLog } from "../lib/auditLog";
 import { randomUUID } from "crypto";
 import { notifyOwner } from "../_core/notification";
+import { dispatchWebhookEvent } from "./webhooks";
 
 // ─── Shared inputs ──────────────────────────────────────────────────────────
 // projectId is varchar(36) in DB — use z.string() for all project-scoped queries
@@ -514,11 +515,78 @@ export const executionsRouter = router({
         : "—";
       notifyOwner({
         title: `\u26a0\ufe0f Ex\u00e9cution #${input.executionId} ${input.status}`,
-        content: `L'ex\u00e9cution #${input.executionId} (sc\u00e9nario: ${scenarioName}, env: ${exec?.targetEnv ?? "—"}) est pass\u00e9e en ${input.status} le ${new Date().toLocaleString("fr-FR")}.`,
+        content: `L'ex\u00e9cution #${input.executionId} (sc\u00e9nario: ${scenarioName}, env: ${exec?.targetEnv ?? "\u2014"}) est pass\u00e9e en ${input.status} le ${new Date().toLocaleString("fr-FR")}.`,
       }).catch((err) => console.warn("[Notification] Failed to notify owner:", err));
+
+      // Dispatch webhook event for failed executions
+      dispatchWebhookEvent(exec?.projectId ?? "", "run.failed", {
+        executionId: input.executionId,
+        executionUid: exec?.uid,
+        status: input.status,
+        scenarioName,
+        targetEnv: exec?.targetEnv ?? null,
+        timestamp: new Date().toISOString(),
+      }).catch((err) => console.warn("[Webhook] Failed to dispatch run.failed:", err));
+    }
+
+    // Dispatch webhook event for completed executions (PASSED)
+    if (input.status === "PASSED") {
+      const [exec] = await db.select().from(executions).where(eq(executions.id, input.executionId)).limit(1);
+      const scenarioName = exec?.scenarioId
+        ? (await db.select({ name: testScenarios.name }).from(testScenarios).where(eq(testScenarios.uid, exec.scenarioId)).limit(1))?.[0]?.name ?? "\u2014"
+        : "\u2014";
+      dispatchWebhookEvent(exec?.projectId ?? "", "run.completed", {
+        executionId: input.executionId,
+        executionUid: exec?.uid,
+        status: input.status,
+        scenarioName,
+        targetEnv: exec?.targetEnv ?? null,
+        timestamp: new Date().toISOString(),
+      }).catch((err) => console.warn("[Webhook] Failed to dispatch run.completed:", err));
     }
 
     return { success: true };
+  }),
+
+  compare: protectedProcedure.input(z.object({
+    executionIdA: z.number(),
+    executionIdB: z.number(),
+  })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+    const loadExec = async (execId: number) => {
+      const [exec] = await db.select().from(executions).where(eq(executions.id, execId)).limit(1);
+      if (!exec) throw new TRPCError({ code: "NOT_FOUND", message: `Exécution #${execId} introuvable` });
+      const [arts, incs, scenario, profile] = await Promise.all([
+        db.select().from(artifacts).where(eq(artifacts.executionId, exec.uid)),
+        db.select().from(incidents).where(eq(incidents.executionId, execId)).orderBy(desc(incidents.createdAt)),
+        exec.scenarioId ? db.select().from(testScenarios).where(eq(testScenarios.uid, exec.scenarioId)).limit(1) : Promise.resolve([]),
+        exec.profileId ? db.select().from(testProfiles).where(eq(testProfiles.uid, exec.profileId)).limit(1) : Promise.resolve([]),
+      ]);
+      return {
+        ...exec,
+        artifacts: arts,
+        incidents: incs,
+        scenario: scenario[0] ?? null,
+        profile: profile[0] ?? null,
+      };
+    };
+
+    const [a, b] = await Promise.all([loadExec(input.executionIdA), loadExec(input.executionIdB)]);
+
+    // Build comparison summary
+    const summary = {
+      statusMatch: a.status === b.status,
+      durationDiffMs: (a.durationMs ?? 0) - (b.durationMs ?? 0),
+      artifactCountDiff: a.artifacts.length - b.artifacts.length,
+      incidentCountDiff: a.incidents.length - b.incidents.length,
+      sameScenario: a.scenarioId === b.scenarioId,
+      sameProfile: a.profileId === b.profileId,
+      sameEnv: a.targetEnv === b.targetEnv,
+    };
+
+    return { a, b, summary };
   }),
 });
 
