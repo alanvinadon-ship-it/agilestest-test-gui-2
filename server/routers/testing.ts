@@ -83,7 +83,7 @@ export const profilesRouter = router({
       parameters: input.parameters ?? null,
     });
     await writeAuditLog({ userId: ctx.user!.id, action: "PROFILE_CREATED", entity: "test_profile", entityId: String(res[0].insertId) });
-    return { success: true, profileId: Number(res[0].insertId) };
+    return { success: true, profileId: Number(res[0].insertId), uid };
   }),
   update: protectedProcedure.input(z.object({
     profileId: z.number(), name: z.string().optional(), description: z.string().optional(),
@@ -185,7 +185,7 @@ export const scenariosRouter = router({
       requiredDatasetTypes: input.requiredDatasetTypes ?? null,
     });
     await writeAuditLog({ userId: ctx.user!.id, action: "SCENARIO_CREATED", entity: "test_scenario", entityId: String(res[0].insertId) });
-    return { success: true, scenarioId: Number(res[0].insertId) };
+    return { success: true, scenarioId: Number(res[0].insertId), uid };
   }),
   update: protectedProcedure.input(z.object({
     scenarioId: z.number(), name: z.string().optional(), description: z.string().optional(),

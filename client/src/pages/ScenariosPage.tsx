@@ -15,6 +15,7 @@ import GeneratePromptModal from '../components/GeneratePromptModal';
 import GenerateScriptModal from '../components/GenerateScriptModal';
 
 import SuggestScenariosModal from '../components/SuggestScenariosModal';
+import PublishTemplateModal from '../components/PublishTemplateModal';
 import ScenarioDatasetSection from '../components/ScenarioDatasetSection';
 import { CapturePolicyEditor } from '../capture';
 import type { CapturePolicy } from '../capture/types';
@@ -521,6 +522,7 @@ export default function ScenariosPage() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [exportingId, setExportingId] = useState<number | null>(null);
   const [publishingId, setPublishingId] = useState<number | null>(null);
+  const [publishTarget, setPublishTarget] = useState<TestScenario | null>(null);
   const trpcUtils = trpc.useUtils();
   const [promptScenario, setPromptScenario] = useState<{ scenario: TestScenario; profile: TestProfile } | null>(null);
   const [scriptScenario, setScriptScenario] = useState<{ scenario: TestScenario; profile: TestProfile } | null>(null);
@@ -887,11 +889,7 @@ export default function ScenariosPage() {
                                     </button>
                                   )}
                                   <button onClick={() => {
-                                    setPublishingId(Number(scenario.id));
-                                    publishMutation.mutate({
-                                      scenarioId: Number(scenario.id),
-                                      projectId: String(currentProject?.id),
-                                    });
+                                    setPublishTarget(scenario);
                                   }}
                                     className="text-muted-foreground hover:text-green-400 p-1.5 rounded hover:bg-green-500/10 transition-colors" title="Publier comme template communautaire">
                                     {publishingId === Number(scenario.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
@@ -1000,6 +998,17 @@ export default function ScenariosPage() {
           onImported={() => {
             utils.scenarios.list.invalidate();
             utils.profiles.list.invalidate();
+          }}
+        />
+      )}
+      {publishTarget && (
+        <PublishTemplateModal
+          scenario={publishTarget}
+          projectId={String(currentProject.id)}
+          onClose={() => setPublishTarget(null)}
+          onPublished={() => {
+            setPublishTarget(null);
+            utils.scenarios.list.invalidate();
           }}
         />
       )}

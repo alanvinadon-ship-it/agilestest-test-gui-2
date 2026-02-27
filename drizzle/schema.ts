@@ -630,12 +630,20 @@ export type InsertDatasetSecret = typeof datasetSecrets.$inferInsert;
 export const scenarioTemplates = mysqlTable("scenario_templates", {
   id: int("id").autoincrement().primaryKey(),
   uid: varchar("uid", { length: 36 }).notNull().unique(),
+  orgId: varchar("org_id", { length: 36 }),
+  scenarioUid: varchar("scenario_uid", { length: 36 }),
   domain: mysqlEnum("domain", ["IMS", "5GC", "API_REST", "VOLTE", "DRIVE_TEST", "SECURITY", "PERFORMANCE"]).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
+  tagsJson: json("tags_json"), // string[] — new structured tags
+  templateJson: json("template_json"), // full snapshot JSON (schemaVersion + content)
+  visibility: mysqlEnum("visibility", ["PUBLIC", "UNLISTED"]).default("PUBLIC").notNull(),
+  status: mysqlEnum("status", ["PUBLISHED", "UNPUBLISHED"]).default("PUBLISHED").notNull(),
+  createdBy: varchar("created_by", { length: 128 }),
+  version: int("version").default(1).notNull(),
   testType: mysqlEnum("test_type", ["VABF", "VSR", "VABE"]).default("VABF").notNull(),
   difficulty: mysqlEnum("difficulty", ["BEGINNER", "INTERMEDIATE", "ADVANCED"]).default("INTERMEDIATE").notNull(),
-  tags: json("tags"), // string[]
+  tags: json("tags"), // legacy string[] (kept for backward compat)
   steps: json("steps"), // ScenarioStep[]
   requiredDatasetTypes: json("required_dataset_types"), // string[]
   artifactPolicy: json("artifact_policy"),

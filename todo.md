@@ -335,9 +335,9 @@
 - [x] Chantier 11D: Frontend — publish intégré dans scenarioTemplates.publish (depuis ScenariosPage)
 - [x] Chantier 11E: Tests backend community templates (couvert par TS=0 + 514 tests)
 - [x] Chantier Final 9-10-11: Tests finaux (514 tests passés, 0 échecs) + TS=0 erreurs + checkpoint
-- [ ] Chantier 12A: Frontend — bouton Publier dans ScenariosPage (ouvre modal avec nom/description/tags)
-- [ ] Chantier 12B: Backend — endpoint scenarioTemplates.publishFromScenario (crée template depuis scénario existant)
-- [ ] Chantier 12C: Tests + vérification TS
+- [x] Chantier 12A: Frontend — bouton Publier dans ScenariosPage (ouvre modal avec nom/description/tags)
+- [x] Chantier 12B: Backend — endpoint scenarioTemplates.publishFromScenario (crée template depuis scénario existant)
+- [x] Chantier 12C: Tests + vérification TS
 - [ ] Chantier 13A: Backend — endpoint analytics.globalDashboard (agrégats cross-projets)
 - [ ] Chantier 13B: Frontend — page AnalyticsDashboardPage (Chart.js: taux succès, temps moyen, top échecs)
 - [ ] Chantier 13C: Frontend — route + sidebar + tests
@@ -351,3 +351,10 @@
 - [x] Fix: Corriger aiGeneration.ts pour types varchar (projectId, scenarioId, createdBy)
 - [x] Fix: Corriger testing.ts scripts CRUD pour types varchar
 - [x] Fix: writeAuditLog accepte userId number|string + génère uid automatique
+- [x] Chantier 12A: Backend — Table Drizzle scenario_templates (uid, org_id, scenario_uid, name, description, tags_json, version, template_json, visibility, status, created_by, created_at, updated_at) + indexes + migration DB
+- [x] Chantier 12B: Backend — Routeur tRPC scenarioTemplates (publish, unpublish, listPublic, get, forkToProject) avec RBAC owner/admin
+- [x] Chantier 12C: Backend — Tests Vitest (publish snapshot, unpublish RBAC, listPublic filtre, forkToProject crée scénario)
+- [x] Chantier 12D: Frontend — Modal Publier dans ScenariosPage (nom, description, tags, visibilité) + indicateur publié + toast
+- [x] Chantier 12E: Frontend — Page Templates (explorer listPublic + fork vers projet) + route + sidebar
+- [x] Chantier 12F: Documentation docs/TEMPLATES.md (format JSON, versioning, RBAC, endpoints)
+- [x] Chantier 12 Final: Tests finaux (539 tests, TS=0) + checkpoint
