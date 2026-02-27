@@ -346,3 +346,73 @@ export const probeAlertState = mysqlTable("probe_alert_state", {
 
 export type ProbeAlertState = typeof probeAlertState.$inferSelect;
 export type InsertProbeAlertState = typeof probeAlertState.$inferInsert;
+
+// ─── Dataset Types (gabarits de datasets) ──────────────────────────────────
+// DB columns: id, uid, dataset_type_id, domain, test_type, name, description, schema_fields, example_placeholders, tags, created_at, updated_at
+export const datasetTypes = mysqlTable("dataset_types", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  datasetTypeId: varchar("dataset_type_id", { length: 100 }).notNull().unique(),
+  domain: varchar("domain", { length: 50 }).notNull(),
+  testType: varchar("test_type", { length: 10 }),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  schemaFields: json("schema_fields"),
+  examplePlaceholders: json("example_placeholders"),
+  tags: json("tags"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DatasetTypeRow = typeof datasetTypes.$inferSelect;
+export type InsertDatasetType = typeof datasetTypes.$inferInsert;
+
+// ─── Dataset Instances (instances concrètes de datasets) ───────────────────
+// DB columns: id, uid, project_id, dataset_type_id, env, version, status, values_json, notes, created_by, created_at, updated_at
+export const datasetInstances = mysqlTable("dataset_instances", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  projectId: varchar("project_id", { length: 36 }).notNull(),
+  datasetTypeId: varchar("dataset_type_id", { length: 100 }).notNull(),
+  env: mysqlEnum("env", ["DEV", "PREPROD", "PILOT_ORANGE", "PROD"]).default("DEV").notNull(),
+  version: int("version").default(1).notNull(),
+  status: mysqlEnum("status", ["DRAFT", "ACTIVE", "DEPRECATED"]).default("DRAFT").notNull(),
+  valuesJson: json("values_json"),
+  notes: text("notes"),
+  createdBy: varchar("created_by", { length: 64 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DatasetInstanceRow = typeof datasetInstances.$inferSelect;
+export type InsertDatasetInstance = typeof datasetInstances.$inferInsert;
+
+// ─── Dataset Bundles (regroupement de datasets par environnement) ──────────
+// DB columns: id, uid, project_id, name, env, version, status, tags, created_by, created_at, updated_at
+export const datasetBundles = mysqlTable("dataset_bundles", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  projectId: varchar("project_id", { length: 36 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  env: mysqlEnum("env", ["DEV", "PREPROD", "PILOT_ORANGE", "PROD"]).default("PREPROD").notNull(),
+  version: int("version").default(1),
+  status: mysqlEnum("status", ["DRAFT", "ACTIVE", "DEPRECATED"]).default("DRAFT").notNull(),
+  tags: json("tags"),
+  createdBy: varchar("created_by", { length: 64 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DatasetBundleRow = typeof datasetBundles.$inferSelect;
+export type InsertDatasetBundle = typeof datasetBundles.$inferInsert;
+
+// ─── Bundle Items (liaison bundle ↔ dataset instance) ─────────────────────
+// DB columns: id, bundle_id, dataset_id
+export const bundleItems = mysqlTable("bundle_items", {
+  id: int("id").autoincrement().primaryKey(),
+  bundleId: varchar("bundle_id", { length: 36 }).notNull(),
+  datasetId: varchar("dataset_id", { length: 36 }).notNull(),
+});
+
+export type BundleItemRow = typeof bundleItems.$inferSelect;
+export type InsertBundleItem = typeof bundleItems.$inferInsert;

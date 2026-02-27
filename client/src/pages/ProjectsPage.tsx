@@ -256,7 +256,7 @@ export default function ProjectsPage() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      await deleteMutation.mutateAsync({ projectId: Number(deleteTarget.id) });
+      await deleteMutation.mutateAsync({ projectId: deleteTarget.id });
       setDeleteTarget(null);
     } catch {
       // error handled by mutation

@@ -6,7 +6,7 @@ import type { Project, CreateProjectRequest } from '../types';
  */
 function toFrontendProject(row: any): Project {
   return {
-    id: String(row.id),
+    id: row.uid || String(row.id),
     name: row.name || '',
     description: row.description || '',
     domain: row.domain || 'WEB',
@@ -41,7 +41,7 @@ export function useProjects(params?: { page?: number; limit?: number; status?: s
 
 export function useProjectDetail(projectId: string) {
   const query = trpc.projects.get.useQuery(
-    { projectId: Number(projectId) },
+    { projectId },
     { enabled: !!projectId },
   );
 

@@ -1,0 +1,35 @@
+{
+  "query": "SELECT id, project_id, name FROM test_profiles LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute SELECT id, project_id, name FROM test_profiles LIMIT 5;",
+  "rows": [
+    {
+      "id": "1",
+      "project_id": "12a94dbe-3205-4d53-b079-f8afa65e54f4",
+      "name": "Profil IMS VoLTE"
+    },
+    {
+      "id": "2",
+      "project_id": "85a169f9-4b1f-47c8-85bc-0db8515f096f",
+      "name": "Profil List Test"
+    },
+    {
+      "id": "3",
+      "project_id": "569e2fd5-8659-439f-8a2c-73a278535e2d",
+      "name": "Profil Scenario Test"
+    },
+    {
+      "id": "4",
+      "project_id": "66f1567b-1038-44c5-8b8f-d0dfa14a282e",
+      "name": "Profil Scenario Test"
+    },
+    {
+      "id": "5",
+      "project_id": "7e12e2fc-932c-41d6-a3e0-8a37272a26e4",
+      "name": "Profil Scenario Test"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tproject_id\tname\n1\t12a94dbe-3205-4d53-b079-f8afa65e54f4\tProfil IMS VoLTE\n2\t85a169f9-4b1f-47c8-85bc-0db8515f096f\tProfil List Test\n3\t569e2fd5-8659-439f-8a2c-73a278535e2d\tProfil Scenario Test\n4\t66f1567b-1038-44c5-8b8f-d0dfa14a282e\tProfil Scenario Test\n5\t7e12e2fc-932c-41d6-a3e0-8a37272a26e4\tProfil Scenario Test\n",
+  "stderr": "",
+  "execution_time_ms": 381
+}

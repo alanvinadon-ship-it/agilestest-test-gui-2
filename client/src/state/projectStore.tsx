@@ -27,9 +27,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   // On mount, try to restore last selected project from uiStorage
   const lastProjectId = uiGet("lastProjectId");
   const projectQuery = trpc.projects.get.useQuery(
-    { projectId: lastProjectId ?? 0 },
+    { projectId: String(lastProjectId ?? "") },
     {
-      enabled: lastProjectId !== null && lastProjectId > 0 && currentProject === null,
+      enabled: lastProjectId !== null && lastProjectId !== "" && currentProject === null,
       retry: false,
     }
   );
@@ -39,7 +39,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     if (projectQuery.data && !currentProject) {
       const p = projectQuery.data;
       setCurrentProject({
-        id: String(p.id),
+        id: p.uid || String(p.id),
         name: p.name,
         description: p.description ?? "",
         domain: p.domain,
@@ -52,7 +52,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   }, [projectQuery.data, currentProject]);
 
   const selectProject = useCallback((project: Project) => {
-    uiSet("lastProjectId", Number(project.id));
+    uiSet("lastProjectId", project.id);
     setCurrentProject(project);
   }, []);
 

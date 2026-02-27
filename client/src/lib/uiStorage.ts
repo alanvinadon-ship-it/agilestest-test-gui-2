@@ -27,7 +27,7 @@ const UI_KEYS = {
   sidebarMini: z.boolean(),
   locale: z.enum(["fr", "en"]),
   tablePageSize: z.number().int().min(5).max(100),
-  lastProjectId: z.number().int().nullable(),
+  lastProjectId: z.string().nullable(),
   dashboardLayout: z.enum(["grid", "list"]),
   probesMonitorView: z.enum(["grid", "compact"]),
   sidebarAccordions: sidebarAccordionsSchema,

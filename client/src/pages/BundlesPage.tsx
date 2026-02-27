@@ -2,10 +2,7 @@ import { useState, useMemo } from 'react';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
 import { usePermission, PermissionKey } from '../security';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { localDatasetTypes } from '../api/localStore';
-import { repositoryApi } from '../api/repositoryApi';
-import { useDatasetStorage } from '../contexts/DatasetStorageContext';
+import { trpc } from '@/lib/trpc';
 import type {
   DatasetBundle, DatasetInstance, DatasetType, TargetEnv, BundleStatus,
   TestScenario, BundleValidationResult,
@@ -55,13 +52,44 @@ function BundleStatusBadge({ status }: { status: BundleStatus }) {
   );
 }
 
+// ─── Helper: map DB row to frontend DatasetBundle ────────────────────────
+function toFrontendBundle(row: any): DatasetBundle {
+  return {
+    bundle_id: row.bundleId,
+    project_id: row.projectId,
+    name: row.name,
+    env: row.env,
+    version: row.version ?? 1,
+    status: row.status,
+    tags: (row.tags as string[]) ?? [],
+    created_by: row.createdBy ?? '',
+    created_at: row.createdAt ? new Date(row.createdAt).toISOString() : '',
+    updated_at: row.updatedAt ? new Date(row.updatedAt).toISOString() : '',
+  };
+}
+
+function toFrontendInstance(row: any): DatasetInstance {
+  return {
+    dataset_id: row.datasetId,
+    project_id: row.projectId,
+    dataset_type_id: row.datasetTypeId,
+    env: row.env,
+    version: row.version ?? 1,
+    status: row.status,
+    values_json: (row.valuesJson as Record<string, unknown>) ?? {},
+    notes: row.notes ?? '',
+    created_by: row.createdBy ?? '',
+    created_at: row.createdAt ? new Date(row.createdAt).toISOString() : '',
+    updated_at: row.updatedAt ? new Date(row.updatedAt).toISOString() : '',
+  };
+}
+
 // ─── Create Bundle Modal ──────────────────────────────────────────────────
 
 function CreateBundleModal({ isOpen, onClose, projectId, projectDomain }: {
   isOpen: boolean; onClose: () => void; projectId: string; projectDomain: string;
 }) {
-  const queryClient = useQueryClient();
-  const { adapter } = useDatasetStorage();
+  const utils = trpc.useUtils();
   const [env, setEnv] = useState<TargetEnv>('PREPROD');
   const [name, setName] = useState('');
   const [tags, setTags] = useState('');
@@ -71,19 +99,14 @@ function CreateBundleModal({ isOpen, onClose, projectId, projectDomain }: {
     return `BUNDLE_${domain}_${env}_V1`;
   }, [env, projectDomain]);
 
-  const mutation = useMutation({
-    mutationFn: async () => adapter.bundles.create(projectId, {
-      name: name || suggestedName,
-      env,
-      tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : [],
-    }),
+  const createMutation = trpc.bundles.create.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dataset_bundles'] });
+      utils.bundles.list.invalidate();
       toast.success('Bundle créé');
       setName(''); setTags('');
       onClose();
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err) => toast.error(err.message),
   });
 
   if (!isOpen) return null;
@@ -138,9 +161,14 @@ function CreateBundleModal({ isOpen, onClose, projectId, projectDomain }: {
             className="px-4 py-2 rounded-md border border-input text-sm font-medium text-foreground hover:bg-accent transition-colors">
             Annuler
           </button>
-          <button onClick={() => mutation.mutate()} disabled={mutation.isPending}
+          <button onClick={() => createMutation.mutate({
+            projectId,
+            name: name || suggestedName,
+            env,
+            tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+          })} disabled={createMutation.isPending}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50">
-            {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Package className="w-4 h-4" />}
+            {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Package className="w-4 h-4" />}
             Créer
           </button>
         </div>
@@ -154,25 +182,52 @@ function CreateBundleModal({ isOpen, onClose, projectId, projectDomain }: {
 function ValidateBundleModal({ bundle, onClose, projectId }: {
   bundle: DatasetBundle; onClose: () => void; projectId: string;
 }) {
-  const { adapter } = useDatasetStorage();
   const [scenarioId, setScenarioId] = useState('');
   const [result, setResult] = useState<BundleValidationResult | null>(null);
 
-  const { data: scenariosData } = useQuery({
-    queryKey: ['all_scenarios_project', projectId],
-    queryFn: () => repositoryApi.listScenariosByProject(projectId),
-    enabled: !!projectId,
-  });
-  const scenarios = (scenariosData?.data || []) as TestScenario[];
+  const { data: scenariosRaw } = trpc.scenarios.list.useQuery(
+    { projectId, page: 1, pageSize: 100 },
+    { enabled: !!projectId }
+  );
+  const scenarios = (scenariosRaw?.data || []) as any[];
+
+  // Bundle items for validation
+  const { data: bundleItemsData } = trpc.bundleItems.list.useQuery({ bundleId: bundle.bundle_id });
+  const items = bundleItemsData?.data || [];
+
+  // All instances for this project
+  const { data: instancesData } = trpc.datasetInstances.list.useQuery({ projectId });
+  const allInstances = (instancesData?.data || []).map(toFrontendInstance);
 
   const handleValidate = async () => {
     if (!scenarioId) return;
-    try {
-      const res = await adapter.validation.validateBundleForScenario(bundle.bundle_id, scenarioId);
-      setResult(res);
-    } catch (err: unknown) {
-      toast.error((err as Error).message);
-    }
+    // Client-side validation: check required dataset types vs bundle contents
+    const scenario = scenarios.find((s: any) => String(s.id) === scenarioId);
+    if (!scenario) return;
+    const requiredTypes: string[] = scenario.requiredDatasetTypes ? JSON.parse(scenario.requiredDatasetTypes) : [];
+    const bundleDatasetIds = new Set(items.map(bi => bi.datasetId));
+    const bundleDatasets = allInstances.filter(d => bundleDatasetIds.has(d.dataset_id));
+    const coveredTypes = new Set(bundleDatasets.map(d => d.dataset_type_id));
+    const missingTypes = requiredTypes.filter(t => !coveredTypes.has(t));
+
+    // Check for type duplicates
+    const typeCounts = new Map<string, string[]>();
+    bundleDatasets.forEach(d => {
+      const arr = typeCounts.get(d.dataset_type_id) || [];
+      arr.push(d.dataset_id);
+      typeCounts.set(d.dataset_type_id, arr);
+    });
+    const conflicts = Array.from(typeCounts.entries())
+      .filter(([, ids]) => ids.length > 1)
+      .map(([typeId, ids]) => ({ dataset_type_id: typeId, dataset_ids: ids }));
+
+    setResult({
+      ok: missingTypes.length === 0 && conflicts.length === 0,
+      missing_types: missingTypes,
+      conflicts,
+      schema_errors_by_type: {},
+      warnings: [],
+    });
   };
 
   return (
@@ -198,9 +253,9 @@ function ValidateBundleModal({ bundle, onClose, projectId }: {
             <select value={scenarioId} onChange={e => setScenarioId(e.target.value)}
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30">
               <option value="">— Sélectionner un scénario —</option>
-              {scenarios.map(s => (
-                <option key={s.id} value={s.id}>
-                  {s.name} {s.scenario_code ? `(${s.scenario_code})` : ''} [{s.status}]
+              {scenarios.map((s: any) => (
+                <option key={s.id} value={String(s.id)}>
+                  {s.name} {s.scenarioCode ? `(${s.scenarioCode})` : ''} [{s.status}]
                 </option>
               ))}
             </select>
@@ -213,7 +268,7 @@ function ValidateBundleModal({ bundle, onClose, projectId }: {
 
           {result && (
             <div className="space-y-3">
-              <div className={`rounded-md p-4 border ${result.ok ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
+              <div className={`rounded-md p-4 border ${result.ok ? 'bg-green-500/5 border-green-500/20' : 'bg-red-500/5 border-red-500/20'}`}>
                 <div className="flex items-center gap-2 mb-2">
                   {result.ok ? (
                     <><CheckCircle2 className="w-5 h-5 text-green-400" /><span className="text-sm font-semibold text-green-400">Compatible</span></>
@@ -283,67 +338,58 @@ function ValidateBundleModal({ bundle, onClose, projectId }: {
 // ─── Bundle Detail (expanded row) ─────────────────────────────────────────
 
 function BundleDetail({ bundle, projectId }: { bundle: DatasetBundle; projectId: string }) {
-  const queryClient = useQueryClient();
-  const { adapter } = useDatasetStorage();
+  const utils = trpc.useUtils();
   const { canWrite } = useAuth();
   const { can } = usePermission();
   const canUpdateBundle = can(PermissionKey.BUNDLES_UPDATE);
   const [addingDataset, setAddingDataset] = useState(false);
 
-  // Get bundle items via adapter
-  const { data: bundleItemsData } = useQuery({
-    queryKey: ['bundle_items', bundle.bundle_id],
-    queryFn: () => adapter.bundleItems.list(bundle.bundle_id),
-  });
-  const bundleItems = bundleItemsData || [];
-  const allInstances = useQuery({
-    queryKey: ['dataset_instances', projectId],
-    queryFn: () => adapter.instances.list(projectId),
-  });
-  const allDatasets = (allInstances.data?.data || []) as DatasetInstance[];
+  // Get bundle items via tRPC
+  const { data: bundleItemsData } = trpc.bundleItems.list.useQuery({ bundleId: bundle.bundle_id });
+  const bundleItemsList = bundleItemsData?.data || [];
 
-  const { data: dtData } = useQuery({
-    queryKey: ['dataset_types_all'],
-    queryFn: () => localDatasetTypes.list(),
-  });
+  // All instances for this project
+  const { data: instancesData } = trpc.datasetInstances.list.useQuery({ projectId });
+  const allDatasets = (instancesData?.data || []).map(toFrontendInstance);
+
+  // Dataset types
+  const { data: dtData } = trpc.datasetTypes.list.useQuery();
   const dtMap = useMemo(() => {
-    const types = (dtData?.data || []) as DatasetType[];
-    return new Map(types.map(dt => [dt.dataset_type_id, dt]));
+    const types = dtData?.data || [];
+    return new Map(types.map(dt => [dt.datasetTypeId, dt]));
   }, [dtData]);
 
   // Datasets in this bundle
   const bundleDatasets = useMemo(() => {
-    const ids = new Set(bundleItems.map(bi => bi.dataset_id));
+    const ids = new Set(bundleItemsList.map(bi => bi.datasetId));
     return allDatasets.filter(d => ids.has(d.dataset_id));
-  }, [bundleItems, allDatasets]);
+  }, [bundleItemsList, allDatasets]);
 
   // Available datasets (same env, not already in bundle)
   const availableDatasets = useMemo(() => {
-    const existingIds = new Set(bundleItems.map(bi => bi.dataset_id));
+    const existingIds = new Set(bundleItemsList.map(bi => bi.datasetId));
     const existingTypes = new Set(bundleDatasets.map(d => d.dataset_type_id));
     return allDatasets.filter(d =>
       d.env === bundle.env &&
       !existingIds.has(d.dataset_id) &&
-      !existingTypes.has(d.dataset_type_id) // Prevent type duplicates
+      !existingTypes.has(d.dataset_type_id)
     );
-  }, [allDatasets, bundleItems, bundleDatasets, bundle.env]);
+  }, [allDatasets, bundleItemsList, bundleDatasets, bundle.env]);
 
-  const addMutation = useMutation({
-    mutationFn: async (datasetId: string) => adapter.bundleItems.add(bundle.bundle_id, datasetId),
+  const addMutation = trpc.bundleItems.add.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bundle_items'] });
-      queryClient.invalidateQueries({ queryKey: ['dataset_bundles'] });
-      queryClient.invalidateQueries({ queryKey: ['dataset_instances'] });
+      utils.bundleItems.list.invalidate();
+      utils.bundles.list.invalidate();
+      utils.datasetInstances.list.invalidate();
       toast.success('Dataset ajouté au bundle');
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err) => toast.error(err.message),
   });
 
-  const removeMutation = useMutation({
-    mutationFn: async (datasetId: string) => adapter.bundleItems.remove(bundle.bundle_id, datasetId),
+  const removeMutation = trpc.bundleItems.remove.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bundle_items'] });
-      queryClient.invalidateQueries({ queryKey: ['dataset_bundles'] });
+      utils.bundleItems.list.invalidate();
+      utils.bundles.list.invalidate();
       toast.success('Dataset retiré du bundle');
     },
   });
@@ -374,7 +420,7 @@ function BundleDetail({ bundle, projectId }: { bundle: DatasetBundle; projectId:
                   <span className="text-[10px] font-mono text-muted-foreground">v{d.version}</span>
                 </div>
                 {canUpdateBundle && (
-                  <button onClick={() => removeMutation.mutate(d.dataset_id)}
+                  <button onClick={() => removeMutation.mutate({ bundleId: bundle.bundle_id, datasetId: d.dataset_id })}
                     className="text-muted-foreground hover:text-destructive p-1 rounded hover:bg-destructive/10 transition-colors" title="Retirer">
                     <Unlink className="w-3.5 h-3.5" />
                   </button>
@@ -402,7 +448,7 @@ function BundleDetail({ bundle, projectId }: { bundle: DatasetBundle; projectId:
                   {availableDatasets.map(d => {
                     const dt = dtMap.get(d.dataset_type_id);
                     return (
-                      <button key={d.dataset_id} onClick={() => addMutation.mutate(d.dataset_id)}
+                      <button key={d.dataset_id} onClick={() => addMutation.mutate({ bundleId: bundle.bundle_id, datasetId: d.dataset_id })}
                         className="w-full flex items-center justify-between px-3 py-2 rounded-md hover:bg-primary/10 transition-colors text-left">
                         <div className="flex items-center gap-2">
                           <Link2 className="w-3.5 h-3.5 text-primary/60" />
@@ -439,8 +485,7 @@ export default function BundlesPage() {
   const canCreateBundle = can(PermissionKey.BUNDLES_CREATE);
   const canDeleteBundle = can(PermissionKey.BUNDLES_DELETE);
   const canActivateBundle = can(PermissionKey.BUNDLES_ACTIVATE);
-  const { adapter, mode } = useDatasetStorage();
-  const queryClient = useQueryClient();
+  const utils = trpc.useUtils();
   const [showCreate, setShowCreate] = useState(false);
   const [validatingBundle, setValidatingBundle] = useState<DatasetBundle | null>(null);
   const [search, setSearch] = useState('');
@@ -448,16 +493,18 @@ export default function BundlesPage() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [expandedBundle, setExpandedBundle] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['dataset_bundles', currentProject?.id, envFilter, statusFilter],
-    queryFn: () => adapter.bundles.list(currentProject!.id, {
+  const { data: bundlesRaw, isLoading } = trpc.bundles.list.useQuery(
+    {
+      projectId: currentProject?.id ?? '',
       env: envFilter !== 'ALL' ? envFilter as TargetEnv : undefined,
       status: statusFilter !== 'ALL' ? statusFilter as BundleStatus : undefined,
-    }),
-    enabled: !!currentProject,
-  });
+    },
+    { enabled: !!currentProject }
+  );
 
-  const bundles = (data?.data || []) as DatasetBundle[];
+  const bundles = useMemo(() => {
+    return (bundlesRaw?.data || []).map(toFrontendBundle);
+  }, [bundlesRaw]);
 
   const filtered = useMemo(() => {
     if (!search) return bundles;
@@ -468,38 +515,34 @@ export default function BundlesPage() {
     );
   }, [bundles, search]);
 
-  const activateMutation = useMutation({
-    mutationFn: async (id: string) => adapter.bundles.update(id, { status: 'ACTIVE' }),
+  const activateMutation = trpc.bundles.update.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dataset_bundles'] });
+      utils.bundles.list.invalidate();
       toast.success('Bundle activé');
     },
   });
 
-  const deprecateMutation = useMutation({
-    mutationFn: async (id: string) => adapter.bundles.update(id, { status: 'DEPRECATED' }),
+  const deprecateMutation = trpc.bundles.update.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dataset_bundles'] });
+      utils.bundles.list.invalidate();
       toast.success('Bundle déprécié');
     },
   });
 
-  const cloneMutation = useMutation({
-    mutationFn: async (id: string) => adapter.bundles.clone(id),
+  const cloneMutation = trpc.bundles.clone.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dataset_bundles'] });
+      utils.bundles.list.invalidate();
       toast.success('Bundle cloné');
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err) => toast.error(err.message),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => adapter.bundles.delete(id),
+  const deleteMutation = trpc.bundles.delete.useMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dataset_bundles'] });
+      utils.bundles.list.invalidate();
       toast.success('Bundle supprimé');
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err) => toast.error(err.message),
   });
 
   if (!currentProject) {
@@ -521,9 +564,6 @@ export default function BundlesPage() {
           <p className="text-sm text-muted-foreground mt-1">
             Regroupez les datasets par environnement pour <strong className="text-foreground">{currentProject.name}</strong>.
             Un bundle = 1 dataset max par type.
-            <span className="ml-2 text-[10px] font-mono px-1.5 py-0.5 rounded bg-secondary/50 border border-border">
-              mode: {mode}
-            </span>
           </p>
         </div>
         {canCreateBundle && (
@@ -598,8 +638,6 @@ export default function BundlesPage() {
         <div className="space-y-2">
           {filtered.map(bundle => {
             const isExpanded = expandedBundle === bundle.bundle_id;
-            // Item count will be fetched when expanded; show placeholder
-            const itemCount = 0; // Loaded dynamically in BundleDetail
 
             return (
               <div key={bundle.bundle_id} className="bg-card border border-border rounded-lg overflow-hidden">
@@ -611,17 +649,16 @@ export default function BundlesPage() {
                     <EnvBadge env={bundle.env} />
                     <BundleStatusBadge status={bundle.status} />
                     <span className="text-[10px] font-mono text-muted-foreground">v{bundle.version}</span>
-                    <span className="text-[10px] text-muted-foreground">{itemCount} dataset(s)</span>
                   </div>
                   <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                     {canActivateBundle && bundle.status === 'DRAFT' && (
-                      <button onClick={() => activateMutation.mutate(bundle.bundle_id)}
+                      <button onClick={() => activateMutation.mutate({ bundleId: bundle.bundle_id, status: 'ACTIVE' })}
                         className="text-green-400 hover:text-green-300 p-1.5 rounded hover:bg-green-500/10 transition-colors" title="Activer">
                         <CheckCircle2 className="w-4 h-4" />
                       </button>
                     )}
                     {canActivateBundle && bundle.status === 'ACTIVE' && (
-                      <button onClick={() => deprecateMutation.mutate(bundle.bundle_id)}
+                      <button onClick={() => deprecateMutation.mutate({ bundleId: bundle.bundle_id, status: 'DEPRECATED' })}
                         className="text-red-400 hover:text-red-300 p-1.5 rounded hover:bg-red-500/10 transition-colors" title="Déprécier">
                         <Archive className="w-4 h-4" />
                       </button>
@@ -630,12 +667,12 @@ export default function BundlesPage() {
                       className="text-cyan-400 hover:text-cyan-300 p-1.5 rounded hover:bg-cyan-500/10 transition-colors" title="Valider avec scénario">
                       <ClipboardCheck className="w-4 h-4" />
                     </button>
-                    <button onClick={() => cloneMutation.mutate(bundle.bundle_id)}
+                    <button onClick={() => cloneMutation.mutate({ bundleId: bundle.bundle_id })}
                       className="text-muted-foreground hover:text-cyan-400 p-1.5 rounded hover:bg-cyan-500/10 transition-colors" title="Cloner">
                       <Copy className="w-4 h-4" />
                     </button>
                     {canDeleteBundle && bundle.status === 'DRAFT' && (
-                      <button onClick={() => deleteMutation.mutate(bundle.bundle_id)}
+                      <button onClick={() => deleteMutation.mutate({ bundleId: bundle.bundle_id })}
                         className="text-muted-foreground hover:text-destructive p-1.5 rounded hover:bg-destructive/10 transition-colors" title="Supprimer">
                         <Trash2 className="w-4 h-4" />
                       </button>

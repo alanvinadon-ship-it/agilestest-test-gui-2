@@ -24,14 +24,14 @@ const createProjectInput = z.object({
 });
 
 const updateProjectInput = z.object({
-  projectId: z.number(),
+  projectId: z.string(),
   name: z.string().min(1).max(255).optional(),
   description: z.string().optional(),
   domain: z.string().optional(),
   status: z.enum(["ACTIVE", "ARCHIVED", "DRAFT"]).optional(),
 });
 
-const deleteProjectInput = z.object({ projectId: z.number() });
+const deleteProjectInput = z.object({ projectId: z.string() });
 
 export const projectsRouter = router({
   list: protectedProcedure.input(listProjectsInput).query(async ({ input }) => {
@@ -65,10 +65,10 @@ export const projectsRouter = router({
     };
   }),
 
-  get: protectedProcedure.input(z.object({ projectId: z.number() })).query(async ({ input }) => {
+  get: protectedProcedure.input(z.object({ projectId: z.string() })).query(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const result = await db.select().from(projects).where(eq(projects.id, input.projectId)).limit(1);
+    const result = await db.select().from(projects).where(eq(projects.uid, input.projectId)).limit(1);
     if (result.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Projet introuvable" });
     return result[0];
   }),
@@ -115,7 +115,7 @@ export const projectsRouter = router({
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-    const existing = await db.select().from(projects).where(eq(projects.id, input.projectId)).limit(1);
+    const existing = await db.select().from(projects).where(eq(projects.uid, input.projectId)).limit(1);
     if (existing.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Projet introuvable" });
 
     const updateSet: Record<string, unknown> = {};
@@ -125,7 +125,7 @@ export const projectsRouter = router({
     if (input.status !== undefined) updateSet.status = input.status;
 
     if (Object.keys(updateSet).length > 0) {
-      await db.update(projects).set(updateSet).where(eq(projects.id, input.projectId));
+      await db.update(projects).set(updateSet).where(eq(projects.uid, input.projectId));
     }
 
     await writeAuditLog({
@@ -143,11 +143,11 @@ export const projectsRouter = router({
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-    const existing = await db.select().from(projects).where(eq(projects.id, input.projectId)).limit(1);
+    const existing = await db.select().from(projects).where(eq(projects.uid, input.projectId)).limit(1);
     if (existing.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Projet introuvable" });
 
-    await db.delete(projectMemberships).where(eq(projectMemberships.projectId, String(input.projectId)));
-    await db.delete(projects).where(eq(projects.id, input.projectId));
+    await db.delete(projectMemberships).where(eq(projectMemberships.projectId, input.projectId));
+    await db.delete(projects).where(eq(projects.uid, input.projectId));
 
     await writeAuditLog({
       userId: ctx.user!.id,

@@ -23,19 +23,31 @@ const projectScopedList = z.object({
 
 // ─── Profiles ───────────────────────────────────────────────────────────────
 export const profilesRouter = router({
-  list: protectedProcedure.input(projectScopedList).query(async ({ input }) => {
+  list: protectedProcedure.input(projectScopedList.extend({
+    cursor: z.number().optional(), // id of last item for cursor-based pagination
+  })).query(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     const { page, pageSize, offset } = normalizePagination(input);
     const conditions: SQL[] = [eq(testProfiles.projectId, input.projectId)];
     if (input.search) conditions.push(like(testProfiles.name, `%${input.search}%`));
+    // Cursor-based: fetch items with id < cursor (descending order)
+    if (input.cursor) conditions.push(sql`${testProfiles.id} < ${input.cursor}`);
     const where = and(...conditions);
-    const [data, cnt] = await Promise.all([
-      db.select().from(testProfiles).where(where).orderBy(desc(testProfiles.createdAt)).limit(pageSize).offset(offset),
-      countRows(db, testProfiles, where),
-    ]);
+    const fetchSize = pageSize + 1; // fetch one extra to detect hasMore
+    const rows = await db.select().from(testProfiles).where(where).orderBy(desc(testProfiles.id)).limit(fetchSize);
+    const hasMore = rows.length > pageSize;
+    const data = hasMore ? rows.slice(0, pageSize) : rows;
+    const nextCursor = hasMore && data.length > 0 ? data[data.length - 1].id : undefined;
+    // Also return offset-based pagination for backward compat
+    const cnt = await countRows(db, testProfiles, and(eq(testProfiles.projectId, input.projectId), input.search ? like(testProfiles.name, `%${input.search}%`) : undefined));
     const total = cnt[0]?.count ?? 0;
-    return { data, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
+    return {
+      data,
+      pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) },
+      nextCursor,
+      hasMore,
+    };
   }),
   get: protectedProcedure.input(z.object({ profileId: z.number() })).query(async ({ input }) => {
     const db = await getDb();
@@ -112,6 +124,7 @@ export const scenariosRouter = router({
   list: protectedProcedure.input(projectScopedList.extend({
     testType: z.enum(["VABF", "VSR", "VABE"]).optional(),
     status: z.enum(["DRAFT", "FINAL", "DEPRECATED"]).optional(),
+    cursor: z.number().optional(), // id of last item for cursor-based pagination
   })).query(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
@@ -120,13 +133,27 @@ export const scenariosRouter = router({
     if (input.search) conditions.push(like(testScenarios.name, `%${input.search}%`));
     if (input.testType) conditions.push(eq(testScenarios.testType, input.testType));
     if (input.status) conditions.push(eq(testScenarios.status, input.status));
+    // Cursor-based: fetch items with id < cursor (descending order)
+    if (input.cursor) conditions.push(sql`${testScenarios.id} < ${input.cursor}`);
     const where = and(...conditions);
-    const [data, cnt] = await Promise.all([
-      db.select().from(testScenarios).where(where).orderBy(desc(testScenarios.createdAt)).limit(pageSize).offset(offset),
-      countRows(db, testScenarios, where),
-    ]);
+    const fetchSize = pageSize + 1;
+    const rows = await db.select().from(testScenarios).where(where).orderBy(desc(testScenarios.id)).limit(fetchSize);
+    const hasMore = rows.length > pageSize;
+    const data = hasMore ? rows.slice(0, pageSize) : rows;
+    const nextCursor = hasMore && data.length > 0 ? data[data.length - 1].id : undefined;
+    // Also return offset-based pagination for backward compat
+    const baseConditions: SQL[] = [eq(testScenarios.projectId, input.projectId)];
+    if (input.search) baseConditions.push(like(testScenarios.name, `%${input.search}%`));
+    if (input.testType) baseConditions.push(eq(testScenarios.testType, input.testType));
+    if (input.status) baseConditions.push(eq(testScenarios.status, input.status));
+    const cnt = await countRows(db, testScenarios, and(...baseConditions));
     const total = cnt[0]?.count ?? 0;
-    return { data, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
+    return {
+      data,
+      pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) },
+      nextCursor,
+      hasMore,
+    };
   }),
   get: protectedProcedure.input(z.object({ scenarioId: z.number() })).query(async ({ input }) => {
     const db = await getDb();

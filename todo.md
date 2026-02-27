@@ -197,3 +197,22 @@
 - [x] Tests: 422 tests Vitest passent (dont 2 nouveaux tests de persistance profiles/scenarios)
 - [x] Vérification: Projet "Orange-Web-Persistance-Test" persiste après rafraîchissement ✓
 - [x] Vérification: Profil "Profil Persistance Test" persiste après rafraîchissement ✓
+- [x] Étape 1: Backend — Tables Drizzle dataset_types/dataset_instances/dataset_bundles/bundle_items créées via SQL
+- [x] Étape 1: Backend — Routeurs tRPC datasets CRUD existant dans testing.ts
+- [x] Étape 1: Backend — Routeurs tRPC bundles CRUD (list/create/update/delete) + instances + bundleItems + datasetTypes dans bundles.ts
+- [x] Étape 1: Backend — protectedProcedure sur tous endpoints bundles (auth requise)
+- [x] Étape 1: Frontend — BundlesPage migrée vers tRPC (bundles.list/create/update/delete)
+- [x] Étape 1: Frontend — Invalidation cache via utils.bundles.list.invalidate()
+- [x] Étape 1: Tests — 422 tests Vitest passent + vérification navigateur bundle persiste après refresh
+- [ ] Étape 2: Cleanup — repositoryApi/localStore encore utilisés par pages secondaires (DatasetsPage, DatasetTypesPage, DriveCampaignsPage)
+- [ ] Étape 2: Cleanup — Mettre à jour imports/exports/barrels
+- [ ] Étape 2: Cleanup — Gate anti-régression (script audit:legacy ou eslint rule)
+- [ ] Étape 2: Tests — build + typecheck + vitest OK après cleanup
+- [x] Étape 3: Backend — Cursor pagination ajoutée aux routeurs profiles.list et scenarios.list (cursor optionnel basé sur id)
+- [x] Étape 3: Backend — profiles.list et scenarios.list supportent cursor + offset pagination
+- [ ] Étape 3: Backend — Indexes à ajouter (created_at desc, id desc) sur profiles/scenarios pour performance
+- [ ] Étape 3: Frontend — Migrer ProfilesPage et ScenariosPage vers cursor pagination UI (Charger plus)
+- [ ] Étape 3: Tests — cursor pagination tests à écrire
+- [x] Fix: Migrer projectId vers UUID (uid) partout — useProjectQueries, projectStore, uiStorage, routeurs projects
+- [x] Fix: Corriger données orphelines dans DB — project_id numériques remplacés par UUID dans test_profiles, test_scenarios, executions
+- [x] Vérification: Bundle "BUNDLE_PERSISTANCE_TEST_V1" persiste après rafraîchissement ✓

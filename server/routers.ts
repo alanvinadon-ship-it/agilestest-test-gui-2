@@ -20,6 +20,12 @@ import { jobsRouter } from "./routers/jobs";
 import { reportsRouter } from "./routers/reports";
 import { analyticsRouter } from "./routers/analytics";
 import { webhooksRouter } from "./routers/webhooks";
+import {
+  bundlesRouter,
+  bundleItemsRouter,
+  datasetInstancesRouter,
+  datasetTypesRouter,
+} from "./routers/bundles";
 
 export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -63,6 +69,12 @@ export const appRouter = router({
   reports: reportsRouter,
   analytics: analyticsRouter,
   webhooks: webhooksRouter,
+
+  // Bundles & dataset instances
+  bundles: bundlesRouter,
+  bundleItems: bundleItemsRouter,
+  datasetInstances: datasetInstancesRouter,
+  datasetTypes: datasetTypesRouter,
 });
 
 export type AppRouter = typeof appRouter;
