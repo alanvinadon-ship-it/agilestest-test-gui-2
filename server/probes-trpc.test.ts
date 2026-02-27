@@ -226,13 +226,11 @@ describe("schema: probes table", () => {
   it("should have probes table with required columns", async () => {
     const schema = await import("../drizzle/schema");
     expect(schema.probes).toBeDefined();
-    expect(schema.probes.name).toBeDefined();
+    expect(schema.probes.site).toBeDefined();
     expect(schema.probes.probeType).toBeDefined();
     expect(schema.probes.status).toBeDefined();
-    expect(schema.probes.host).toBeDefined();
-    expect(schema.probes.port).toBeDefined();
+    expect(schema.probes.zone).toBeDefined();
     expect(schema.probes.capabilities).toBeDefined();
-    expect(schema.probes.config).toBeDefined();
     expect(schema.probes.lastSeenAt).toBeDefined();
   });
 });

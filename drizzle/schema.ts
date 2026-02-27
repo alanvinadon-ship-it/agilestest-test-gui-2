@@ -245,19 +245,35 @@ export type Capture = typeof captures.$inferSelect;
 export type InsertCapture = typeof captures.$inferInsert;
 
 // ─── Probes ─────────────────────────────────────────────────────────────────
+// DB columns: id, uid, site, zone, type, capabilities, status, auth_token_hash, last_seen_at, metadata,
+// version, uptime_seconds, cpu_percent, disk_free_mb, interfaces, active_sessions, total_captures,
+// last_error, health_status, heartbeat_interval_sec, allowlist_cidrs, tls_enabled, created_at, updated_at, probeToken
 export const probes = mysqlTable("probes", {
   id: int("id").autoincrement().primaryKey(),
-  name: varchar("name", { length: 255 }).notNull(),
-  probeType: mysqlEnum("probeType", ["LINUX_EDGE", "K8S_CLUSTER", "NETWORK_TAP"]).default("LINUX_EDGE").notNull(),
-  status: mysqlEnum("status", ["ONLINE", "OFFLINE", "DEGRADED"]).default("OFFLINE").notNull(),
-  host: varchar("host", { length: 255 }),
-  port: int("port"),
+  uid: varchar("uid", { length: 36 }),
+  site: varchar("site", { length: 255 }),
+  zone: varchar("zone", { length: 255 }),
+  probeType: varchar("type", { length: 100 }),
   capabilities: json("capabilities"),
-  config: json("config"),
-  lastSeenAt: timestamp("lastSeenAt"),
+  status: varchar("status", { length: 50 }).default("OFFLINE").notNull(),
+  authTokenHash: varchar("auth_token_hash", { length: 255 }),
+  lastSeenAt: timestamp("last_seen_at"),
+  metadata: json("metadata"),
+  version: varchar("version", { length: 50 }),
+  uptimeSeconds: bigint("uptime_seconds", { mode: "number" }),
+  cpuPercent: double("cpu_percent"),
+  diskFreeMb: int("disk_free_mb"),
+  interfaces: json("interfaces"),
+  activeSessions: int("active_sessions").default(0),
+  totalCaptures: int("total_captures").default(0),
+  lastError: text("last_error"),
+  healthStatus: varchar("health_status", { length: 20 }),
+  heartbeatIntervalSec: int("heartbeat_interval_sec").default(30),
+  allowlistCidrs: json("allowlist_cidrs"),
+  tlsEnabled: boolean("tls_enabled").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
   probeToken: varchar("probeToken", { length: 128 }),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 export type ProbeRow = typeof probes.$inferSelect;
@@ -353,6 +369,23 @@ export const probeAlertState = mysqlTable("probe_alert_state", {
 
 export type ProbeAlertState = typeof probeAlertState.$inferSelect;
 export type InsertProbeAlertState = typeof probeAlertState.$inferInsert;
+
+// ─── Unified Alerts State (success rate, probes RED, etc.) ──────────────────
+export const alertsState = mysqlTable("alerts_state", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  orgId: varchar("org_id", { length: 100 }).notNull(),
+  alertType: mysqlEnum("alert_type", ["SUCCESS_RATE_LOW", "PROBE_RED"]).notNull(),
+  key: varchar("alert_key", { length: 255 }).notNull(), // "GLOBAL" or probeUid
+  stateJson: json("state_json"), // { consecutiveBreaches, lastSuccessRate, threshold, ... }
+  lastNotifiedAt: timestamp("last_notified_at"),
+  resolvedAt: timestamp("resolved_at"),
+  alertCount: int("alert_count").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+export type AlertsState = typeof alertsState.$inferSelect;
+export type InsertAlertsState = typeof alertsState.$inferInsert;
 
 // ─── Dataset Types (gabarits de datasets) ──────────────────────────────────
 // DB columns: id, uid, dataset_type_id, domain, test_type, name, description, schema_fields, example_placeholders, tags, created_at, updated_at

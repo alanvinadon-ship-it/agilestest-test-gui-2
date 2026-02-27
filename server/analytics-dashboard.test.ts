@@ -266,7 +266,136 @@ describe("Analytics — SQL queries use correct column names", () => {
   });
 });
 
-// ─── GlobalDashboard result shape tests ─────────────────────────────────────
+// ─── Date range from/to tests ───────────────────────────────────────────────────
+
+describe("Analytics — date range from/to", () => {
+  it("backend should accept from/to in globalDashboard input schema", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+    const filePath = path.resolve(__dirname, "./routers/analytics.ts");
+    const content = fs.readFileSync(filePath, "utf-8");
+    expect(content).toContain("from: z.string().optional()");
+    expect(content).toContain("to: z.string().optional()");
+  });
+
+  it("backend should apply from/to to executions WHERE clause", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+    const filePath = path.resolve(__dirname, "./routers/analytics.ts");
+    const content = fs.readFileSync(filePath, "utf-8");
+    expect(content).toContain("e.created_at >= '");
+    expect(content).toContain("e.created_at <= '");
+  });
+
+  it("backend should apply from/to to incidents WHERE clause", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+    const filePath = path.resolve(__dirname, "./routers/analytics.ts");
+    const content = fs.readFileSync(filePath, "utf-8");
+    expect(content).toContain("i.detected_at >= '");
+    expect(content).toContain("i.detected_at <= '");
+  });
+
+  it("frontend should have date input fields for from/to", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+    const filePath = path.resolve(__dirname, "../client/src/pages/GlobalAnalyticsPage.tsx");
+    const content = fs.readFileSync(filePath, "utf-8");
+    expect(content).toContain('type="date"');
+    expect(content).toContain("fromDate");
+    expect(content).toContain("toDate");
+  });
+
+  it("frontend should persist from/to in URL query params", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+    const filePath = path.resolve(__dirname, "../client/src/pages/GlobalAnalyticsPage.tsx");
+    const content = fs.readFileSync(filePath, "utf-8");
+    expect(content).toContain("setSearchParams");
+    expect(content).toContain("window.location.search");
+    expect(content).toContain("window.history.replaceState");
+  });
+
+  it("frontend should have preset buttons (7d, 30d, 90d, YTD)", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+    const filePath = path.resolve(__dirname, "../client/src/pages/GlobalAnalyticsPage.tsx");
+    const content = fs.readFileSync(filePath, "utf-8");
+    expect(content).toContain("7 jours");
+    expect(content).toContain("30 jours");
+    expect(content).toContain("90 jours");
+    expect(content).toContain("Depuis janv.");
+  });
+
+  it("frontend should have a reset button for date range", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+    const filePath = path.resolve(__dirname, "../client/src/pages/GlobalAnalyticsPage.tsx");
+    const content = fs.readFileSync(filePath, "utf-8");
+    expect(content).toContain("R\u00e9initialiser");
+    expect(content).toContain("resetDates");
+  });
+
+  it("frontend should pass from/to to trpc query input", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+    const filePath = path.resolve(__dirname, "../client/src/pages/GlobalAnalyticsPage.tsx");
+    const content = fs.readFileSync(filePath, "utf-8");
+    expect(content).toContain("from: fromDate || undefined");
+    expect(content).toContain("to: toDate || undefined");
+  });
+});
+
+// ─── Export PDF tests ────────────────────────────────────────────────────────
+
+describe("Analytics — Export PDF", () => {
+  it("frontend should have Export PDF button", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+    const filePath = path.resolve(__dirname, "../client/src/pages/GlobalAnalyticsPage.tsx");
+    const content = fs.readFileSync(filePath, "utf-8");
+    expect(content).toContain("Export PDF");
+    expect(content).toContain("handleExportPdf");
+  });
+
+  it("export should capture chart images via toDataURL", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+    const filePath = path.resolve(__dirname, "../client/src/pages/GlobalAnalyticsPage.tsx");
+    const content = fs.readFileSync(filePath, "utf-8");
+    expect(content).toContain("toDataURL");
+    expect(content).toContain("image/png");
+  });
+
+  it("export should generate HTML report with KPIs and charts", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+    const filePath = path.resolve(__dirname, "../client/src/pages/GlobalAnalyticsPage.tsx");
+    const content = fs.readFileSync(filePath, "utf-8");
+    expect(content).toContain("Dashboard Analytique");
+    expect(content).toContain("new Blob");
+    expect(content).toContain("text/html");
+  });
+
+  it("export should include period and date range in filename", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+    const filePath = path.resolve(__dirname, "../client/src/pages/GlobalAnalyticsPage.tsx");
+    const content = fs.readFileSync(filePath, "utf-8");
+    expect(content).toContain("dashboard-analytique-");
+  });
+
+  it("export should show loading state during generation", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+    const filePath = path.resolve(__dirname, "../client/src/pages/GlobalAnalyticsPage.tsx");
+    const content = fs.readFileSync(filePath, "utf-8");
+    expect(content).toContain("pdfExporting");
+    expect(content).toContain("G\u00e9n\u00e9ration...");
+  });
+});
+
+// ─── GlobalDashboard result shape tests ─────────────────────────────────────────
 
 describe("Analytics — globalDashboard result shape", () => {
   it("should return runs series with labels, passed, failed, aborted, total, successRate", async () => {

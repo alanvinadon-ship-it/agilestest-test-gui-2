@@ -304,7 +304,7 @@ export const driveProbeLinksRouter = router({
           probeId: driveProbeLinks.probeId,
           role: driveProbeLinks.role,
           createdAt: driveProbeLinks.createdAt,
-          probeName: probes.name,
+          probeName: probes.site,
           probeType: probes.probeType,
           probeStatus: probes.status,
         })

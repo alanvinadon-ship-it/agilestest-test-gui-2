@@ -133,9 +133,9 @@ describe("notification content", () => {
   it("should include probe name, type, host, status in notification", async () => {
     const fs = await import("fs");
     const content = fs.readFileSync("server/probeAlertService.ts", "utf-8");
-    expect(content).toContain("probe.name");
+    expect(content).toContain("probe.site");
     expect(content).toContain("probe.probeType");
-    expect(content).toContain("probe.host");
+    expect(content).toContain("probe.zone");
     expect(content).toContain("probe.status");
   });
 

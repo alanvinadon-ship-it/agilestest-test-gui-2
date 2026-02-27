@@ -12,6 +12,7 @@ export const WEBHOOK_EVENT_TYPES = [
   "probe.alert.red",
   "probe.status.changed",
   "incident.created",
+  "analytics.success_rate.low",
 ] as const;
 export type WebhookEventType = (typeof WEBHOOK_EVENT_TYPES)[number];
 

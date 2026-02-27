@@ -395,8 +395,8 @@ export const collectorRouter = router({
         metaJson: collectorSessions.metaJson,
         captureId: collectorSessions.captureId,
         probeId: collectorSessions.probeId,
-        probeName: probes.name,
-        probeHost: probes.host,
+        probeName: probes.site,
+        probeZone: probes.zone,
         probeStatus: probes.status,
         captureName: captures.name,
       })
@@ -440,14 +440,14 @@ export const collectorRouter = router({
       const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
       const eventsPerProbe = await db.select({
         probeId: collectorSessions.probeId,
-        probeName: probes.name,
+        probeName: probes.site,
         eventCount: sql<number>`count(${collectorEvents.id})`,
       })
         .from(collectorEvents)
         .innerJoin(collectorSessions, eq(collectorEvents.sessionId, collectorSessions.id))
         .leftJoin(probes, eq(collectorSessions.probeId, probes.id))
         .where(sql`${collectorEvents.createdAt} >= ${oneDayAgo}`)
-        .groupBy(collectorSessions.probeId, probes.name)
+        .groupBy(collectorSessions.probeId, probes.site)
         .orderBy(sql`count(${collectorEvents.id}) DESC`)
         .limit(10);
 

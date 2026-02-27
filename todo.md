@@ -369,3 +369,13 @@
 - [x] E2E Validation C: Assertions counts + intégrité FK + contenu normalisé + idempotence inject (16 tests)
 - [x] E2E Validation D: Documentation docs/IMPORT_EXPORT_VALIDATION.md
 - [x] E2E Validation Final: 570 tests verts, 0 TS errors + checkpoint
+- [x] Sprint Analytics 1A: Frontend — Date picker from/to + presets (7j, 30j, 90j, YTD) + boutons Appliquer/Réinitialiser
+- [x] Sprint Analytics 1B: Frontend — Persister from/to en URL query params (?period=week&from=...&to=...)
+- [x] Sprint Analytics 1C: Backend — Vérification parsing ISO date from/to + tests
+- [x] Sprint Analytics 2A: Frontend — Export HTML rapport (client-side, ouverture nouvelle fenêtre avec KPIs + tableaux)
+- [x] Sprint Analytics 2B: Frontend — Bouton Export Rapport dans la toolbar + génération HTML
+- [x] Sprint Analytics 2C: Tests frontend export rapport (vérification intégration)
+- [x] Sprint Analytics 3A: Backend — Table alerts_state + success rate alert service (polling 5min, hysteresis 2 runs, cooldown 60min)
+- [x] Sprint Analytics 3B: Backend — Probes RED alert unifié (probeAlertService.ts) + webhook dispatch analytics.success_rate.low
+- [x] Sprint Analytics 3C: Tests alertes (13 tests: threshold, cooldown, reset, probe health, webhook types)
+- [x] Sprint Analytics Final: 596 tests verts, 0 TS errors + checkpoint

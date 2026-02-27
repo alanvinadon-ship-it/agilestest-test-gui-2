@@ -134,11 +134,11 @@ export async function evaluateProbesHealthAndAlert(): Promise<{
     try {
       const redMinutes = Math.round(redDurationMs / 60000);
       await notifyOwner({
-        title: `🔴 Sonde "${probe.name}" en état critique (RED)`,
+        title: `🔴 Sonde "${probe.site || probe.uid}" en état critique (RED)`,
         content: [
-          `La sonde **${probe.name}** (${probe.probeType}) est en état RED depuis **${redMinutes} minutes**.`,
+          `La sonde **${probe.site || probe.uid}** (${probe.probeType}) est en état RED depuis **${redMinutes} minutes**.`,
           ``,
-          `- **Hôte** : ${probe.host || "N/A"}`,
+          `- **Zone** : ${probe.zone || "N/A"}`,
           `- **Statut** : ${probe.status}`,
           `- **Dernier contact** : ${probe.lastSeenAt ? new Date(probe.lastSeenAt).toLocaleString("fr-FR") : "Jamais"}`,
           ``,
@@ -157,9 +157,9 @@ export async function evaluateProbesHealthAndAlert(): Promise<{
         "probe.alert.red",
         {
           probeId: probe.id,
-          probeName: probe.name,
+          probeName: probe.site || probe.uid,
           probeType: probe.probeType,
-          host: probe.host,
+          zone: probe.zone,
           status: probe.status,
           redSinceMinutes: Math.round(redDurationMs / 60000),
           timestamp: new Date(now).toISOString(),

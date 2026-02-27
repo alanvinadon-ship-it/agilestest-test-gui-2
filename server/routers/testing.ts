@@ -682,11 +682,11 @@ export const probesRouter = router({
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     const conditions: SQL[] = [];
     if (input?.status) conditions.push(eq(probes.status, input.status));
-    if (input?.q) conditions.push(like(probes.name, `%${input.q}%`));
+    if (input?.q) conditions.push(like(probes.site, `%${input.q}%`));
     const where = conditions.length ? and(...conditions) : undefined;
     const rows = await db.select({
-      id: probes.id, name: probes.name, probeType: probes.probeType, status: probes.status,
-    }).from(probes).where(where).orderBy(probes.name).limit(200);
+      id: probes.id, site: probes.site, probeType: probes.probeType, status: probes.status,
+    }).from(probes).where(where).orderBy(probes.site).limit(200);
     return rows;
   }),
   monitoring: protectedProcedure.input(z.object({
@@ -699,9 +699,9 @@ export const probesRouter = router({
     const conditions: SQL[] = [];
     if (input?.status) conditions.push(eq(probes.status, input.status));
     if (input?.probeType) conditions.push(eq(probes.probeType, input.probeType));
-    if (input?.q) conditions.push(like(probes.name, `%${input.q}%`));
+    if (input?.q) conditions.push(like(probes.site, `%${input.q}%`));
     const where = conditions.length ? and(...conditions) : undefined;
-    const rows = await db.select().from(probes).where(where).orderBy(probes.name).limit(500);
+    const rows = await db.select().from(probes).where(where).orderBy(probes.site).limit(500);
     const HEALTH_GREEN_SEC = Number(process.env.PROBE_HEALTH_GREEN_SEC ?? 60);
     const HEALTH_ORANGE_SEC = Number(process.env.PROBE_HEALTH_ORANGE_SEC ?? 300);
     const now = Date.now();
@@ -734,7 +734,7 @@ export const probesRouter = router({
     const conditions: SQL[] = [];
     if (input.status) conditions.push(eq(probes.status, input.status));
     if (input.probeType) conditions.push(eq(probes.probeType, input.probeType));
-    if (input.search) conditions.push(like(probes.name, `%${input.search}%`));
+    if (input.search) conditions.push(like(probes.site, `%${input.search}%`));
     if (input.cursor) conditions.push(lt(probes.id, input.cursor));
     const where = conditions.length ? and(...conditions) : undefined;
     const baseQuery = where ? db.select().from(probes).where(where) : db.select().from(probes);
@@ -772,10 +772,11 @@ export const probesRouter = router({
   })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const uid = (await import('crypto')).randomUUID();
     const res = await db.insert(probes).values({
-      name: input.name, probeType: input.probeType, status: "OFFLINE",
-      host: input.host ?? null, port: input.port ?? null,
-      capabilities: input.capabilities ?? null, config: input.config ?? null,
+      uid, site: input.name, probeType: input.probeType, status: "OFFLINE",
+      zone: input.host ?? null,
+      capabilities: input.capabilities ?? null,
     });
     return { success: true, probeId: Number(res[0].insertId) };
   }),
@@ -791,12 +792,10 @@ export const probesRouter = router({
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     const u: Record<string, unknown> = {};
-    if (input.name !== undefined) u.name = input.name;
+    if (input.name !== undefined) u.site = input.name;
     if (input.probeType !== undefined) u.probeType = input.probeType;
-    if (input.host !== undefined) u.host = input.host;
-    if (input.port !== undefined) u.port = input.port;
+    if (input.host !== undefined) u.zone = input.host;
     if (input.capabilities !== undefined) u.capabilities = input.capabilities;
-    if (input.config !== undefined) u.config = input.config;
     if (Object.keys(u).length) await db.update(probes).set(u).where(eq(probes.id, input.probeId));
     return { success: true };
   }),

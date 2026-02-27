@@ -231,3 +231,77 @@ Dashboard par projet utilisant `analytics.dashboard` avec les mêmes types de gr
 ## RBAC
 
 Les deux endpoints utilisent `protectedProcedure` : tout utilisateur authentifié peut consulter les analytics. Le filtrage par `projectUid` est optionnel et ne vérifie pas l'appartenance au projet (les analytics sont cross-projets par design).
+
+---
+
+## Alertes Automatiques
+
+### Success Rate Alert
+
+| Paramètre | Défaut | Env Variable |
+|---|---|---|
+| Seuil | 90% | `ANALYTICS_SUCCESS_RATE_THRESHOLD` |
+| Fenêtre | 7 jours | `ANALYTICS_WINDOW_DAYS` |
+| Détections consécutives | 2 | (hardcodé) |
+| Cooldown | 60 min | `ANALYTICS_ALERT_COOLDOWN_MS` |
+| Marge de récupération | +2% | `ANALYTICS_RECOVERY_MARGIN` |
+
+**Flux** :
+1. Toutes les 5 minutes, le job poller évalue le taux de succès global
+2. Si le taux < seuil pendant 2 évaluations consécutives → notification owner + webhook `analytics.success_rate.low`
+3. Anti-spam : pas de nouvelle notification pendant 60 min
+4. Récupération : quand le taux remonte au-dessus de seuil + marge, les compteurs sont réinitialisés
+
+### Probe RED Alert
+
+| Paramètre | Défaut | Env Variable |
+|---|---|---|
+| Seuil RED | 5 min | `PROBE_RED_THRESHOLD_MS` |
+| Anti-spam | 30 min | `PROBE_ANTI_SPAM_MS` |
+| Heartbeat GREEN | 60 sec | `PROBE_HEALTH_GREEN_SEC` |
+| Heartbeat ORANGE | 300 sec | `PROBE_HEALTH_ORANGE_SEC` |
+
+### Table `alerts_state`
+
+| Colonne | Type | Description |
+|---|---|---|
+| `uid` | VARCHAR(36) | UUID unique |
+| `org_id` | VARCHAR(100) | Scope organisationnel |
+| `alert_type` | VARCHAR(50) | Type d'alerte |
+| `key` | VARCHAR(100) | Clé unique (GLOBAL, probe-{id}) |
+| `state_json` | JSON | État interne (breaches, threshold) |
+| `alert_count` | INT | Nombre de notifications envoyées |
+| `last_notified_at` | DATETIME | Dernière notification |
+| `resolved_at` | DATETIME | Date de résolution |
+
+---
+
+## Date Range et Export
+
+### URL Params
+
+Les paramètres from/to sont persistés dans l'URL pour le partage :
+
+```
+/analytics?period=week&from=2026-01-01&to=2026-02-27
+```
+
+### Presets
+
+| Preset | Description |
+|---|---|
+| 7 derniers jours | `from = now - 7d` |
+| 30 derniers jours | `from = now - 30d` |
+| 90 derniers jours | `from = now - 90d` |
+| Depuis début d'année | `from = 1er janvier` |
+
+### Export Rapport
+
+Le bouton "Exporter Rapport" génère un rapport HTML complet (KPIs + tableaux) dans une nouvelle fenêtre, prêt pour impression PDF via le navigateur.
+
+---
+
+## Tests
+
+- **analytics-dashboard.test.ts** : 18 tests (structure, date range, KPIs, by project, top failed)
+- **alerts.test.ts** : 13 tests (alerts_state CRUD, success rate threshold/breach/cooldown/recovery, probe health, webhook types, job queue integration)

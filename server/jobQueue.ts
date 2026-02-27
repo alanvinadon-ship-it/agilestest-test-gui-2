@@ -9,6 +9,7 @@ import { eq, and, lte, sql, inArray } from "drizzle-orm";
 import { ENV } from "./_core/env";
 import { deleteArtifact } from "./artifactStorage";
 import { evaluateProbesHealthAndAlert } from "./probeAlertService";
+import { evaluateSuccessRateAlert } from "./successRateAlertService";
 import { processWebhookDeliveries } from "./routers/webhooks";
 import { notifyOwner } from "./_core/notification";
 
@@ -148,6 +149,7 @@ export async function pollAndProcess(): Promise<number> {
 
 let _probeAlertInterval: ReturnType<typeof setInterval> | null = null;
 let _webhookDeliveryInterval: ReturnType<typeof setInterval> | null = null;
+let _successRateAlertInterval: ReturnType<typeof setInterval> | null = null;
 
 export function startPolling(intervalMs = 5000) {
   if (_polling) return;
@@ -189,6 +191,23 @@ export function startPolling(intervalMs = 5000) {
     }
   }, webhookIntervalMs);
   console.log(`[WebhookDelivery] Delivery processor started (interval: ${webhookIntervalMs}ms)`);
+
+  // Start success rate alert evaluation every 5 min
+  const successRateIntervalMs = Number(process.env.SUCCESS_RATE_ALERT_POLL_MS ?? 5 * 60 * 1000);
+  _successRateAlertInterval = setInterval(async () => {
+    try {
+      const result = await evaluateSuccessRateAlert();
+      if (result.alertSent) {
+        console.log(`[SuccessRateAlert] Alert sent — rate: ${((result.successRate ?? 0) * 100).toFixed(1)}%`);
+      }
+      if (result.resolved) {
+        console.log(`[SuccessRateAlert] Resolved — rate recovered to ${((result.successRate ?? 0) * 100).toFixed(1)}%`);
+      }
+    } catch (err) {
+      console.error("[SuccessRateAlert] Evaluation error:", err);
+    }
+  }, successRateIntervalMs);
+  console.log(`[SuccessRateAlert] Evaluation started (interval: ${successRateIntervalMs}ms)`);
 }
 
 export function stopPolling() {
@@ -203,6 +222,10 @@ export function stopPolling() {
   if (_webhookDeliveryInterval) {
     clearInterval(_webhookDeliveryInterval);
     _webhookDeliveryInterval = null;
+  }
+  if (_successRateAlertInterval) {
+    clearInterval(_successRateAlertInterval);
+    _successRateAlertInterval = null;
   }
   _polling = false;
   console.log("[JobQueue] Polling stopped");
