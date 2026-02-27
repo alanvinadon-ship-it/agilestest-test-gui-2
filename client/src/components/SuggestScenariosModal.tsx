@@ -8,7 +8,7 @@
  * - Audit log
  */
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import {
   X, Sparkles, ChevronRight, ChevronDown, Check, Filter,
   AlertTriangle, Info, Zap, FileText, Tag, ArrowRight,
@@ -22,7 +22,10 @@ import {
   bulkImportSuggestions,
   type SuggestedScenario,
   type SuggestResponse,
+  type ScenarioStore,
+  type AuditStore,
 } from '../services/scenarioSuggestionEngine';
+import { trpc } from '@/lib/trpc';
 
 interface Props {
   profile: TestProfile;
@@ -81,6 +84,82 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
   const [importing, setImporting] = useState(false);
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
 
+  // Fetch scenarios for the project to build the ScenarioStore
+  const { data: scenariosData } = trpc.scenarios.list.useQuery(
+    { projectId, pageSize: 1000 },
+    { enabled: !!projectId && open }
+  );
+  const createMutation = trpc.scenarios.create.useMutation();
+  const updateMutation = trpc.scenarios.update.useMutation();
+  const utils = trpc.useUtils();
+
+  // Build a synchronous ScenarioStore adapter from tRPC data
+  // NOTE: create/update are fire-and-forget (async) but the engine expects sync returns.
+  // We generate a temporary UID client-side and let the mutation resolve in background.
+  const scenarioStoreRef = useRef<ScenarioStore>(null);
+  const allScenarios = useMemo(() => scenariosData?.data ?? [], [scenariosData]);
+
+  scenarioStoreRef.current = {
+    nextId(pid: string, testType: string, domain: string) {
+      const prefix = `${testType}-`;
+      const existing = allScenarios
+        .filter((s: any) => (s.scenarioCode || s.scenario_code || '').startsWith(prefix))
+        .map((s: any) => {
+          const parts = (s.scenarioCode || s.scenario_code || '').split('-');
+          return parseInt(parts[2] || '0', 10);
+        })
+        .filter((n: number) => !isNaN(n));
+      const maxN = existing.length > 0 ? Math.max(...existing) : 0;
+      return { nnn: maxN + 1 };
+    },
+    codeExists(pid: string, code: string) {
+      return allScenarios.some((s: any) => (s.scenarioCode || s.scenario_code) === code);
+    },
+    generateCode(pid: string, testType: string, domain: string, title: string) {
+      const { nnn } = this.nextId(pid, testType, domain);
+      const slug = title.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
+      const DOMAIN_MAP: Record<string, string> = { WEB:'WEB', API:'API', MOBILE:'MOB', DESKTOP:'DESK', TELECOM_IMS:'IMS', TELECOM_RAN:'RAN', TELECOM_EPC:'EPC4', TELECOM_5GC_SA:'5GSA', TELECOM_5GC_NSA:'5GNSA', IOT:'DRIVE', IMS:'IMS', RAN:'RAN', EPC:'EPC4', '5GC':'5GSA' };
+      const dc = DOMAIN_MAP[domain] || domain.slice(0, 4).toUpperCase();
+      return `${testType}-${dc}-${nnn.toString().padStart(3, '0')}-${slug}`;
+    },
+    create(_profileId: string, _projectId: string, data: any) {
+      const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      // Fire-and-forget mutation
+      createMutation.mutateAsync({
+        projectId: _projectId,
+        profileId: _profileId,
+        name: data.name,
+        description: data.description,
+        scenarioCode: data.scenario_code,
+        status: data.status || 'DRAFT',
+        steps: data.steps || [],
+        requiredDatasetTypes: data.required_dataset_types || [],
+      }).then(() => utils.scenarios.list.invalidate());
+      return { id: tempId };
+    },
+    update(id: string, data: any) {
+      updateMutation.mutateAsync({
+        scenarioId: Number(id),
+        name: data.name,
+        description: data.description,
+        status: data.status,
+        steps: data.steps || undefined,
+        requiredDatasetTypes: data.required_dataset_types || undefined,
+      }).then(() => utils.scenarios.list.invalidate());
+    },
+    listByProject(_pid: string) {
+      return { data: allScenarios as any[] };
+    },
+  };
+
+  const auditStoreRef = useRef<AuditStore>(null);
+  auditStoreRef.current = {
+    add(entry: any) {
+      // Audit log is informational — just return a stub
+      return { id: `audit-${Date.now()}`, timestamp: new Date().toISOString() };
+    },
+  };
+
   // Générer les suggestions
   const handleGenerate = useCallback(() => {
     const result = suggestScenarios({
@@ -88,7 +167,7 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
       project_id: projectId,
       project_name: projectName,
       scope_level: scope,
-    });
+    }, scenarioStoreRef.current!);
     setResponse(result);
     const p0Ids = new Set(result.suggestions.filter(s => s.priority === 'P0').map(s => s.scenario_code));
     setSelected(p0Ids);
@@ -128,7 +207,7 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
     const toImport = response.suggestions.filter(s => selected.has(s.scenario_code));
 
     setTimeout(() => {
-      const report = bulkImportSuggestions(toImport, profile.id, projectId, importMode);
+      const report = bulkImportSuggestions(toImport, profile.id, projectId, importMode, scenarioStoreRef.current!, auditStoreRef.current!);
       setImportReport(report);
       setImporting(false);
       setStep('report');

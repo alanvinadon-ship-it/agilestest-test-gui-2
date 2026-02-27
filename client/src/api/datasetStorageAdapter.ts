@@ -2,20 +2,11 @@
  * DatasetStorageAdapter — Couche d'abstraction pour le stockage des Dataset Instances,
  * Bundles, BundleItems, SecretKeys et Validation.
  *
- * Deux implémentations :
- *   - LocalAdapter  → localStorage (demo/offline)
- *   - ApiAdapter    → Repository API REST (production)
- *
- * Le switch se fait via la variable d'environnement VITE_DATASET_STORAGE_MODE :
- *   - "local"  → LocalAdapter (défaut)
- *   - "api"    → ApiAdapter avec fallback local si API indisponible
+ * NOTE: L'implémentation LocalAdapter a été supprimée (localStore.ts supprimé).
+ * Seul l'ApiAdapter est désormais disponible. Les fallback retournent des données vides.
  */
 
 import apiClient from './client';
-import {
-  localDatasetInstances, localDatasetSecrets, localBundles,
-  localBundleItems, localValidation,
-} from './localStore';
 import type {
   DatasetInstance, TargetEnv, DatasetInstanceStatus,
   DatasetBundle, BundleStatus, BundleItem, DatasetSecretKey,
@@ -79,52 +70,59 @@ export interface DatasetStorageAdapter {
   mode: 'local' | 'api';
 }
 
-// ─── LocalAdapter ─────────────────────────────────────────────────────────
+// ─── Stub fallback (données vides) ───────────────────────────────────────
 
-const localInstancesAdapter: DatasetInstancesAdapter = {
-  list: async (projectId, params) => localDatasetInstances.list(projectId, params),
-  get: async (id) => localDatasetInstances.get(id),
-  create: async (projectId, data) => localDatasetInstances.create(projectId, data),
-  update: async (id, data) => localDatasetInstances.update(id, data),
-  clone: async (id) => localDatasetInstances.clone(id),
-  delete: async (id) => localDatasetInstances.delete(id),
+const emptyPaginated = <T>(): PaginatedResponse<T> => ({
+  data: [] as T[],
+  pagination: { page: 1, limit: 20, total: 0, total_pages: 0 },
+});
+
+const throwLocal = (op: string): never => {
+  throw new Error(`Opération "${op}" non disponible — backend API requis`);
 };
 
-const localSecretsAdapter: DatasetSecretsAdapter = {
-  list: async (datasetId) => localDatasetSecrets.list(datasetId),
-  set: async (datasetId, keyPath, isSecret) => localDatasetSecrets.set(datasetId, keyPath, isSecret),
-  remove: async (datasetId, keyPath) => localDatasetSecrets.remove(datasetId, keyPath),
-  maskValues: async (datasetId, valuesJson) => localDatasetSecrets.maskValues(datasetId, valuesJson),
+const stubInstancesAdapter: DatasetInstancesAdapter = {
+  list: async () => emptyPaginated<DatasetInstance>(),
+  get: async () => throwLocal('instances.get'),
+  create: async () => throwLocal('instances.create'),
+  update: async () => throwLocal('instances.update'),
+  clone: async () => throwLocal('instances.clone'),
+  delete: async () => throwLocal('instances.delete'),
 };
 
-const localBundlesAdapter: BundlesAdapter = {
-  list: async (projectId, params) => localBundles.list(projectId, params),
-  get: async (id) => localBundles.get(id),
-  create: async (projectId, data) => localBundles.create(projectId, data),
-  update: async (id, data) => localBundles.update(id, data),
-  clone: async (id) => localBundles.clone(id),
-  delete: async (id) => localBundles.delete(id),
+const stubSecretsAdapter: DatasetSecretsAdapter = {
+  list: async () => [],
+  set: async () => throwLocal('secrets.set'),
+  remove: async () => throwLocal('secrets.remove'),
+  maskValues: async (_d, v) => v,
 };
 
-const localBundleItemsAdapter: BundleItemsAdapter = {
-  list: async (bundleId) => localBundleItems.list(bundleId),
-  add: async (bundleId, datasetId) => localBundleItems.add(bundleId, datasetId),
-  remove: async (bundleId, datasetId) => localBundleItems.remove(bundleId, datasetId),
+const stubBundlesAdapter: BundlesAdapter = {
+  list: async () => emptyPaginated<DatasetBundle>(),
+  get: async () => throwLocal('bundles.get'),
+  create: async () => throwLocal('bundles.create'),
+  update: async () => throwLocal('bundles.update'),
+  clone: async () => throwLocal('bundles.clone'),
+  delete: async () => throwLocal('bundles.delete'),
 };
 
-const localValidationAdapter: ValidationAdapter = {
-  validateBundleForScenario: async (bundleId, scenarioId) =>
-    localValidation.validateBundleForScenario(bundleId, scenarioId),
-  validateScenarioDatasets: async (scenarioId, env) =>
-    localValidation.validateScenarioDatasets(scenarioId, env),
+const stubBundleItemsAdapter: BundleItemsAdapter = {
+  list: async () => [],
+  add: async () => throwLocal('bundleItems.add'),
+  remove: async () => throwLocal('bundleItems.remove'),
 };
 
-const LOCAL_ADAPTER: DatasetStorageAdapter = {
-  instances: localInstancesAdapter,
-  secrets: localSecretsAdapter,
-  bundles: localBundlesAdapter,
-  bundleItems: localBundleItemsAdapter,
-  validation: localValidationAdapter,
+const stubValidationAdapter: ValidationAdapter = {
+  validateBundleForScenario: async () => throwLocal('validation.validateBundleForScenario'),
+  validateScenarioDatasets: async () => throwLocal('validation.validateScenarioDatasets'),
+};
+
+const STUB_ADAPTER: DatasetStorageAdapter = {
+  instances: stubInstancesAdapter,
+  secrets: stubSecretsAdapter,
+  bundles: stubBundlesAdapter,
+  bundleItems: stubBundleItemsAdapter,
+  validation: stubValidationAdapter,
   mode: 'local',
 };
 
@@ -133,13 +131,13 @@ const LOCAL_ADAPTER: DatasetStorageAdapter = {
 const API_PREFIX = '/api/v1/repository';
 
 /**
- * Wrapper : tente l'appel API, fallback sur local en cas d'erreur.
+ * Wrapper : tente l'appel API, fallback sur stub en cas d'erreur.
  */
-async function withApiFallback<T>(apiFn: () => Promise<T>, localFn: () => T | Promise<T>): Promise<T> {
+async function withApiFallback<T>(apiFn: () => Promise<T>, stubFn: () => T | Promise<T>): Promise<T> {
   try {
     return await apiFn();
   } catch {
-    return localFn();
+    return stubFn();
   }
 }
 
@@ -148,40 +146,40 @@ const apiInstancesAdapter: DatasetInstancesAdapter = {
     () => apiClient.get<PaginatedResponse<DatasetInstance>>(
       `${API_PREFIX}/projects/${projectId}/dataset-instances`, { params }
     ).then(r => r.data),
-    () => localDatasetInstances.list(projectId, params),
+    () => emptyPaginated<DatasetInstance>(),
   ),
 
   get: (id) => withApiFallback(
     () => apiClient.get<{ data: DatasetInstance }>(
       `${API_PREFIX}/dataset-instances/${id}`
     ).then(r => r.data.data),
-    () => localDatasetInstances.get(id),
+    () => throwLocal('instances.get'),
   ),
 
   create: (projectId, data) => withApiFallback(
     () => apiClient.post<{ data: DatasetInstance }>(
       `${API_PREFIX}/projects/${projectId}/dataset-instances`, data
     ).then(r => r.data.data),
-    () => localDatasetInstances.create(projectId, data),
+    () => throwLocal('instances.create'),
   ),
 
   update: (id, data) => withApiFallback(
     () => apiClient.patch<{ data: DatasetInstance }>(
       `${API_PREFIX}/dataset-instances/${id}`, data
     ).then(r => r.data.data),
-    () => localDatasetInstances.update(id, data),
+    () => throwLocal('instances.update'),
   ),
 
   clone: (id) => withApiFallback(
     () => apiClient.post<{ data: DatasetInstance }>(
       `${API_PREFIX}/dataset-instances/${id}/clone`
     ).then(r => r.data.data),
-    () => localDatasetInstances.clone(id),
+    () => throwLocal('instances.clone'),
   ),
 
   delete: (id) => withApiFallback(
     () => apiClient.delete(`${API_PREFIX}/dataset-instances/${id}`).then(() => undefined),
-    () => localDatasetInstances.delete(id),
+    () => throwLocal('instances.delete'),
   ),
 };
 
@@ -190,28 +188,28 @@ const apiSecretsAdapter: DatasetSecretsAdapter = {
     () => apiClient.get<{ data: DatasetSecretKey[] }>(
       `${API_PREFIX}/dataset-instances/${datasetId}/secrets`
     ).then(r => r.data.data),
-    () => localDatasetSecrets.list(datasetId),
+    () => [],
   ),
 
   set: (datasetId, keyPath, isSecret) => withApiFallback(
     () => apiClient.put<{ data: DatasetSecretKey }>(
       `${API_PREFIX}/dataset-instances/${datasetId}/secrets`, { key_path: keyPath, is_secret: isSecret }
     ).then(r => r.data.data),
-    () => localDatasetSecrets.set(datasetId, keyPath, isSecret),
+    () => throwLocal('secrets.set'),
   ),
 
   remove: (datasetId, keyPath) => withApiFallback(
     () => apiClient.delete(
       `${API_PREFIX}/dataset-instances/${datasetId}/secrets/${encodeURIComponent(keyPath)}`
     ).then(() => undefined),
-    () => localDatasetSecrets.remove(datasetId, keyPath),
+    () => throwLocal('secrets.remove'),
   ),
 
   maskValues: (datasetId, valuesJson) => withApiFallback(
     () => apiClient.post<{ data: Record<string, unknown> }>(
       `${API_PREFIX}/dataset-instances/${datasetId}/mask-values`, { values_json: valuesJson }
     ).then(r => r.data.data),
-    () => localDatasetSecrets.maskValues(datasetId, valuesJson),
+    () => valuesJson,
   ),
 };
 
@@ -220,40 +218,40 @@ const apiBundlesAdapter: BundlesAdapter = {
     () => apiClient.get<PaginatedResponse<DatasetBundle>>(
       `${API_PREFIX}/projects/${projectId}/dataset-bundles`, { params }
     ).then(r => r.data),
-    () => localBundles.list(projectId, params),
+    () => emptyPaginated<DatasetBundle>(),
   ),
 
   get: (id) => withApiFallback(
     () => apiClient.get<{ data: DatasetBundle }>(
       `${API_PREFIX}/dataset-bundles/${id}`
     ).then(r => r.data.data),
-    () => localBundles.get(id),
+    () => throwLocal('bundles.get'),
   ),
 
   create: (projectId, data) => withApiFallback(
     () => apiClient.post<{ data: DatasetBundle }>(
       `${API_PREFIX}/projects/${projectId}/dataset-bundles`, data
     ).then(r => r.data.data),
-    () => localBundles.create(projectId, data),
+    () => throwLocal('bundles.create'),
   ),
 
   update: (id, data) => withApiFallback(
     () => apiClient.patch<{ data: DatasetBundle }>(
       `${API_PREFIX}/dataset-bundles/${id}`, data
     ).then(r => r.data.data),
-    () => localBundles.update(id, data),
+    () => throwLocal('bundles.update'),
   ),
 
   clone: (id) => withApiFallback(
     () => apiClient.post<{ data: DatasetBundle }>(
       `${API_PREFIX}/dataset-bundles/${id}/clone`
     ).then(r => r.data.data),
-    () => localBundles.clone(id),
+    () => throwLocal('bundles.clone'),
   ),
 
   delete: (id) => withApiFallback(
     () => apiClient.delete(`${API_PREFIX}/dataset-bundles/${id}`).then(() => undefined),
-    () => localBundles.delete(id),
+    () => throwLocal('bundles.delete'),
   ),
 };
 
@@ -262,21 +260,21 @@ const apiBundleItemsAdapter: BundleItemsAdapter = {
     () => apiClient.get<{ data: BundleItem[] }>(
       `${API_PREFIX}/dataset-bundles/${bundleId}/items`
     ).then(r => r.data.data),
-    () => localBundleItems.list(bundleId),
+    () => [],
   ),
 
   add: (bundleId, datasetId) => withApiFallback(
     () => apiClient.post<{ data: BundleItem }>(
       `${API_PREFIX}/dataset-bundles/${bundleId}/items`, { dataset_id: datasetId }
     ).then(r => r.data.data),
-    () => localBundleItems.add(bundleId, datasetId),
+    () => throwLocal('bundleItems.add'),
   ),
 
   remove: (bundleId, datasetId) => withApiFallback(
     () => apiClient.delete(
       `${API_PREFIX}/dataset-bundles/${bundleId}/items/${datasetId}`
     ).then(() => undefined),
-    () => localBundleItems.remove(bundleId, datasetId),
+    () => throwLocal('bundleItems.remove'),
   ),
 };
 
@@ -285,14 +283,14 @@ const apiValidationAdapter: ValidationAdapter = {
     () => apiClient.post<{ data: BundleValidationResult }>(
       `${API_PREFIX}/dataset-bundles/${bundleId}/validate-for-scenario`, { scenario_id: scenarioId }
     ).then(r => r.data.data),
-    () => localValidation.validateBundleForScenario(bundleId, scenarioId),
+    () => throwLocal('validation.validateBundleForScenario'),
   ),
 
   validateScenarioDatasets: (scenarioId, env) => withApiFallback(
     () => apiClient.post<{ data: ScenarioDatasetValidation }>(
       `${API_PREFIX}/scenarios/${scenarioId}/validate-datasets`, { env }
     ).then(r => r.data.data),
-    () => localValidation.validateScenarioDatasets(scenarioId, env),
+    () => throwLocal('validation.validateScenarioDatasets'),
   ),
 };
 
@@ -310,8 +308,7 @@ const API_ADAPTER: DatasetStorageAdapter = {
 /**
  * Résout le mode de stockage :
  *  1. VITE_DATASET_STORAGE_MODE = "api"  → ApiAdapter
- *  2. VITE_DATASET_STORAGE_MODE = "local" → LocalAdapter
- *  3. Si non défini : "local" par défaut (demo/offline)
+ *  2. Sinon → StubAdapter (données vides, pas de localStorage)
  */
 function resolveStorageMode(): 'local' | 'api' {
   const mode = (import.meta.env.VITE_DATASET_STORAGE_MODE || 'local').toLowerCase();
@@ -322,7 +319,7 @@ function resolveStorageMode(): 'local' | 'api' {
 const STORAGE_MODE = resolveStorageMode();
 
 export function getDatasetStorageAdapter(): DatasetStorageAdapter {
-  return STORAGE_MODE === 'api' ? API_ADAPTER : LOCAL_ADAPTER;
+  return STORAGE_MODE === 'api' ? API_ADAPTER : STUB_ADAPTER;
 }
 
 /** Singleton exporté pour usage direct */

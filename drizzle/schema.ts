@@ -1,6 +1,6 @@
 import {
   int, mysqlEnum, mysqlTable, text, timestamp, varchar,
-  boolean, json, bigint,
+  boolean, json, bigint, double,
 } from "drizzle-orm/mysql-core";
 
 // ─── Users ──────────────────────────────────────────────────────────────────
@@ -530,3 +530,46 @@ export const capturePolicies = mysqlTable("capture_policies", {
 
 export type CapturePolicyRow = typeof capturePolicies.$inferSelect;
 export type InsertCapturePolicyRow = typeof capturePolicies.$inferInsert;
+
+// ─── KPI Samples (Drive Test measurements) ─────────────────────────────────
+export const kpiSamples = mysqlTable("kpi_samples", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull(),
+  orgId: varchar("org_id", { length: 64 }).notNull(),
+  driveJobId: varchar("drive_job_id", { length: 36 }).notNull(),
+  campaignId: varchar("campaign_id", { length: 36 }).notNull(),
+  routeId: varchar("route_id", { length: 36 }).notNull(),
+  timestamp: varchar("timestamp", { length: 64 }).notNull(),
+  lat: double("lat").notNull(),
+  lon: double("lon").notNull(),
+  kpiName: varchar("kpi_name", { length: 50 }).notNull(),
+  value: double("value").notNull(),
+  unit: varchar("unit", { length: 20 }).default("").notNull(),
+  cellId: varchar("cell_id", { length: 50 }),
+  technology: varchar("technology", { length: 20 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type KpiSampleRow = typeof kpiSamples.$inferSelect;
+export type InsertKpiSampleRow = typeof kpiSamples.$inferInsert;
+
+// ─── Drive Run Summaries ────────────────────────────────────────────────────
+export const driveRunSummaries = mysqlTable("drive_run_summaries", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull(),
+  orgId: varchar("org_id", { length: 64 }).notNull(),
+  driveJobId: varchar("drive_job_id", { length: 36 }).notNull().unique(),
+  campaignId: varchar("campaign_id", { length: 36 }).notNull(),
+  totalSamples: int("total_samples").default(0).notNull(),
+  durationSec: double("duration_sec").default(0).notNull(),
+  distanceKm: double("distance_km").default(0).notNull(),
+  kpiAverages: json("kpi_averages"), // Record<string, number>
+  kpiMin: json("kpi_min"),           // Record<string, number>
+  kpiMax: json("kpi_max"),           // Record<string, number>
+  thresholdViolations: json("threshold_violations"), // ThresholdViolation[]
+  overallPass: boolean("overall_pass").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type DriveRunSummaryRow = typeof driveRunSummaries.$inferSelect;
+export type InsertDriveRunSummaryRow = typeof driveRunSummaries.$inferInsert;

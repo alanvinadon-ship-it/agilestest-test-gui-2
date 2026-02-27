@@ -7,7 +7,7 @@ import { PermissionKey } from '../admin/permissions';
 import { CapturePolicyEditor } from '../capture/CapturePolicyEditor';
 import type { CapturePolicy } from '../capture/types';
 import { DEFAULT_CAPTURE_POLICY } from '../capture/types';
-import { localCapturePolicies } from '../api/localStore';
+import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 
 export default function ProjectSettingsPage() {
@@ -18,25 +18,39 @@ export default function ProjectSettingsPage() {
   const [capturePolicy, setCapturePolicy] = useState<CapturePolicy | null>(null);
   const [saved, setSaved] = useState(false);
 
-  // Charger la policy du projet
-  useEffect(() => {
-    if (!currentProject) return;
-    const existing = localCapturePolicies.get('project', currentProject.id);
-    setCapturePolicy(existing);
-  }, [currentProject]);
+  // Charger la policy du projet via tRPC
+  const { data: policyData } = trpc.capturePolicies.getByScope.useQuery(
+    { scope: 'project', scopeId: currentProject?.id || '' },
+    { enabled: !!currentProject }
+  );
+  const utils = trpc.useUtils();
+  const upsertPolicy = trpc.capturePolicies.upsert.useMutation({
+    onSuccess: () => utils.capturePolicies.getByScope.invalidate({ scope: 'project', scopeId: currentProject?.id || '' }),
+  });
+  const removePolicy = trpc.capturePolicies.remove.useMutation({
+    onSuccess: () => utils.capturePolicies.getByScope.invalidate({ scope: 'project', scopeId: currentProject?.id || '' }),
+  });
 
-  const handleSave = () => {
+  useEffect(() => {
+    if (policyData?.policyJson) {
+      setCapturePolicy(policyData.policyJson as unknown as CapturePolicy);
+    } else {
+      setCapturePolicy(null);
+    }
+  }, [policyData]);
+
+  const handleSave = async () => {
     if (!currentProject) return;
     const policyToSave = capturePolicy || { ...DEFAULT_CAPTURE_POLICY };
-    localCapturePolicies.upsert('project', currentProject.id, policyToSave);
+    await upsertPolicy.mutateAsync({ scope: 'project', scopeId: currentProject.id, policyJson: policyToSave as any });
     setSaved(true);
     toast.success('Paramètres du projet sauvegardés');
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (!currentProject) return;
-    localCapturePolicies.remove('project', currentProject.id);
+    await removePolicy.mutateAsync({ scope: 'project', scopeId: currentProject.id });
     setCapturePolicy(null);
     toast.info('Politique de capture réinitialisée aux valeurs par défaut');
   };

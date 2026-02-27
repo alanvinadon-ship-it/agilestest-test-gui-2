@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '../auth/AuthContext';
 import { usePermission, PermissionKey } from '../security';
@@ -492,19 +492,49 @@ export default function BundlesPage() {
   const [envFilter, setEnvFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [expandedBundle, setExpandedBundle] = useState<string | null>(null);
+  const [cursorStack, setCursorStack] = useState<(string | undefined)[]>([undefined]);
+  const pageSize = 30;
+  const currentCursor = cursorStack[cursorStack.length - 1];
 
-  const { data: bundlesRaw, isLoading } = trpc.bundles.list.useQuery(
+  const { data: bundlesRaw, isLoading, isFetching } = trpc.bundles.list.useQuery(
     {
       projectId: currentProject?.id ?? '',
       env: envFilter !== 'ALL' ? envFilter as TargetEnv : undefined,
       status: statusFilter !== 'ALL' ? statusFilter as BundleStatus : undefined,
+      cursor: currentCursor,
+      pageSize,
     },
     { enabled: !!currentProject }
   );
 
+  // Accumulate results across pages
+  const [accumulated, setAccumulated] = useState<any[]>([]);
+  useEffect(() => {
+    if (bundlesRaw?.data) {
+      if (cursorStack.length === 1) {
+        setAccumulated(bundlesRaw.data);
+      } else {
+        setAccumulated(prev => {
+          const ids = new Set(prev.map((r: any) => r.uid));
+          const newItems = bundlesRaw.data.filter((r: any) => !ids.has(r.uid));
+          return [...prev, ...newItems];
+        });
+      }
+    }
+  }, [bundlesRaw?.data, cursorStack.length]);
+
+  const hasMore = bundlesRaw?.hasMore ?? false;
+  const nextCursor = bundlesRaw?.nextCursor;
+
+  // Reset on filter change
+  const resetCursor = useCallback(() => {
+    setCursorStack([undefined]);
+    setAccumulated([]);
+  }, []);
+
   const bundles = useMemo(() => {
-    return (bundlesRaw?.data || []).map(toFrontendBundle);
-  }, [bundlesRaw]);
+    return accumulated.map(toFrontendBundle);
+  }, [accumulated]);
 
   const filtered = useMemo(() => {
     if (!search) return bundles;
@@ -692,18 +722,31 @@ export default function BundlesPage() {
         </div>
       )}
 
-      {/* Stats */}
-      {filtered.length > 0 && (
+      {/* Stats + Charger plus */}
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <span>{filtered.length} bundle(s)</span>
-          <span>•</span>
-          {ALL_ENVS.map(e => {
-            const count = filtered.filter(b => b.env === e).length;
-            if (count === 0) return null;
-            return <span key={e}>{ENV_META[e].label}: {count}</span>;
-          })}
+          {filtered.length > 0 && (
+            <>
+              <span>•</span>
+              {ALL_ENVS.map(e => {
+                const count = filtered.filter(b => b.env === e).length;
+                if (count === 0) return null;
+                return <span key={e}>{ENV_META[e].label}: {count}</span>;
+              })}
+            </>
+          )}
         </div>
-      )}
+        {hasMore && (
+          <button
+            onClick={() => { if (nextCursor) setCursorStack(prev => [...prev, nextCursor]); }}
+            disabled={isFetching}
+            className="rounded-md border border-border px-4 py-1.5 text-xs text-foreground hover:bg-secondary disabled:opacity-50 transition-colors"
+          >
+            {isFetching ? 'Chargement…' : 'Charger plus'}
+          </button>
+        )}
+      </div>
 
       {/* Modals */}
       <CreateBundleModal

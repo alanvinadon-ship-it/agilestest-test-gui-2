@@ -7,6 +7,9 @@
  * - Rapport d'import détaillé
  * - Audit log
  * - Versioning (status DRAFT par défaut)
+ *
+ * NOTE: Ce module n'importe plus localStore.
+ * Les opérations CRUD sont injectées via l'interface ScenarioStore.
  */
 
 import type { TestProfile, TestScenario, ScenarioStep, ImportMode, ImportReport, AuditLogEntry } from '../types';
@@ -17,7 +20,33 @@ import {
   getTemplatesForProfile,
   filterByScope,
 } from '../config/scenarioTemplates';
-import { localScenarios, localAuditLog } from '../api/localStore';
+
+// ─── Dependency Injection Interface ──────────────────────────────────────
+
+/**
+ * Interface abstraite pour les opérations scénario.
+ * L'appelant (SuggestScenariosModal) fournit une implémentation
+ * basée sur tRPC ou tout autre backend.
+ */
+export interface ScenarioStore {
+  /** Retourne le prochain NNN disponible pour le triplet (projectId, testType, domain) */
+  nextId(projectId: string, testType: string, domain: string): { nnn: number };
+  /** Vérifie si un scenario_code existe déjà dans le projet */
+  codeExists(projectId: string, code: string): boolean;
+  /** Génère un code unique (testType-domainCode-NNN-slug) */
+  generateCode(projectId: string, testType: string, domain: string, title: string): string;
+  /** Crée un scénario et retourne l'objet créé (avec id) */
+  create(profileId: string, projectId: string, data: any): { id: string };
+  /** Met à jour un scénario existant */
+  update(id: string, data: any): void;
+  /** Liste tous les scénarios d'un projet */
+  listByProject(projectId: string): { data: TestScenario[] };
+}
+
+export interface AuditStore {
+  /** Ajoute une entrée d'audit */
+  add(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>): { id: string; timestamp: string };
+}
 
 // ─── Domain Code Mapping ──────────────────────────────────────────────────
 
@@ -105,9 +134,10 @@ export interface SuggestResponse {
 
 /**
  * Génère un scenario_code normalisé : TESTTYPE-DOMAINCODE-NNN-SLUG
- * Le NNN est incrémenté par (project_id, test_type, domain_code) via localScenarios.nextId
+ * Le NNN est incrémenté par (project_id, test_type, domain_code) via store.nextId
  */
 function generateScenarioCode(
+  store: ScenarioStore,
   projectId: string,
   testType: string,
   domain: string,
@@ -119,7 +149,7 @@ function generateScenarioCode(
   const slug = slugify(title);
 
   // Récupérer le prochain NNN disponible
-  const { nnn } = localScenarios.nextId(projectId, testType, domain);
+  const { nnn } = store.nextId(projectId, testType, domain);
   const num = (nnn + offset).toString().padStart(3, '0');
   return `${prefix}-${num}-${slug}`;
 }
@@ -163,8 +193,11 @@ function adaptRequiredInputs(template: ScenarioTemplate, profile: TestProfile): 
 /**
  * Génère des suggestions de scénarios basées sur un profil de test.
  * IDs normalisés : TESTTYPE-DOMAINCODE-NNN-SLUG
+ *
+ * @param request - Paramètres de la requête
+ * @param store - Implémentation ScenarioStore (pour nextId)
  */
-export function suggestScenarios(request: SuggestRequest): SuggestResponse {
+export function suggestScenarios(request: SuggestRequest, store: ScenarioStore): SuggestResponse {
   const { profile, project_id, project_name, scope_level, constraints } = request;
 
   const domain = profile.domain || 'WEB';
@@ -191,7 +224,7 @@ export function suggestScenarios(request: SuggestRequest): SuggestResponse {
   // 5. Adapter chaque template en suggestion avec IDs normalisés
   const suggestions: SuggestedScenario[] = sorted.map((template, index) => {
     const title = adaptTitle(template, profile);
-    const code = generateScenarioCode(project_id, testType, domain, title, index);
+    const code = generateScenarioCode(store, project_id, testType, domain, title, index);
 
     return {
       scenario_code: code,
@@ -268,12 +301,17 @@ export function suggestionToScenario(
 /**
  * Importe une liste de suggestions avec gestion des collisions.
  * Modes : SKIP (ignorer), RENAME (auto-renommer), OVERWRITE (écraser, admin only)
+ *
+ * @param store - Implémentation ScenarioStore (CRUD)
+ * @param auditStore - Implémentation AuditStore (audit log)
  */
 export function bulkImportSuggestions(
   suggestions: SuggestedScenario[],
   profileId: string,
   projectId: string,
   importMode: ImportMode = 'RENAME',
+  store: ScenarioStore,
+  auditStore: AuditStore,
 ): ImportReport {
   const details: ImportReport['details'] = [];
   let imported_count = 0;
@@ -283,7 +321,7 @@ export function bulkImportSuggestions(
 
   for (const suggestion of suggestions) {
     const scenarioCode = suggestion.scenario_code;
-    const exists = localScenarios.codeExists(projectId, scenarioCode);
+    const exists = store.codeExists(projectId, scenarioCode);
 
     if (exists) {
       switch (importMode) {
@@ -302,7 +340,7 @@ export function bulkImportSuggestions(
           // Générer un nouveau code avec next-id
           const domain = suggestion.scenario_code.split('-')[1] || 'WEB';
           const testType = suggestion.scenario_code.split('-')[0] || 'VABF';
-          const newCode = localScenarios.generateCode(projectId, testType, domain, suggestion.title);
+          const newCode = store.generateCode(projectId, testType, domain, suggestion.title);
 
           const data = suggestionToScenario(suggestion, profileId, projectId);
           data.scenario_code = newCode;
@@ -313,7 +351,7 @@ export function bulkImportSuggestions(
             import_mode: 'RENAME',
           };
 
-          const created = localScenarios.create(profileId, projectId, data);
+          const created = store.create(profileId, projectId, data);
           renamed_count++;
           imported_count++;
           details.push({
@@ -328,11 +366,11 @@ export function bulkImportSuggestions(
 
         case 'OVERWRITE': {
           // Trouver l'existant et le mettre à jour
-          const allScenarios = localScenarios.listByProject(projectId);
+          const allScenarios = store.listByProject(projectId);
           const existing = allScenarios.data.find(s => s.scenario_code === scenarioCode);
           if (existing) {
             const data = suggestionToScenario(suggestion, profileId, projectId);
-            localScenarios.update(existing.id, {
+            store.update(existing.id, {
               ...data,
               version: (existing.version || 1) + 1,
               metadata: { ...data.metadata, import_mode: 'OVERWRITE' },
@@ -353,7 +391,7 @@ export function bulkImportSuggestions(
       // Pas de collision — import direct
       const data = suggestionToScenario(suggestion, profileId, projectId);
       (data.metadata as any) = { ...data.metadata, import_mode: importMode };
-      const created = localScenarios.create(profileId, projectId, data);
+      const created = store.create(profileId, projectId, data);
       imported_count++;
       details.push({
         scenario_id: created.id,
@@ -365,7 +403,7 @@ export function bulkImportSuggestions(
   }
 
   // Audit log
-  const auditEntry = localAuditLog.add({
+  const auditEntry = auditStore.add({
     actor_user_id: 'local-admin-001',
     project_id: projectId,
     profile_id: profileId,

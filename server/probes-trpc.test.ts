@@ -211,12 +211,12 @@ describe("frontend: ProbesPage tRPC migration", () => {
     expect(content).toContain("probeDetail");
   });
 
-  it("should have pagination", async () => {
+  it("should have cursor pagination (Charger plus)", async () => {
     const fs = await import("fs");
     const content = fs.readFileSync("client/src/pages/ProbesPage.tsx", "utf-8");
-    expect(content).toContain("pagination");
-    expect(content).toContain("Précédent");
-    expect(content).toContain("Suivant");
+    expect(content).toContain("Charger plus");
+    expect(content).toContain("cursor");
+    expect(content).toContain("hasMore");
   });
 });
 

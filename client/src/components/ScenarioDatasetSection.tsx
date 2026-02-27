@@ -5,7 +5,7 @@
  */
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { localDatasetTypes } from '../api/localStore';
+import { trpc } from '@/lib/trpc';
 import { useDatasetStorage } from '../contexts/DatasetStorageContext';
 import type { TestScenario, TargetEnv, ScenarioDatasetValidation, DatasetType } from '../types';
 import {
@@ -31,13 +31,12 @@ export default function ScenarioDatasetSection({ scenario }: Props) {
   const { adapter } = useDatasetStorage();
   const requiredTypes = scenario.required_dataset_types || [];
 
-  // Charger les noms des dataset types
+  // Charger les noms des dataset types via tRPC
+  const { data: dtData } = trpc.datasetTypes.list.useQuery();
   const dtMap = useMemo(() => {
-    try {
-      const all = localDatasetTypes.list();
-      return new Map((all.data as DatasetType[]).map(dt => [dt.dataset_type_id, dt.name]));
-    } catch { return new Map<string, string>(); }
-  }, []);
+    if (!dtData?.data) return new Map<string, string>();
+    return new Map(dtData.data.map((dt: any) => [dt.datasetTypeId, dt.name]));
+  }, [dtData]);
 
   // Validation par env via adapter (async-compatible)
   const { data: validationByEnv } = useQuery({

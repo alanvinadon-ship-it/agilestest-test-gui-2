@@ -2,7 +2,7 @@
  * ProbesPage — Gestion complète des sondes de collecte
  * Données réelles via tRPC (MySQL) — CRUD complet + liaison captures.
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { usePermission, PermissionKey } from '../security';
 import { trpc } from '@/lib/trpc';
 import {
@@ -369,13 +369,15 @@ export default function ProbesPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
-  const [page, setPage] = useState(1);
-  const pageSize = 25;
+  const [cursorStack, setCursorStack] = useState<(number | undefined)[]>([undefined]);
+  const pageSize = 30;
+  const currentCursor = cursorStack[cursorStack.length - 1];
 
-  const { data, isLoading } = trpc.probes.list.useQuery(
+  const { data, isLoading, isFetching } = trpc.probes.list.useQuery(
     {
-      page,
+      page: 1,
       pageSize,
+      cursor: currentCursor,
       ...(statusFilter ? { status: statusFilter as ProbeStatus } : {}),
       ...(typeFilter ? { probeType: typeFilter as ProbeType } : {}),
       ...(search.trim() ? { search: search.trim() } : {}),
@@ -383,8 +385,32 @@ export default function ProbesPage() {
     { refetchInterval: 15000 },
   );
 
-  const probes = data?.data ?? [];
+  // Accumulate results across pages
+  const [allProbes, setAllProbes] = useState<any[]>([]);
+  useEffect(() => {
+    if (data?.data) {
+      if (cursorStack.length === 1) {
+        setAllProbes(data.data);
+      } else {
+        setAllProbes(prev => {
+          const ids = new Set(prev.map((p: any) => p.id));
+          const newItems = data.data.filter((p: any) => !ids.has(p.id));
+          return [...prev, ...newItems];
+        });
+      }
+    }
+  }, [data?.data, cursorStack.length]);
+
+  // Reset on filter change
+  const resetCursor = useCallback(() => {
+    setCursorStack([undefined]);
+    setAllProbes([]);
+  }, []);
+
+  const probes = allProbes;
   const pagination = data?.pagination;
+  const hasMore = data?.hasMore ?? false;
+  const nextCursor = data?.nextCursor;
 
   const onlineCount = useMemo(() => probes.filter((p: any) => p.status === 'ONLINE').length, [probes]);
   const offlineCount = useMemo(() => probes.filter((p: any) => p.status === 'OFFLINE').length, [probes]);
@@ -425,18 +451,18 @@ export default function ProbesPage() {
       <div className="flex items-center gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input type="text" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          <input type="text" value={search} onChange={(e) => { setSearch(e.target.value); resetCursor(); }}
             placeholder="Rechercher une sonde..."
             className="w-full rounded-md border border-input bg-background pl-10 pr-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
         </div>
-        <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+        <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); resetCursor(); }}
           className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30">
           <option value="">Tous les statuts</option>
           <option value="ONLINE">En ligne</option>
           <option value="OFFLINE">Hors ligne</option>
           <option value="DEGRADED">Dégradé</option>
         </select>
-        <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
+        <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); resetCursor(); }}
           className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30">
           <option value="">Tous les types</option>
           <option value="LINUX_EDGE">Linux Edge</option>
@@ -464,24 +490,21 @@ export default function ProbesPage() {
         </div>
       )}
 
-      {/* Pagination */}
-      {pagination && pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">
-            Page {pagination.page} / {pagination.totalPages} — {pagination.total} sonde(s)
-          </p>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
-              className="rounded-md border border-border px-3 py-1 text-xs text-foreground hover:bg-secondary disabled:opacity-50 transition-colors">
-              Précédent
-            </button>
-            <button onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))} disabled={page >= pagination.totalPages}
-              className="rounded-md border border-border px-3 py-1 text-xs text-foreground hover:bg-secondary disabled:opacity-50 transition-colors">
-              Suivant
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Charger plus */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">
+          {probes.length}{pagination?.total ? ` / ${pagination.total}` : ''} sonde(s)
+        </p>
+        {hasMore && (
+          <button
+            onClick={() => { if (nextCursor) setCursorStack(prev => [...prev, nextCursor]); }}
+            disabled={isFetching}
+            className="rounded-md border border-border px-4 py-1.5 text-xs text-foreground hover:bg-secondary disabled:opacity-50 transition-colors"
+          >
+            {isFetching ? 'Chargement…' : 'Charger plus'}
+          </button>
+        )}
+      </div>
 
       <CreateProbeModal isOpen={showCreate} onClose={() => setShowCreate(false)} />
     </div>

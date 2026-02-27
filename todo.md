@@ -262,3 +262,13 @@
 - [x] Sprint Final Étape 3B: Frontend Charger plus ExecutionsPage (remplacé pagination offset par cursor, compteur total)
 - [x] Sprint Final Gates: ESLint gate couvre 10 pages migrées, 0 erreurs, 4 pages exclues documentées
 - [x] Sprint Final: Tests finaux (454 passés, 0 échecs) + checkpoint
+- [x] Sprint ZÉRO Étape 1A: Analyse terminée — AdminProjectAccess(localProjects→trpc.projects), ProjectSettings(localCapturePolicies→trpc.capturePolicies), DriveIncident+DriveReporting(besoin tables kpi_samples+drive_run_summaries)
+- [x] Sprint ZÉRO Étape 1B: Migrer AdminProjectAccessPage vers tRPC (localProjects→trpc.projects.list)
+- [x] Sprint ZÉRO Étape 1C: Migrer ProjectSettingsPage vers tRPC (localCapturePolicies→trpc.capturePolicies.getByScope/upsert/remove)
+- [x] Sprint ZÉRO Étape 1D: Migrer DriveIncidentReportPage vers tRPC (6 imports→tRPC cascading queries: projects/campaigns/routes/jobs/kpiSamples)
+- [x] Sprint ZÉRO Étape 1E: Migrer DriveReportingPage vers tRPC (6 imports→tRPC cascading queries: campaigns/routes/jobs/summaries/kpiSamples)
+- [x] Sprint ZÉRO Étape 1F: Tests backend kpiData (16 tests) + gate ESLint étendue à 14 pages (0 erreurs, 0 pages exclues)
+- [x] Sprint ZÉRO Étape 2A: Backend cursor pagination probes.list (cursor+hasMore+nextCursor), datasetTypes.list (cursor+pageSize), bundles.list (cursor+pageSize)
+- [x] Sprint ZÉRO Étape 2B: Frontend Charger plus ProbesPage (cursor+accumulation+resetCursor), DatasetTypesPage (cursor+pageSize=50), BundlesPage (cursor+pageSize=30+resetCursor)
+- [x] Sprint ZÉRO Étape 3: Supprimé localStore.ts + repositoryApi.ts + ImportResultsModal.tsx + nettoyé collectorApi/datasetStorageAdapter/scenarioSuggestionEngine + gate ESLint globale client/src/**
+- [x] Sprint ZÉRO: Tests finaux (470 passés, 0 échecs) + lint 0 erreurs + TS=0 erreurs + checkpoint

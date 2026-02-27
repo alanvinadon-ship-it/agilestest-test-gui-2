@@ -10,8 +10,8 @@ import {
 import { toast } from 'sonner';
 import { useAuth } from '../auth/AuthContext';
 import { useProject } from '../state/projectStore';
-import { localProjects } from '../api/localStore';
-import type { Project } from '../types';
+import { trpc } from '@/lib/trpc';
+// Project type inferred from tRPC response
 import { adminMemberships, adminUsers } from '../admin/adminStore';
 import {
   PROJECT_ROLE_LABELS, PROJECT_ROLE_COLORS,
@@ -23,7 +23,8 @@ import type { ProjectMembership, ProjectRole, AdminUser } from '../admin/types';
 export default function AdminProjectAccessPage() {
   const { user: currentUser } = useAuth();
   const { currentProject } = useProject();
-  const allProjects = useMemo(() => localProjects.list().data, []);
+  const { data: projectsData } = trpc.projects.list.useQuery({ page: 1, pageSize: 200 });
+  const allProjects = useMemo(() => projectsData?.data || [], [projectsData]);
   const actor = currentUser
     ? { id: currentUser.id, name: currentUser.full_name, email: currentUser.email }
     : { id: '', name: '', email: '' };
@@ -36,7 +37,7 @@ export default function AdminProjectAccessPage() {
 
   const refresh = useCallback(() => setRefreshKey(k => k + 1), []);
 
-  const selectedProject = useMemo(() => allProjects.find((p: Project) => p.id === selectedProjectId), [allProjects, selectedProjectId]);
+  const selectedProject = useMemo(() => allProjects.find((p) => String(p.uid) === selectedProjectId || String(p.id) === selectedProjectId), [allProjects, selectedProjectId]);
 
   const members = useMemo(() => {
     void refreshKey;
@@ -88,8 +89,8 @@ export default function AdminProjectAccessPage() {
           className="w-full max-w-md px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
         >
           <option value="">— Choisir un projet —</option>
-          {allProjects.map((p: Project) => (
-            <option key={p.id} value={p.id}>{p.name} ({p.domain})</option>
+          {allProjects.map((p) => (
+            <option key={p.uid} value={p.uid}>{p.name} ({p.domain})</option>
           ))}
         </select>
       </div>

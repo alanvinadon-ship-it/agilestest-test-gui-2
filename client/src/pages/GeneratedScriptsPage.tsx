@@ -80,7 +80,6 @@ export default function GeneratedScriptsPage() {
       );
     }
     return data;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, filterFramework, filterStatus, filterEnv, search, refreshKey]);
 
   const handleActivate = (scriptId: string) => {

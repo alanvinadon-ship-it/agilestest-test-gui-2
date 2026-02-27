@@ -14,10 +14,8 @@ import {
   RefreshCw, Copy, Check, ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import {
-  localProjects, localDriveRoutes, localDriveRunSummaries,
-  localDriveCampaigns, localDriveJobs, localKpiSamples,
-} from '@/api/localStore';
+import { trpc } from '@/lib/trpc';
+import { useProject } from '@/state/projectStore';
 import type { DriveIncident, RouteSegment, EnrichedKpiSample, ArtifactTimeIndex } from '@/driveCorrelation/types';
 import {
   KPI_LABELS, KPI_UNITS, SEVERITY_LABELS, SEVERITY_COLORS,
@@ -40,38 +38,56 @@ import {
   buildArtifactTimeIndex, DEFAULT_SEGMENTATION_CONFIG,
 } from '@/driveCorrelation';
 
-// ─── Mock incident for demo ────────────────────────────────────────────────
+// ─── Incident data from tRPC (cascading queries) ──────────────────────────
 
-function useMockIncidentData(incidentId: string) {
-  const projects = localProjects.list().data;
-  const projectId = projects[0]?.id || '';
+function useIncidentData(incidentId: string) {
+  const { currentProject } = useProject();
+  const projectId = currentProject?.id || '';
+
+  // 1. Campaigns for project
+  const { data: campaignsData } = trpc.driveCampaigns.list.useQuery(
+    { projectId, pageSize: 200 },
+    { enabled: !!projectId }
+  );
+  const campaign = campaignsData?.data?.[0] ?? null;
+  const campaignId = campaign?.uid || '';
+
+  // 2. Routes for first campaign
+  const { data: routesData } = trpc.driveRoutes.list.useQuery(
+    { campaignId, limit: 50 },
+    { enabled: !!campaignId }
+  );
+  const route = routesData?.items?.[0] ?? null;
+
+  // 3. Jobs for first campaign
+  const { data: jobsData } = trpc.driveJobs.list.useQuery(
+    { campaignId, limit: 200 },
+    { enabled: !!campaignId }
+  );
+  const job = jobsData?.items?.[0] ?? null;
+  const jobId = job?.uid || '';
+
+  // 4. KPI samples for first job
+  const { data: samplesData } = trpc.kpiSamples.listAll.useQuery(
+    { driveJobId: jobId },
+    { enabled: !!jobId }
+  );
 
   return useMemo(() => {
-    const campaignsResult = localDriveCampaigns.list(projectId, { limit: 200 });
-    const campaign = campaignsResult.data[0];
-    if (!campaign) return null;
-
-    const routes = localDriveRoutes.list(campaign.campaign_id);
-    const route = routes[0];
-    if (!route) return null;
-
-    const jobsResult = localDriveJobs.list({ campaign_id: campaign.campaign_id, limit: 200 });
-    const job = jobsResult.data[0];
-    if (!job) return null;
-
-    const samplesResult = localKpiSamples.list({ drive_job_id: job.drive_job_id });
-    const samples = samplesResult.data;
+    if (!campaign || !route || !job) return null;
+    const samples = samplesData || [];
     if (samples.length === 0) return null;
 
     // Build segments from route
-    const allCoords = route.route_geojson?.coordinates || [];
+    const routeGeojson = route.routeGeojson as any;
+    const allCoords = routeGeojson?.coordinates || [];
     if (allCoords.length < 2) return null;
 
     const config = { ...DEFAULT_SEGMENTATION_CONFIG };
-    const segments = segmentRoute(route.route_id, campaign.campaign_id, allCoords, config);
-    const enriched = enrichSamplesWithSegments(samples, segments, config);
+    const segments = segmentRoute(route.uid, campaignId, allCoords, config);
+    const enriched = enrichSamplesWithSegments(samples as any, segments, config);
     aggregateSegmentKpi(segments, enriched);
-    const artifactIndex = buildArtifactTimeIndex(job, campaign.campaign_id, route.route_id);
+    const artifactIndex = buildArtifactTimeIndex(job as any, campaignId, route.uid);
 
     // Find or create incident
     const critSegments = segments.filter((s: RouteSegment) => s.breach_level === 'CRIT');
@@ -82,9 +98,9 @@ function useMockIncidentData(incidentId: string) {
 
     const incident: DriveIncident = {
       incident_id: incidentId || `INC-${Date.now()}`,
-      campaign_id: campaign.campaign_id,
-      route_id: route.route_id,
-      drive_job_id: job.drive_job_id,
+      campaign_id: campaignId,
+      route_id: route.uid,
+      drive_job_id: job.uid,
       type: 'DRIVE_KPI_THRESHOLD_BREACH',
       kpi_name: kpiName as any,
       threshold: stats?.threshold || 0,
@@ -116,7 +132,7 @@ function useMockIncidentData(incidentId: string) {
     };
 
     return { incident, segments, enrichedSamples: enriched, artifactIndex, campaign, job };
-  }, [projectId, incidentId]);
+  }, [campaign, route, job, samplesData, campaignId, incidentId]);
 }
 
 // ─── Evidence Chip ──────────────────────────────────────────────────────────
@@ -190,7 +206,7 @@ function ConfidenceBar({ value, size = 'sm' }: { value: number; size?: 'sm' | 'm
 export default function DriveIncidentReportPage() {
   const [, params] = useRoute('/drive/incidents/:id');
   const incidentId = params?.id || '';
-  const data = useMockIncidentData(incidentId);
+  const data = useIncidentData(incidentId);
 
   const [report, setReport] = useState<DriveRepairResult | null>(null);
   const [analyzing, setAnalyzing] = useState(false);

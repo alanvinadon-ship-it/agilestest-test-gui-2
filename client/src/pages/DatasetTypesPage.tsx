@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { trpc } from '@/lib/trpc';
 import type { DatasetTypeField, TestType } from '../types';
 import {
@@ -343,13 +343,38 @@ export default function DatasetTypesPage() {
   const [editing, setEditing] = useState<DisplayDatasetType | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // ── Query: fetch all dataset types from DB via tRPC ──
-  const { data, isLoading } = trpc.datasetTypes.list.useQuery();
+  // ── Query: fetch dataset types with cursor pagination ──
+  const [cursorStack, setCursorStack] = useState<(string | undefined)[]>([undefined]);
+  const pageSize = 50;
+  const currentCursor = cursorStack[cursorStack.length - 1];
+
+  const { data, isLoading, isFetching } = trpc.datasetTypes.list.useQuery(
+    { cursor: currentCursor, pageSize },
+  );
+
+  // Accumulate results across pages
+  const [accumulated, setAccumulated] = useState<any[]>([]);
+  useEffect(() => {
+    if (data?.data) {
+      if (cursorStack.length === 1) {
+        setAccumulated(data.data);
+      } else {
+        setAccumulated(prev => {
+          const ids = new Set(prev.map((r: any) => r.uid));
+          const newItems = data.data.filter((r: any) => !ids.has(r.uid));
+          return [...prev, ...newItems];
+        });
+      }
+    }
+  }, [data?.data, cursorStack.length]);
+
+  const hasMore = data?.hasMore ?? false;
+  const nextCursor = data?.nextCursor;
 
   // Map DB rows to display shape
   const allItems = useMemo(() => {
-    return (data?.data || []).map(mapRow);
-  }, [data]);
+    return accumulated.map(mapRow);
+  }, [accumulated]);
 
   // Apply client-side filters (domain, testType, search)
   const items = useMemo(() => {
@@ -508,6 +533,22 @@ export default function DatasetTypesPage() {
           })}
         </div>
       )}
+
+      {/* Charger plus */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">
+          {items.length} gabarit(s) affiché(s){allItems.length !== items.length ? ` / ${allItems.length} total` : ''}
+        </p>
+        {hasMore && (
+          <button
+            onClick={() => { if (nextCursor) setCursorStack(prev => [...prev, nextCursor]); }}
+            disabled={isFetching}
+            className="rounded-md border border-border px-4 py-1.5 text-xs text-foreground hover:bg-secondary disabled:opacity-50 transition-colors"
+          >
+            {isFetching ? 'Chargement…' : 'Charger plus'}
+          </button>
+        )}
+      </div>
 
       {/* Create Modal */}
       <DatasetTypeModal

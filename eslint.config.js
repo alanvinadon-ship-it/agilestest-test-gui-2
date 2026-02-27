@@ -1,41 +1,16 @@
 /**
- * ESLint config — Gate anti-régression localStorage → tRPC
+ * ESLint config — Gate anti-régression localStorage
  *
- * Objectif : empêcher la réintroduction de localStore / repositoryApi
- * dans les pages déjà migrées vers tRPC/DB.
+ * OBJECTIF : Empêcher tout import de localStore ou repositoryApi dans le code source.
+ * Le fichier localStore.ts a été supprimé. Cette gate empêche toute réintroduction.
  *
- * Usage CI : pnpm lint   (échoue si import interdit détecté)
- *
- * Pages migrées (surveillées) — 10 pages :
- *   ProfilesPage, DatasetTypesPage, DatasetsPage, DriveCampaignsPage,
- *   ProjectsPage, ProbesPage, ExecutionsPage, CapturesPage, BundlesPage,
- *   ScenariosPage
- *
- * Pages NON migrées (exclues pour l'instant) — 4 pages :
- *   AdminProjectAccessPage (localProjects)
- *   ProjectSettingsPage (localCapturePolicies)
- *   DriveIncidentReportPage (localDriveRunSummaries, localDriveCampaigns)
- *   DriveReportingPage (localDriveRunSummaries, localDriveCampaigns)
- *
- * Pages sans import localStore (pas de surveillance nécessaire) :
- *   Home, NotFound, ComponentShowcase, ExecutionDetailPage, etc.
+ * Scope : GLOBAL — tous les fichiers .ts/.tsx sous client/src/
  */
 import tsParser from "typescript-eslint";
 
 export default [
   {
-    files: [
-      "client/src/pages/ProfilesPage.tsx",
-      "client/src/pages/DatasetTypesPage.tsx",
-      "client/src/pages/DatasetsPage.tsx",
-      "client/src/pages/DriveCampaignsPage.tsx",
-      "client/src/pages/ProjectsPage.tsx",
-      "client/src/pages/ProbesPage.tsx",
-      "client/src/pages/ExecutionsPage.tsx",
-      "client/src/pages/CapturesPage.tsx",
-      "client/src/pages/BundlesPage.tsx",
-      "client/src/pages/ScenariosPage.tsx",
-    ],
+    files: ["client/src/**/*.{ts,tsx}"],
     languageOptions: {
       parser: tsParser.parser,
       parserOptions: {
@@ -48,28 +23,16 @@ export default [
       "no-restricted-imports": [
         "error",
         {
-          paths: [
-            {
-              name: "../api/localStore",
-              message:
-                "⛔ Cette page est migrée vers tRPC/DB. Utilisez trpc.* hooks au lieu de localStore.",
-            },
-            {
-              name: "../api/repositoryApi",
-              message:
-                "⛔ Cette page est migrée vers tRPC/DB. Utilisez trpc.* hooks au lieu de repositoryApi.",
-            },
-          ],
           patterns: [
             {
-              group: ["**/api/localStore*"],
+              group: ["**/localStore", "**/localStore.*"],
               message:
-                "⛔ Cette page est migrée vers tRPC/DB. Utilisez trpc.* hooks au lieu de localStore.",
+                "❌ localStore.ts a été supprimé. Utiliser les hooks tRPC (trpc.*.useQuery/useMutation).",
             },
             {
-              group: ["**/api/repositoryApi*"],
+              group: ["**/repositoryApi", "**/repositoryApi.*"],
               message:
-                "⛔ Cette page est migrée vers tRPC/DB. Utilisez trpc.* hooks au lieu de repositoryApi.",
+                "❌ repositoryApi.ts a été supprimé. Utiliser les hooks tRPC (trpc.*.useQuery/useMutation).",
             },
           ],
         },

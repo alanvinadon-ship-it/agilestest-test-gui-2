@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { eq, desc, and, like, inArray, sql, SQL } from "drizzle-orm";
+import { eq, desc, and, like, inArray, sql, SQL, lt } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../_core/trpc";
 import { getDb } from "../db";
@@ -640,6 +640,7 @@ export const probesRouter = router({
   }),
   list: protectedProcedure.input(z.object({
     ...paginationInput.shape,
+    cursor: z.number().optional(),
     status: z.enum(["ONLINE", "OFFLINE", "DEGRADED"]).optional(),
     probeType: z.enum(["LINUX_EDGE", "K8S_CLUSTER", "NETWORK_TAP"]).optional(),
     search: z.string().optional(),
@@ -651,14 +652,18 @@ export const probesRouter = router({
     if (input.status) conditions.push(eq(probes.status, input.status));
     if (input.probeType) conditions.push(eq(probes.probeType, input.probeType));
     if (input.search) conditions.push(like(probes.name, `%${input.search}%`));
+    if (input.cursor) conditions.push(lt(probes.id, input.cursor));
     const where = conditions.length ? and(...conditions) : undefined;
     const baseQuery = where ? db.select().from(probes).where(where) : db.select().from(probes);
     const [data, cnt] = await Promise.all([
-      baseQuery.orderBy(desc(probes.createdAt)).limit(pageSize).offset(offset),
+      baseQuery.orderBy(desc(probes.createdAt)).limit(pageSize + 1).offset(input.cursor ? 0 : offset),
       countRows(db, probes, where),
     ]);
     const total = cnt[0]?.count ?? 0;
-    return { data, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
+    const hasMore = data.length > pageSize;
+    const items = hasMore ? data.slice(0, pageSize) : data;
+    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : undefined;
+    return { data: items, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) }, hasMore, nextCursor };
   }),
   get: protectedProcedure.input(z.object({ probeId: z.number() })).query(async ({ input }) => {
     const db = await getDb();

@@ -13,10 +13,8 @@ import { Button } from '@/components/ui/button';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import {
-  localDriveCampaigns, localDriveRoutes, localProjects,
-  localDriveJobs, localKpiSamples, localDriveRunSummaries,
-} from '@/api/localStore';
+import { trpc } from '@/lib/trpc';
+import { useProject } from '@/state/projectStore';
 import type { DriveCampaign, DriveRoute, DriveJob, KpiSample, DriveRunSummary, DriveKpi } from '@/types';
 import { getThresholdLevel } from '@/ai/kpiParsers';
 import {
@@ -98,16 +96,9 @@ function buildReport(
   jobs: DriveJob[],
   windowSize: WindowSize,
   selectedKpi: string,
+  allSamples: KpiSample[],
+  summaries: DriveRunSummary[],
 ): CampaignReport {
-  // Collect samples
-  const allSamples: KpiSample[] = [];
-  const summaries: DriveRunSummary[] = [];
-  for (const job of jobs) {
-    const s = localDriveRunSummaries.get(job.drive_job_id);
-    if (s) summaries.push(s);
-    const samplesResult = localKpiSamples.list({ drive_job_id: job.drive_job_id });
-    allSamples.push(...samplesResult.data);
-  }
 
   // If no real data, simulate
   let samples = allSamples;
@@ -561,9 +552,9 @@ function IncidentsSummary({ incidents, onRepair }: {
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 export default function DriveReportingPage() {
-  const [projects] = useState(() => localProjects.list({ limit: 200 }).data);
-  const [projectId, setProjectId] = useState(projects[0]?.id || '');
-  const [campaigns, setCampaigns] = useState<DriveCampaign[]>([]);
+  const { currentProject } = useProject();
+  const projectId = currentProject?.id || '';
+
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
   const [selectedJobId, setSelectedJobId] = useState<string>('ALL');
   const [selectedKpi, setSelectedKpi] = useState<string>('RSRP');
@@ -573,6 +564,7 @@ export default function DriveReportingPage() {
   const [selectedSegment, setSelectedSegment] = useState<RouteSegment | null>(null);
   const [autoIncidents, setAutoIncidents] = useState(true);
 
+  // URL params
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const cId = params.get('campaign');
@@ -581,47 +573,75 @@ export default function DriveReportingPage() {
     if (jId) setSelectedJobId(jId);
   }, []);
 
-  useEffect(() => {
-    if (!projectId) return;
-    const result = localDriveCampaigns.list(projectId, { limit: 200 });
-    setCampaigns(result.data);
-    if (result.data.length > 0 && !selectedCampaignId) {
-      setSelectedCampaignId(result.data[0].campaign_id);
-    }
-  }, [projectId]);
+  // tRPC: campaigns for project
+  const { data: campaignsData } = trpc.driveCampaigns.list.useQuery(
+    { projectId, pageSize: 200 },
+    { enabled: !!projectId }
+  );
+  const campaigns = (campaignsData?.data || []) as unknown as DriveCampaign[];
 
+  // Auto-select first campaign
+  useEffect(() => {
+    if (campaigns.length > 0 && !selectedCampaignId) {
+      setSelectedCampaignId(campaigns[0].campaign_id || (campaigns[0] as any).uid || '');
+    }
+  }, [campaigns, selectedCampaignId]);
+
+  // tRPC: routes for selected campaign
+  const { data: routesData } = trpc.driveRoutes.list.useQuery(
+    { campaignId: selectedCampaignId, limit: 100 },
+    { enabled: !!selectedCampaignId }
+  );
+  const routes = (routesData?.items || []) as unknown as DriveRoute[];
+
+  // tRPC: jobs for selected campaign
+  const { data: jobsData } = trpc.driveJobs.list.useQuery(
+    { campaignId: selectedCampaignId, limit: 200 },
+    { enabled: !!selectedCampaignId }
+  );
+  const allJobs = (jobsData?.items || []) as unknown as DriveJob[];
+  const availableJobs = allJobs;
+
+  // tRPC: summaries for selected campaign
+  const { data: summariesData } = trpc.driveRunSummaries.list.useQuery(
+    { campaignId: selectedCampaignId, pageSize: 100 },
+    { enabled: !!selectedCampaignId }
+  );
+  const allSummaries = (summariesData?.data || []) as unknown as DriveRunSummary[];
+
+  // tRPC: KPI samples for all jobs in campaign
+  const { data: samplesData } = trpc.kpiSamples.list.useQuery(
+    { campaignId: selectedCampaignId, pageSize: 500 },
+    { enabled: !!selectedCampaignId }
+  );
+  const allSamples = (samplesData?.data || []) as unknown as KpiSample[];
+
+  // Generate report from tRPC data
   const generateReport = useCallback(() => {
-    if (!selectedCampaignId) return;
+    if (!selectedCampaignId || campaigns.length === 0) return;
     setLoading(true);
     setSelectedSegment(null);
     setTimeout(() => {
       try {
-        const campaign = localDriveCampaigns.get(selectedCampaignId);
-        const routes = localDriveRoutes.list(selectedCampaignId);
-        const jobsResult = localDriveJobs.list({ campaign_id: selectedCampaignId, limit: 200 });
+        const campaign = campaigns.find((c: any) => (c.campaign_id || c.uid) === selectedCampaignId);
+        if (!campaign) { toast.error('Campagne introuvable'); setLoading(false); return; }
         const jobs = selectedJobId !== 'ALL'
-          ? jobsResult.data.filter(j => j.drive_job_id === selectedJobId)
-          : jobsResult.data;
-        const r = buildReport(campaign, routes, jobs, windowSize, selectedKpi);
+          ? allJobs.filter((j: any) => (j.drive_job_id || j.uid) === selectedJobId)
+          : allJobs;
+        const r = buildReport(campaign, routes, jobs, windowSize, selectedKpi, allSamples, allSummaries);
         setReport(r);
-        const label = r.dataSource === 'real' ? 'réels' : 'simulés';
-        toast.success(`Rapport généré : ${r.segments.length} segments, ${r.incidents.length} incidents (${label})`);
+        const label = r.dataSource === 'real' ? 'r\u00e9els' : 'simul\u00e9s';
+        toast.success(`Rapport g\u00e9n\u00e9r\u00e9 : ${r.segments.length} segments, ${r.incidents.length} incidents (${label})`);
       } catch (e: any) {
         toast.error(e.message);
       }
       setLoading(false);
     }, 200);
-  }, [selectedCampaignId, selectedJobId, windowSize, selectedKpi]);
+  }, [selectedCampaignId, selectedJobId, windowSize, selectedKpi, campaigns, routes, allJobs, allSamples, allSummaries]);
 
   useEffect(() => {
-    if (selectedCampaignId) generateReport();
-  }, [selectedCampaignId, selectedJobId, windowSize]);
-
-  const availableJobs = useMemo(() => {
-    if (!selectedCampaignId) return [];
-    try { return localDriveJobs.list({ campaign_id: selectedCampaignId, limit: 200 }).data; }
-    catch { return []; }
-  }, [selectedCampaignId]);
+    if (selectedCampaignId && campaigns.length > 0) generateReport();
+  }, [selectedCampaignId, selectedJobId, windowSize, generateReport]);
 
   // Drill-down data
   const drillDown: SegmentDrillDown | null = useMemo(() => {
@@ -687,10 +707,9 @@ export default function DriveReportingPage() {
           <p className="text-muted-foreground text-sm mt-1">Segments route, drill-down KPI, artefacts et incidents automatiques</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Select value={projectId} onValueChange={setProjectId}>
-            <SelectTrigger className="w-[160px]"><SelectValue placeholder="Projet" /></SelectTrigger>
-            <SelectContent>{projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
-          </Select>
+          <div className="text-sm text-muted-foreground border border-border rounded-md px-3 py-2">
+            {currentProject?.name || 'Aucun projet'}
+          </div>
           <Select value={selectedCampaignId} onValueChange={v => { setSelectedCampaignId(v); setSelectedJobId('ALL'); }}>
             <SelectTrigger className="w-[180px]"><SelectValue placeholder="Campagne" /></SelectTrigger>
             <SelectContent>{campaigns.map(c => <SelectItem key={c.campaign_id} value={c.campaign_id}>{c.name}</SelectItem>)}</SelectContent>

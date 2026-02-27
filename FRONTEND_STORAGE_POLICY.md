@@ -1,50 +1,84 @@
-# Frontend Storage Policy
+# Frontend Storage Policy — AgilesTest
 
-## Règle générale
+## Statut : ✅ ZÉRO localStorage pour données métier
 
-Toutes les pages migrées vers tRPC/DB **doivent** utiliser les hooks `trpc.*` pour la persistance des données. L'import de `localStore` ou `repositoryApi` est **interdit** dans ces pages.
+**Date** : 27 février 2026
 
-## Gate ESLint
+### Résumé
 
-Une règle `no-restricted-imports` est configurée dans `eslint.config.js` pour bloquer automatiquement les imports interdits dans les pages migrées.
+Le fichier `localStore.ts` a été **supprimé**. Le fichier `repositoryApi.ts` a été **supprimé**.
+Toutes les données métier (projets, profils, scénarios, datasets, bundles, campagnes, routes, devices, probes, jobs, captures, exécutions, KPI, incidents, rapports, capture policies) transitent désormais par **tRPC/DB**.
+
+### Gate ESLint
 
 ```bash
-# Vérifier la conformité
-pnpm lint
-
-# Le script échoue si un import interdit est détecté
+pnpm lint   # ESLint global — bloque tout import de localStore ou repositoryApi
 ```
 
-## Pages migrées (gate ESLint active) — 10 pages
+La gate couvre **tous les fichiers** `client/src/**/*.{ts,tsx}`.
 
-| Page | Routeur(s) tRPC | Cursor pagination |
-|------|----------------|:-----------------:|
-| `ProfilesPage.tsx` | `trpc.profiles.*` | Charger plus |
-| `DatasetTypesPage.tsx` | `trpc.datasetTypes.*` | — |
-| `DatasetsPage.tsx` | `trpc.datasetTypes.*` + `trpc.datasetInstances.*` | — |
-| `DriveCampaignsPage.tsx` | `trpc.driveCampaigns.*` + `trpc.driveRoutes.*` + `trpc.driveDevices.*` + `trpc.driveProbeLinks.*` + `trpc.driveJobs.*` + `trpc.capturePolicies.*` | Charger plus |
-| `ScenariosPage.tsx` | `trpc.scenarios.*` + `trpc.capturePolicies.*` | Charger plus |
-| `ProjectsPage.tsx` | `trpc.projects.*` | — |
-| `ProbesPage.tsx` | `trpc.probes.*` | — |
-| `ExecutionsPage.tsx` | `trpc.executions.*` | Charger plus |
-| `CapturesPage.tsx` | `trpc.captures.*` | Charger plus |
-| `BundlesPage.tsx` | `trpc.bundles.*` | — |
+### Fichiers supprimés
 
-## Pages non encore migrées (exclues de la gate) — 4 pages
+| Fichier | Raison |
+|---------|--------|
+| `client/src/api/localStore.ts` | Remplacé par tRPC hooks |
+| `client/src/api/repositoryApi.ts` | Remplacé par tRPC hooks |
+| `client/src/components/ImportResultsModal.tsx` | Code mort (0 importeurs) |
 
-| Page | Dépendances localStorage | Priorité |
-|------|--------------------------|----------|
-| `AdminProjectAccessPage.tsx` | `localProjects` | Moyenne |
-| `ProjectSettingsPage.tsx` | `localCapturePolicies` | Moyenne |
-| `DriveIncidentReportPage.tsx` | `localDriveRunSummaries`, `localDriveCampaigns` | Basse |
-| `DriveReportingPage.tsx` | `localDriveRunSummaries`, `localDriveCampaigns` | Basse |
+### Fichiers nettoyés (imports localStore retirés)
 
-## Comment ajouter une page migrée
+| Fichier | Avant | Après |
+|---------|-------|-------|
+| `collectorApi.ts` | Fallback localStorage | Stubs vides (backend API only) |
+| `datasetStorageAdapter.ts` | LocalAdapter localStorage | Stub adapter (backend API only) |
+| `scenarioSuggestionEngine.ts` | Appels directs localScenarios | Injection de dépendances (ScenarioStore) |
+| `SuggestScenariosModal.tsx` | — | Passe ScenarioStore basé sur tRPC |
+| `ScenarioDatasetSection.tsx` | localDatasetTypes | trpc.datasetTypes.list |
+| `GeneratePromptModal.tsx` | localBundleItems (inutilisé) | Import supprimé |
 
-1. Migrer la page vers tRPC (supprimer les imports `localStore`/`repositoryApi`)
-2. Ajouter le fichier dans la liste `files` de `eslint.config.js`
-3. Vérifier avec `pnpm lint`
+### Pages migrées vers tRPC (14 pages)
 
-## Exceptions temporaires
+| Page | Routeurs tRPC utilisés |
+|------|----------------------|
+| ProfilesPage | profiles.list/create/update/delete |
+| ScenariosPage | scenarios.list/create/update/delete + capturePolicies |
+| DatasetTypesPage | datasetTypes.list/create/update/delete |
+| DatasetsPage | datasetTypes.list + datasetInstances.list/create/update/delete |
+| BundlesPage | bundles.list/create/update/delete |
+| DriveCampaignsPage | driveCampaigns + driveRoutes + driveDevices + driveProbeLinks + driveJobs + capturePolicies |
+| ProjectsPage | projects.list/create/update/delete |
+| ProbesPage | probes.list/create/update/delete |
+| ExecutionsPage | executions.list |
+| CapturesPage | captures.list |
+| AdminProjectAccessPage | projects.list |
+| ProjectSettingsPage | capturePolicies.getByScope/upsert/remove |
+| DriveIncidentReportPage | projects + driveCampaigns + driveRoutes + driveJobs + kpiSamples |
+| DriveReportingPage | driveCampaigns + driveRoutes + driveJobs + driveRunSummaries + kpiSamples |
 
-Aucune exception active. Toutes les pages surveillées sont 100% tRPC.
+### Cursor pagination "Charger plus" (8 pages)
+
+| Page | pageSize | Pattern |
+|------|----------|---------|
+| ProfilesPage | 30 | cursor + accumulation + déduplication |
+| ScenariosPage | 30 | cursor + accumulation + déduplication |
+| DriveCampaignsPage | 30 | cursor + accumulation + déduplication |
+| CapturesPage | 30 | cursor + accumulation + compteur total |
+| ExecutionsPage | 30 | cursor + accumulation + compteur total |
+| ProbesPage | 30 | cursor + accumulation + resetCursor |
+| DatasetTypesPage | 50 | cursor + accumulation |
+| BundlesPage | 30 | cursor + accumulation + resetCursor |
+
+### Tables DB créées dans ce sprint
+
+| Table | Routeur tRPC |
+|-------|-------------|
+| capture_policies | capturePolicies |
+| kpi_samples | kpiSamples |
+| drive_run_summaries | driveRunSummaries |
+
+### Qualité
+
+- **470 tests Vitest** passent (0 échecs)
+- **0 erreur TypeScript** (tsc --noEmit --skipLibCheck)
+- **0 erreur ESLint** (pnpm lint)
+- **0 import localStore/repositoryApi** dans tout le code source

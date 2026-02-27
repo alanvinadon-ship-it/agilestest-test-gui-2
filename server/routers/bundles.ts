@@ -8,16 +8,26 @@ import {
   datasetInstances,
   datasetTypes,
 } from "../../drizzle/schema";
-import { eq, and, desc, like, sql, SQL } from "drizzle-orm";
+import { eq, and, desc, like, sql, SQL, lt } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 // ─── Dataset Types ──────────────────────────────────────────────────────────
 export const datasetTypesRouter = router({
-  list: protectedProcedure.query(async () => {
+  list: protectedProcedure.input(z.object({
+    cursor: z.string().optional(),
+    pageSize: z.number().min(1).max(200).default(50),
+  }).optional()).query(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
-    const data = await db.select().from(datasetTypes).orderBy(datasetTypes.name);
-    return { data };
+    const ps = input?.pageSize ?? 50;
+    const conditions: SQL[] = [];
+    if (input?.cursor) conditions.push(lt(datasetTypes.uid, input.cursor));
+    const where = conditions.length ? and(...conditions) : undefined;
+    const rows = await db.select().from(datasetTypes).where(where).orderBy(datasetTypes.name).limit(ps + 1);
+    const hasMore = rows.length > ps;
+    const data = hasMore ? rows.slice(0, ps) : rows;
+    const nextCursor = hasMore && data.length > 0 ? data[data.length - 1].uid : undefined;
+    return { data, hasMore, nextCursor };
   }),
 
   create: protectedProcedure.input(z.object({
@@ -161,6 +171,8 @@ export const bundlesRouter = router({
     env: z.enum(["DEV", "PREPROD", "PILOT_ORANGE", "PROD"]).optional(),
     status: z.enum(["DRAFT", "ACTIVE", "DEPRECATED"]).optional(),
     search: z.string().optional(),
+    cursor: z.string().optional(),
+    pageSize: z.number().min(1).max(100).default(30),
   })).query(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
@@ -168,9 +180,13 @@ export const bundlesRouter = router({
     if (input.env) conditions.push(eq(datasetBundles.env, input.env));
     if (input.status) conditions.push(eq(datasetBundles.status, input.status));
     if (input.search) conditions.push(like(datasetBundles.name, `%${input.search}%`));
+    if (input.cursor) conditions.push(lt(datasetBundles.uid, input.cursor));
     const where = and(...conditions);
-    const data = await db.select().from(datasetBundles).where(where).orderBy(desc(datasetBundles.createdAt)).limit(100);
-    return { data };
+    const rows = await db.select().from(datasetBundles).where(where).orderBy(desc(datasetBundles.createdAt)).limit(input.pageSize + 1);
+    const hasMore = rows.length > input.pageSize;
+    const data = hasMore ? rows.slice(0, input.pageSize) : rows;
+    const nextCursor = hasMore && data.length > 0 ? data[data.length - 1].uid : undefined;
+    return { data, hasMore, nextCursor };
   }),
 
   create: protectedProcedure.input(z.object({

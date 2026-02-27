@@ -9,7 +9,6 @@ import { useProject } from '../state/projectStore';
 import { useDatasetStorage } from '../contexts/DatasetStorageContext';
 import { buildAiScriptContext } from '../ai/buildContext';
 import { PROMPT_SCRIPT_PLAN_v1, PROMPT_SCRIPT_GEN_v1 } from '../ai/promptTemplates';
-import { localBundleItems } from '../api/localStore';
 import type { TestProfile, TestScenario, TargetEnv, DatasetInstance, DatasetSecretKey } from '../types';
 import type { AiScriptContext } from '../ai/types';
 
