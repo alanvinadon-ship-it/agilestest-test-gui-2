@@ -1,17 +1,16 @@
 /**
  * AcceptInvitePage — /invite/accept?token=...
  * Page publique permettant à un utilisateur invité de finaliser son inscription.
- * Flux : validation token → formulaire (nom, mot de passe) → activation compte → redirection login
+ * Flux : vérification token via tRPC → formulaire (nom, mot de passe) → acceptation → redirection login
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useLocation, useSearch } from 'wouter';
 import { toast } from 'sonner';
 import {
   Shield, UserPlus, Loader2, AlertCircle, CheckCircle2,
   Eye, EyeOff, Mail, User, Lock, ArrowRight, XCircle,
 } from 'lucide-react';
-import { adminInvites } from '../admin/adminStore';
-import type { Invite } from '../admin/types';
+import { trpc } from '@/lib/trpc';
 
 // ─── Role labels ────────────────────────────────────────────────────────
 const ROLE_LABELS: Record<string, string> = {
@@ -20,6 +19,20 @@ const ROLE_LABELS: Record<string, string> = {
   VIEWER: 'Lecteur',
 };
 
+// ─── Password strength ─────────────────────────────────────────────────
+function getPasswordStrength(pw: string): { score: number; label: string; color: string } {
+  let score = 0;
+  if (pw.length >= 8) score++;
+  if (pw.length >= 12) score++;
+  if (/[A-Z]/.test(pw)) score++;
+  if (/[0-9]/.test(pw)) score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score++;
+  if (score <= 1) return { score, label: 'Faible', color: 'bg-red-500' };
+  if (score <= 2) return { score, label: 'Moyen', color: 'bg-amber-500' };
+  if (score <= 3) return { score, label: 'Bon', color: 'bg-blue-500' };
+  return { score, label: 'Fort', color: 'bg-emerald-500' };
+}
+
 // ─── Component ──────────────────────────────────────────────────────────
 export default function AcceptInvitePage() {
   const search = useSearch();
@@ -27,79 +40,53 @@ export default function AcceptInvitePage() {
 
   // Extract token from query string
   const params = new URLSearchParams(search);
-  const token = params.get('token');
+  const token = params.get('token') ?? '';
 
-  // State
-  const [status, setStatus] = useState<'loading' | 'valid' | 'invalid' | 'expired' | 'accepted' | 'already' | 'success'>('loading');
-  const [invite, setInvite] = useState<Invite | null>(null);
+  // Form state
   const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [accepted, setAccepted] = useState(false);
 
-  // Validate token on mount
-  useEffect(() => {
-    if (!token) {
-      setStatus('invalid');
-      return;
-    }
+  // tRPC: verify token
+  const { data: verifyResult, isLoading: verifying } = trpc.invite.verifyToken.useQuery(
+    { token },
+    { enabled: !!token, retry: false }
+  );
 
-    try {
-      const found = adminInvites.findByToken(token);
-      if (!found) {
-        setStatus('invalid');
-        return;
-      }
-
-      if (found.status === 'ACCEPTED') {
-        setStatus('already');
-        setInvite(found);
-        return;
-      }
-
-      if (found.status === 'REVOKED') {
-        setStatus('invalid');
-        return;
-      }
-
-      if (found.status === 'EXPIRED' || new Date(found.expires_at).getTime() < Date.now()) {
-        setStatus('expired');
-        setInvite(found);
-        return;
-      }
-
-      setInvite(found);
-      setStatus('valid');
-    } catch {
-      setStatus('invalid');
-    }
-  }, [token]);
+  // tRPC: accept invite
+  const acceptMutation = trpc.invite.accept.useMutation({
+    onSuccess: (data) => {
+      setAccepted(true);
+      toast.success(`Bienvenue ${data.fullName} ! Votre compte est activé.`);
+      setTimeout(() => navigate('/login'), 3000);
+    },
+    onError: (err) => {
+      toast.error(err.message || "Erreur lors de l'activation du compte");
+    },
+  });
 
   // Form validation
   const validate = useCallback((): boolean => {
     const errs: Record<string, string> = {};
-
     if (!fullName.trim()) {
       errs.fullName = 'Le nom complet est requis';
     } else if (fullName.trim().length < 2) {
       errs.fullName = 'Le nom doit contenir au moins 2 caractères';
     }
-
     if (!password) {
       errs.password = 'Le mot de passe est requis';
     } else if (password.length < 8) {
       errs.password = 'Le mot de passe doit contenir au moins 8 caractères';
     }
-
     if (!confirmPassword) {
       errs.confirmPassword = 'Veuillez confirmer le mot de passe';
     } else if (password !== confirmPassword) {
       errs.confirmPassword = 'Les mots de passe ne correspondent pas';
     }
-
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }, [fullName, password, confirmPassword]);
@@ -108,28 +95,27 @@ export default function AcceptInvitePage() {
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate() || !token) return;
+    acceptMutation.mutate({ token, fullName: fullName.trim(), password });
+  }, [token, fullName, password, validate, acceptMutation]);
 
-    setSubmitting(true);
-    try {
-      const result = adminInvites.acceptByToken(token, fullName.trim(), password);
-      setStatus('success');
-      toast.success(`Bienvenue ${result.user.full_name} ! Votre compte est activé.`);
+  const pwStrength = getPasswordStrength(password);
 
-      // Redirect to login after 3s
-      setTimeout(() => {
-        navigate('/login');
-      }, 3000);
-    } catch (err: any) {
-      toast.error(err.message || 'Erreur lors de l\'activation du compte');
-      if (err.message?.includes('expiré')) {
-        setStatus('expired');
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  }, [token, fullName, password, validate, navigate]);
-
-  // ─── Render ─────────────────────────────────────────────────────────────
+  // ─── Determine status ──────────────────────────────────────────────────
+  const status = !token
+    ? 'invalid'
+    : verifying
+    ? 'loading'
+    : accepted
+    ? 'success'
+    : !verifyResult
+    ? 'loading'
+    : verifyResult.valid
+    ? 'valid'
+    : verifyResult.reason === 'ALREADY_ACCEPTED'
+    ? 'already'
+    : verifyResult.reason === 'EXPIRED'
+    ? 'expired'
+    : 'invalid';
 
   return (
     <div className="min-h-screen flex items-center justify-center blueprint-grid bg-background">
@@ -174,19 +160,23 @@ export default function AcceptInvitePage() {
         )}
 
         {/* ─── Expired ─────────────────────────────────────────── */}
-        {status === 'expired' && invite && (
+        {status === 'expired' && verifyResult && !verifyResult.valid && (
           <div className="bg-card border border-border rounded-lg p-8 text-center">
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-amber-500/10 mb-4">
               <AlertCircle className="w-6 h-6 text-amber-400" />
             </div>
             <h2 className="text-lg font-heading font-bold text-foreground mb-2">Invitation expirée</h2>
             <p className="text-sm text-muted-foreground mb-2">
-              L'invitation envoyée à <span className="text-foreground font-medium">{invite.email}</span> a expiré
-              le {new Date(invite.expires_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}.
+              L'invitation envoyée à <span className="text-foreground font-medium">{'email' in verifyResult ? verifyResult.email : ''}</span> a expiré
+              {'expiresAt' in verifyResult && verifyResult.expiresAt
+                ? ` le ${new Date(verifyResult.expiresAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`
+                : ''}.
             </p>
-            <p className="text-xs text-muted-foreground mb-6">
-              Contactez <span className="text-foreground">{invite.invited_by_name}</span> pour recevoir une nouvelle invitation.
-            </p>
+            {'invitedByName' in verifyResult && verifyResult.invitedByName && (
+              <p className="text-xs text-muted-foreground mb-6">
+                Contactez <span className="text-foreground">{verifyResult.invitedByName}</span> pour recevoir une nouvelle invitation.
+              </p>
+            )}
             <button
               onClick={() => navigate('/login')}
               className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
@@ -198,14 +188,14 @@ export default function AcceptInvitePage() {
         )}
 
         {/* ─── Already accepted ────────────────────────────────── */}
-        {status === 'already' && invite && (
+        {status === 'already' && verifyResult && !verifyResult.valid && (
           <div className="bg-card border border-border rounded-lg p-8 text-center">
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-500/10 mb-4">
               <CheckCircle2 className="w-6 h-6 text-blue-400" />
             </div>
             <h2 className="text-lg font-heading font-bold text-foreground mb-2">Invitation déjà acceptée</h2>
             <p className="text-sm text-muted-foreground mb-6">
-              Le compte <span className="text-foreground font-medium">{invite.email}</span> est déjà activé.
+              Le compte <span className="text-foreground font-medium">{'email' in verifyResult ? verifyResult.email : ''}</span> est déjà activé.
               Vous pouvez vous connecter directement.
             </p>
             <button
@@ -236,7 +226,7 @@ export default function AcceptInvitePage() {
         )}
 
         {/* ─── Registration form ───────────────────────────────── */}
-        {status === 'valid' && invite && (
+        {status === 'valid' && verifyResult && verifyResult.valid && (
           <div className="bg-card border border-border rounded-lg overflow-hidden">
             {/* Header */}
             <div className="px-6 py-5 border-b border-border">
@@ -256,161 +246,109 @@ export default function AcceptInvitePage() {
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
                   <span className="text-muted-foreground">Email</span>
-                  <p className="text-foreground font-medium mt-0.5 flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 mt-0.5">
                     <Mail className="w-3.5 h-3.5 text-primary" />
-                    {invite.email}
-                  </p>
+                    <span className="text-foreground font-medium">{verifyResult.email}</span>
+                  </div>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Rôle attribué</span>
-                  <p className="text-foreground font-medium mt-0.5">
-                    {ROLE_LABELS[invite.role] || invite.role}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Invité par</span>
-                  <p className="text-foreground font-medium mt-0.5">{invite.invited_by_name}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Expire le</span>
-                  <p className="text-foreground font-medium mt-0.5">
-                    {new Date(invite.expires_at).toLocaleDateString('fr-FR', {
-                      day: 'numeric', month: 'long', year: 'numeric',
-                    })}
-                  </p>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <Shield className="w-3.5 h-3.5 text-primary" />
+                    <span className="text-foreground font-medium">{ROLE_LABELS[verifyResult.role] ?? verifyResult.role}</span>
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-              {/* Full name */}
+              {/* Full Name */}
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                  Nom complet
-                </label>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Nom complet</label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <input
                     type="text"
                     value={fullName}
-                    onChange={e => { setFullName(e.target.value); setErrors(prev => ({ ...prev, fullName: '' })); }}
+                    onChange={e => setFullName(e.target.value)}
                     placeholder="Jean Dupont"
-                    className={`w-full pl-10 pr-3 py-2.5 rounded-md border bg-background text-sm text-foreground placeholder:text-muted-foreground/50 transition-colors ${
-                      errors.fullName ? 'border-red-500 focus:ring-red-500' : 'border-border focus:ring-primary'
-                    } focus:outline-none focus:ring-1`}
-                    autoFocus
+                    className={`w-full pl-10 pr-3 py-2.5 bg-background border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 ${errors.fullName ? 'border-red-500' : 'border-border'}`}
                   />
                 </div>
-                {errors.fullName && (
-                  <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" /> {errors.fullName}
-                  </p>
-                )}
+                {errors.fullName && <p className="text-xs text-red-400 mt-1">{errors.fullName}</p>}
               </div>
 
               {/* Password */}
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                  Mot de passe
-                </label>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Mot de passe</label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
-                    onChange={e => { setPassword(e.target.value); setErrors(prev => ({ ...prev, password: '' })); }}
+                    onChange={e => setPassword(e.target.value)}
                     placeholder="Minimum 8 caractères"
-                    className={`w-full pl-10 pr-10 py-2.5 rounded-md border bg-background text-sm text-foreground placeholder:text-muted-foreground/50 transition-colors ${
-                      errors.password ? 'border-red-500 focus:ring-red-500' : 'border-border focus:ring-primary'
-                    } focus:outline-none focus:ring-1`}
+                    className={`w-full pl-10 pr-10 py-2.5 bg-background border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 ${errors.password ? 'border-red-500' : 'border-border'}`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    tabIndex={-1}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                {errors.password && (
-                  <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" /> {errors.password}
-                  </p>
-                )}
-                {/* Password strength indicator */}
+                {errors.password && <p className="text-xs text-red-400 mt-1">{errors.password}</p>}
                 {password && (
-                  <div className="mt-2 flex gap-1">
-                    {[1, 2, 3, 4].map(level => {
-                      const strength = password.length >= 12 && /[A-Z]/.test(password) && /[0-9]/.test(password) && /[^A-Za-z0-9]/.test(password) ? 4
-                        : password.length >= 10 && /[A-Z]/.test(password) && /[0-9]/.test(password) ? 3
-                        : password.length >= 8 ? 2 : 1;
-                      const colors = ['bg-red-500', 'bg-amber-500', 'bg-blue-500', 'bg-emerald-500'];
-                      return (
-                        <div
-                          key={level}
-                          className={`h-1 flex-1 rounded-full transition-colors ${
-                            level <= strength ? colors[strength - 1] : 'bg-border'
-                          }`}
-                        />
-                      );
-                    })}
+                  <div className="mt-2">
+                    <div className="flex gap-1 mb-1">
+                      {[1, 2, 3, 4, 5].map(i => (
+                        <div key={i} className={`h-1 flex-1 rounded-full ${i <= pwStrength.score ? pwStrength.color : 'bg-border'}`} />
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Force : <span className="text-foreground">{pwStrength.label}</span></p>
                   </div>
                 )}
               </div>
 
-              {/* Confirm password */}
+              {/* Confirm Password */}
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                  Confirmer le mot de passe
-                </label>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Confirmer le mot de passe</label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <input
                     type={showConfirm ? 'text' : 'password'}
                     value={confirmPassword}
-                    onChange={e => { setConfirmPassword(e.target.value); setErrors(prev => ({ ...prev, confirmPassword: '' })); }}
+                    onChange={e => setConfirmPassword(e.target.value)}
                     placeholder="Retapez le mot de passe"
-                    className={`w-full pl-10 pr-10 py-2.5 rounded-md border bg-background text-sm text-foreground placeholder:text-muted-foreground/50 transition-colors ${
-                      errors.confirmPassword ? 'border-red-500 focus:ring-red-500' : 'border-border focus:ring-primary'
-                    } focus:outline-none focus:ring-1`}
+                    className={`w-full pl-10 pr-10 py-2.5 bg-background border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 ${errors.confirmPassword ? 'border-red-500' : 'border-border'}`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirm(!showConfirm)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    tabIndex={-1}
                   >
                     {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                {errors.confirmPassword && (
-                  <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" /> {errors.confirmPassword}
-                  </p>
-                )}
-                {confirmPassword && password === confirmPassword && (
-                  <p className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> Les mots de passe correspondent
-                  </p>
-                )}
+                {errors.confirmPassword && <p className="text-xs text-red-400 mt-1">{errors.confirmPassword}</p>}
               </div>
 
               {/* Submit */}
               <button
                 type="submit"
-                disabled={submitting}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary text-primary-foreground rounded-md text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors mt-2"
+                disabled={acceptMutation.isPending}
+                className="w-full py-2.5 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                {submitting ? (
+                {acceptMutation.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Activation en cours...
                   </>
                 ) : (
                   <>
-                    <UserPlus className="w-4 h-4" />
+                    <CheckCircle2 className="w-4 h-4" />
                     Activer mon compte
                   </>
                 )}
@@ -421,21 +359,13 @@ export default function AcceptInvitePage() {
             <div className="px-6 py-3 border-t border-border text-center">
               <p className="text-xs text-muted-foreground">
                 Vous avez déjà un compte ?{' '}
-                <button
-                  onClick={() => navigate('/login')}
-                  className="text-primary hover:underline"
-                >
+                <button onClick={() => navigate('/login')} className="text-primary hover:underline">
                   Se connecter
                 </button>
               </p>
             </div>
           </div>
         )}
-
-        {/* Version */}
-        <p className="text-center text-xs text-muted-foreground/50 mt-6 font-mono">
-          AgilesTest v0.1.1 — Orange CIV
-        </p>
       </div>
     </div>
   );

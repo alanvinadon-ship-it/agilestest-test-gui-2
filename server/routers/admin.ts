@@ -2,7 +2,8 @@ import { z } from "zod";
 import { eq, desc, and, like, sql, or, SQL } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import crypto from "crypto";
-import { router, adminProcedure } from "../_core/trpc";
+import { router, adminProcedure, publicProcedure } from "../_core/trpc";
+import bcrypt from "bcryptjs";
 import { getDb } from "../db";
 import {
   users, invites, auditLogs, projectMemberships,
@@ -49,7 +50,134 @@ const listAuditLogsInput = z.object({
   userId: z.number().optional(),
 });
 
-// ─── Router ─────────────────────────────────────────────────────────────────
+// ─── Public Invite Router (no auth required) ───────────────────────────────
+
+export const invitePublicRouter = router({
+  /** Verify an invite token — returns invite info if valid */
+  verifyToken: publicProcedure
+    .input(z.object({ token: z.string().min(1) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      const [invite] = await db.select().from(invites)
+        .where(eq(invites.token, input.token))
+        .limit(1);
+
+      if (!invite) {
+        return { valid: false as const, reason: "NOT_FOUND" as const };
+      }
+
+      if (invite.status === "ACCEPTED") {
+        return { valid: false as const, reason: "ALREADY_ACCEPTED" as const, email: invite.email };
+      }
+
+      if (invite.status === "REVOKED") {
+        return { valid: false as const, reason: "REVOKED" as const };
+      }
+
+      if (invite.status === "EXPIRED" || (invite.expiresAt && new Date(invite.expiresAt).getTime() < Date.now())) {
+        // Auto-mark expired if not already
+        if (invite.status !== "EXPIRED") {
+          await db.update(invites).set({ status: "EXPIRED" }).where(eq(invites.id, invite.id));
+        }
+        return {
+          valid: false as const,
+          reason: "EXPIRED" as const,
+          email: invite.email,
+          expiresAt: invite.expiresAt?.toISOString() ?? null,
+          invitedByName: invite.invitedByName,
+        };
+      }
+
+      return {
+        valid: true as const,
+        email: invite.email,
+        role: invite.role,
+        invitedByName: invite.invitedByName,
+        expiresAt: invite.expiresAt?.toISOString() ?? null,
+      };
+    }),
+
+  /** Accept an invite — creates user account with password */
+  accept: publicProcedure
+    .input(z.object({
+      token: z.string().min(1),
+      fullName: z.string().min(2),
+      password: z.string().min(8),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      const [invite] = await db.select().from(invites)
+        .where(eq(invites.token, input.token))
+        .limit(1);
+
+      if (!invite) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Invitation non trouvée ou lien invalide." });
+      }
+
+      if (invite.status !== "PENDING") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Cette invitation n'est plus valide." });
+      }
+
+      if (invite.expiresAt && new Date(invite.expiresAt).getTime() < Date.now()) {
+        await db.update(invites).set({ status: "EXPIRED" }).where(eq(invites.id, invite.id));
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Cette invitation a expiré." });
+      }
+
+      // Hash the password
+      const passwordHash = await bcrypt.hash(input.password, 12);
+
+      // Check if user already exists by email
+      const [existingUser] = await db.select().from(users)
+        .where(eq(users.email, invite.email))
+        .limit(1);
+
+      if (existingUser) {
+        // Update existing user
+        await db.update(users).set({
+          fullName: input.fullName,
+          name: input.fullName,
+          passwordHash,
+          status: "ACTIVE",
+        }).where(eq(users.id, existingUser.id));
+      } else {
+        // Create new user
+        const openId = `invite_${crypto.randomUUID()}`;
+        const userRole = invite.role === "ADMIN" ? "admin" as const : "user" as const;
+        await db.insert(users).values({
+          openId,
+          name: input.fullName,
+          fullName: input.fullName,
+          email: invite.email,
+          loginMethod: "invite",
+          role: userRole,
+          status: "ACTIVE",
+          passwordHash,
+        });
+      }
+
+      // Mark invite as accepted
+      await db.update(invites).set({
+        status: "ACCEPTED",
+        acceptedAt: new Date(),
+      }).where(eq(invites.id, invite.id));
+
+      await writeAuditLog({
+        userId: existingUser?.id ?? 0,
+        action: "INVITE_ACCEPTED",
+        entity: "invite",
+        entityId: String(invite.id),
+        details: { email: invite.email, fullName: input.fullName },
+      });
+
+      return { success: true, email: invite.email, fullName: input.fullName };
+    }),
+});
+
+// ─── Admin Router (auth required) ───────────────────────────────────────────
 
 export const adminRouter = router({
   // ── Users ───────────────────────────────────────────────────────────────

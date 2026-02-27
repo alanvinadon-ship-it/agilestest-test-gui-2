@@ -395,3 +395,4 @@
 - [x] Schema Audit: Update kpiData.test.ts (remove uid assertion for driveRunSummaries)
 - [x] Schema Audit: Document results in docs/SCHEMA_AUDIT.md
 - [x] Schema Audit: Verify 0 TS errors, 596 tests passing
+- [x] Bug: Lien d'invitation invalide — corrigé : AcceptInvitePage utilise maintenant tRPC (invite.verifyToken + invite.accept) au lieu du localStorage

@@ -3,7 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { notificationsRouter } from "./routers/notifications";
-import { adminRouter } from "./routers/admin";
+import { adminRouter, invitePublicRouter } from "./routers/admin";
 import { projectsRouter } from "./routers/projects";
 import {
   profilesRouter,
@@ -58,6 +58,8 @@ export const appRouter = router({
 
   // Admin (users, invites, audit logs)
   admin: adminRouter,
+  // Public invite verification & acceptance (no auth)
+  invite: invitePublicRouter,
 
   // Projects CRUD
   projects: projectsRouter,
