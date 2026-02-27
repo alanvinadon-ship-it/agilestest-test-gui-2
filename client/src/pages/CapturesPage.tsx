@@ -15,6 +15,69 @@ import {
 import { toast } from 'sonner';
 import { useSearch, useLocation } from 'wouter';
 
+// ─── Collector Start/Stop Buttons ──────────────────────────────────────────
+
+function CollectorStartButton({ captureId, probeId }: { captureId: number; probeId?: number | null }) {
+  const utils = trpc.useUtils();
+  const startMutation = trpc.collector.start.useMutation({
+    onSuccess: (result) => {
+      toast.success(result.created ? 'Collecte démarrée' : 'Session déjà active');
+      utils.captures.list.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  if (!probeId) return null;
+
+  return (
+    <button
+      onClick={() => startMutation.mutate({ captureId, probeId })}
+      disabled={startMutation.isPending}
+      className="inline-flex items-center gap-1 text-xs text-green-400 hover:text-green-300 transition-colors"
+    >
+      {startMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+      Démarrer
+    </button>
+  );
+}
+
+function CollectorStopButton({ captureId }: { captureId: number }) {
+  const utils = trpc.useUtils();
+  const statusQuery = trpc.collector.status.useQuery(
+    { captureId },
+    { refetchInterval: 10000 },
+  );
+  const activeSession = statusQuery.data?.activeSession;
+
+  const stopMutation = trpc.collector.stop.useMutation({
+    onSuccess: (result) => {
+      toast.success(result.alreadyStopped ? 'Session déjà arrêtée' : 'Collecte arrêtée');
+      utils.captures.list.invalidate();
+      utils.collector.status.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  if (!activeSession) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-blue-400">
+        <Loader2 className="w-3.5 h-3.5 animate-spin" /> En cours...
+      </span>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => stopMutation.mutate({ sessionUid: activeSession.uid })}
+      disabled={stopMutation.isPending}
+      className="inline-flex items-center gap-1 text-xs text-red-400 hover:text-red-300 transition-colors"
+    >
+      {stopMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <StopCircle className="w-3.5 h-3.5" />}
+      Arrêter
+    </button>
+  );
+}
+
 const captureStatusConfig: Record<CaptureStatus, { icon: typeof CheckCircle2; label: string; cls: string }> = {
   QUEUED:    { icon: Clock,        label: 'En file',   cls: 'text-yellow-400' },
   RUNNING:   { icon: Loader2,      label: 'En cours',  cls: 'text-blue-400' },
@@ -429,10 +492,11 @@ export default function CapturesPage() {
                             <Trash2 className="w-3.5 h-3.5" /> Supprimer
                           </button>
                         )}
+                        {cap.status === 'QUEUED' && cap.targetType === 'PROBE' && (
+                          <CollectorStartButton captureId={cap.id} probeId={cap.probeId} />
+                        )}
                         {cap.status === 'RUNNING' && (
-                          <span className="inline-flex items-center gap-1 text-xs text-blue-400">
-                            <StopCircle className="w-3.5 h-3.5" /> En cours...
-                          </span>
+                          <CollectorStopButton captureId={cap.id} />
                         )}
                       </div>
                     </td>

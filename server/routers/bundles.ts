@@ -7,6 +7,7 @@ import {
   bundleItems,
   datasetInstances,
   datasetTypes,
+  datasetSecrets,
 } from "../../drizzle/schema";
 import { eq, and, desc, like, sql, SQL, lt } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -154,6 +155,34 @@ export const datasetInstancesRouter = router({
     return { success: true };
   }),
 
+  get: protectedProcedure.input(z.object({ datasetId: z.string() })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const [row] = await db.select().from(datasetInstances).where(eq(datasetInstances.uid, input.datasetId)).limit(1);
+    if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Dataset instance not found" });
+    return row;
+  }),
+
+  clone: protectedProcedure.input(z.object({ datasetId: z.string() })).mutation(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const [original] = await db.select().from(datasetInstances).where(eq(datasetInstances.uid, input.datasetId)).limit(1);
+    if (!original) throw new TRPCError({ code: "NOT_FOUND", message: "Dataset instance not found" });
+    const newUid = randomUUID();
+    await db.insert(datasetInstances).values({
+      uid: newUid,
+      projectId: original.projectId,
+      datasetTypeId: original.datasetTypeId,
+      env: original.env,
+      valuesJson: original.valuesJson,
+      notes: original.notes ? `${original.notes} (clone)` : 'clone',
+      status: "DRAFT",
+      version: 1,
+      createdBy: ctx.user?.openId ?? null,
+    });
+    return { success: true, datasetId: newUid };
+  }),
+
   delete: protectedProcedure.input(z.object({ datasetId: z.string() })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
@@ -187,6 +216,14 @@ export const bundlesRouter = router({
     const data = hasMore ? rows.slice(0, input.pageSize) : rows;
     const nextCursor = hasMore && data.length > 0 ? data[data.length - 1].uid : undefined;
     return { data, hasMore, nextCursor };
+  }),
+
+  get: protectedProcedure.input(z.object({ bundleId: z.string() })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const [row] = await db.select().from(datasetBundles).where(eq(datasetBundles.uid, input.bundleId)).limit(1);
+    if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Bundle not found" });
+    return row;
   }),
 
   create: protectedProcedure.input(z.object({
@@ -263,6 +300,52 @@ export const bundlesRouter = router({
     // Delete items first
     await db.delete(bundleItems).where(eq(bundleItems.bundleId, input.bundleId));
     await db.delete(datasetBundles).where(eq(datasetBundles.uid, input.bundleId));
+    return { success: true };
+  }),
+});
+
+// ─── Dataset Secrets ────────────────────────────────────────────────────────
+export const datasetSecretsRouter = router({
+  list: protectedProcedure.input(z.object({ datasetId: z.string() })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const data = await db.select().from(datasetSecrets).where(eq(datasetSecrets.datasetId, input.datasetId));
+    return { data };
+  }),
+
+  set: protectedProcedure.input(z.object({
+    datasetId: z.string(),
+    keyPath: z.string().min(1),
+    isSecret: z.boolean(),
+  })).mutation(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    // Upsert: check if exists
+    const [existing] = await db.select().from(datasetSecrets)
+      .where(and(eq(datasetSecrets.datasetId, input.datasetId), eq(datasetSecrets.keyPath, input.keyPath)))
+      .limit(1);
+    if (existing) {
+      await db.update(datasetSecrets).set({ isSecret: input.isSecret })
+        .where(eq(datasetSecrets.id, existing.id));
+    } else {
+      await db.insert(datasetSecrets).values({
+        datasetId: input.datasetId,
+        keyPath: input.keyPath,
+        isSecret: input.isSecret,
+      });
+    }
+    return { success: true };
+  }),
+
+  remove: protectedProcedure.input(z.object({
+    datasetId: z.string(),
+    keyPath: z.string(),
+  })).mutation(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    await db.delete(datasetSecrets).where(
+      and(eq(datasetSecrets.datasetId, input.datasetId), eq(datasetSecrets.keyPath, input.keyPath))
+    );
     return { success: true };
   }),
 });

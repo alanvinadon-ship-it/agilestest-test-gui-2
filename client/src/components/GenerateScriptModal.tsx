@@ -4,11 +4,11 @@
  *
  * Flow: Sélection env+bundle → Plan → Génération → Affichage fichiers → Save to Repo
  */
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Sparkles, AlertTriangle, CheckCircle2, Copy, Save, Loader2, FileCode, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { useProject } from '../state/projectStore';
-import { useDatasetStorage } from '../contexts/DatasetStorageContext';
+import { trpc } from '@/lib/trpc';
 import { buildAiScriptContext } from '../ai/buildContext';
 import { PROMPT_SCRIPT_PLAN_v1, PROMPT_SCRIPT_GEN_v1 } from '../ai/promptTemplates';
 import { localScriptRepository } from '../ai/scriptRepository';
@@ -29,7 +29,7 @@ interface Props {
 
 export default function GenerateScriptModal({ scenario, profile, onClose, onSaved }: Props) {
   const { currentProject } = useProject();
-  const { adapter } = useDatasetStorage();
+  const utils = trpc.useUtils();
 
   const [step, setStep] = useState<Step>('config');
   const [selectedEnv, setSelectedEnv] = useState<TargetEnv>('DEV');
@@ -42,37 +42,45 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
   const [viewFileIdx, setViewFileIdx] = useState(0);
   const [saved, setSaved] = useState(false);
 
-  // Load bundles
-  useMemo(() => {
-    if (!currentProject?.id) return;
-    adapter.bundles.list(currentProject.id, { env: selectedEnv, status: 'ACTIVE' })
-      .then(res => {
-        setBundles(res.data);
-        if (res.data.length > 0) setSelectedBundleId(res.data[0].bundle_id);
-      })
-      .catch(() => setBundles([]));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedEnv, currentProject?.id]);
+  // Load bundles via tRPC
+  const { data: bundlesData } = trpc.bundles.list.useQuery(
+    {
+      projectId: String(currentProject?.id || ''),
+      env: selectedEnv,
+      status: 'ACTIVE' as any,
+    },
+    { enabled: !!currentProject?.id },
+  );
+
+  useEffect(() => {
+    if (bundlesData?.data) {
+      setBundles(bundlesData.data);
+      if (bundlesData.data.length > 0 && !selectedBundleId) {
+        setSelectedBundleId(bundlesData.data[0].uid);
+      }
+    }
+  }, [bundlesData]);
 
   const buildContext = async (): Promise<AiScriptContext> => {
     if (!currentProject || !selectedBundleId) throw new Error('Bundle requis');
-    const bundle = await adapter.bundles.get(selectedBundleId);
-    const items = await adapter.bundleItems.list(selectedBundleId);
+    const bundle = await utils.bundles.get.fetch({ bundleId: selectedBundleId });
+    const itemsResult = await utils.bundleItems.list.fetch({ bundleId: selectedBundleId });
+    const items = itemsResult.data;
     const datasets: DatasetInstance[] = [];
     const allSecrets: DatasetSecretKey[] = [];
     for (const item of items) {
       try {
-        const ds = await adapter.instances.get(item.dataset_id);
-        datasets.push(ds);
-        const secrets = await adapter.secrets.list(item.dataset_id);
-        allSecrets.push(...secrets);
+        const ds = await utils.datasetInstances.get.fetch({ datasetId: item.datasetId });
+        datasets.push(ds as any);
+        const secretsResult = await utils.datasetSecrets.list.fetch({ datasetId: item.datasetId });
+        allSecrets.push(...(secretsResult.data as any[]));
       } catch { /* skip */ }
     }
     return buildAiScriptContext({
       project: currentProject as any,
       profile,
       scenario,
-      bundle,
+      bundle: bundle as any,
       bundleDatasets: datasets,
       secrets: allSecrets,
     });
@@ -364,7 +372,7 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
                     className="text-xs px-3 py-1.5 bg-secondary/30 border border-border rounded-md text-foreground min-w-[200px]"
                   >
                     <option value="">-- Sélectionner --</option>
-                    {bundles.map(b => <option key={b.bundle_id} value={b.bundle_id}>{b.name} v{b.version}</option>)}
+                    {bundles.map((b: any) => <option key={b.uid} value={b.uid}>{b.name}</option>)}
                   </select>
                 </div>
               </div>

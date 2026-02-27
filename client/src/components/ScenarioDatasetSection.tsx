@@ -1,13 +1,12 @@
 /**
  * ScenarioDatasetSection — Section "Datasets & Bundles" intégrée dans chaque scénario.
  * Affiche la compatibilité par environnement et les bundles disponibles.
- * Utilise le DatasetStorageAdapter (local ou API selon feature flag).
+ * Utilise tRPC directement (plus de DatasetStorageAdapter).
  */
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { trpc } from '@/lib/trpc';
-import { useDatasetStorage } from '../contexts/DatasetStorageContext';
-import type { TestScenario, TargetEnv, ScenarioDatasetValidation, DatasetType } from '../types';
+import { useProject } from '../state/projectStore';
+import type { TestScenario, TargetEnv, ScenarioDatasetValidation } from '../types';
 import {
   Package, CheckCircle2, AlertTriangle, XCircle,
   ChevronDown, ChevronRight,
@@ -28,7 +27,7 @@ interface Props {
 
 export default function ScenarioDatasetSection({ scenario }: Props) {
   const [expanded, setExpanded] = useState(false);
-  const { adapter } = useDatasetStorage();
+  const { currentProject } = useProject();
   const requiredTypes = scenario.required_dataset_types || [];
 
   // Charger les noms des dataset types via tRPC
@@ -38,31 +37,68 @@ export default function ScenarioDatasetSection({ scenario }: Props) {
     return new Map(dtData.data.map((dt: any) => [dt.datasetTypeId, dt.name]));
   }, [dtData]);
 
-  // Validation par env via adapter (async-compatible)
-  const { data: validationByEnv } = useQuery({
-    queryKey: ['scenario_dataset_validation', scenario.id, requiredTypes.join(',')],
-    queryFn: async () => {
-      if (requiredTypes.length === 0) return new Map<TargetEnv, ScenarioDatasetValidation>();
-      const map = new Map<TargetEnv, ScenarioDatasetValidation>();
-      for (const env of ALL_ENVS) {
-        try {
-          const result = await adapter.validation.validateScenarioDatasets(scenario.id, env);
-          map.set(env, result);
-        } catch {
-          // ignore
-        }
-      }
-      return map;
-    },
-    enabled: requiredTypes.length > 0,
-    staleTime: 10_000,
-  });
+  // Load instances per env to compute validation client-side
+  // We query all instances for the project and compute compatibility
+  const { data: instancesData } = trpc.datasetInstances.list.useQuery(
+    { projectId: String(currentProject?.id || '') },
+    { enabled: !!currentProject?.id && requiredTypes.length > 0 },
+  );
+
+  const { data: bundlesDataDev } = trpc.bundles.list.useQuery(
+    { projectId: String(currentProject?.id || ''), env: 'DEV' as any },
+    { enabled: !!currentProject?.id && requiredTypes.length > 0 },
+  );
+  const { data: bundlesDataPreprod } = trpc.bundles.list.useQuery(
+    { projectId: String(currentProject?.id || ''), env: 'PREPROD' as any },
+    { enabled: !!currentProject?.id && requiredTypes.length > 0 },
+  );
+  const { data: bundlesDataPilot } = trpc.bundles.list.useQuery(
+    { projectId: String(currentProject?.id || ''), env: 'PILOT_ORANGE' as any },
+    { enabled: !!currentProject?.id && requiredTypes.length > 0 },
+  );
+  const { data: bundlesDataProd } = trpc.bundles.list.useQuery(
+    { projectId: String(currentProject?.id || ''), env: 'PROD' as any },
+    { enabled: !!currentProject?.id && requiredTypes.length > 0 },
+  );
+
+  // Compute validation by env
+  const envMap = useMemo(() => {
+    const map = new Map<TargetEnv, ScenarioDatasetValidation>();
+    if (requiredTypes.length === 0) return map;
+
+    const instances = instancesData?.data || [];
+    const bundlesByEnv: Record<TargetEnv, any[]> = {
+      DEV: bundlesDataDev?.data || [],
+      PREPROD: bundlesDataPreprod?.data || [],
+      PILOT_ORANGE: bundlesDataPilot?.data || [],
+      PROD: bundlesDataProd?.data || [],
+    };
+
+    for (const env of ALL_ENVS) {
+      const envInstances = instances.filter((i: any) => i.env === env);
+      const availableTypes = new Set(envInstances.map((i: any) => i.datasetTypeId));
+      const missingTypes = requiredTypes.filter(t => !availableTypes.has(t));
+      const bundles = bundlesByEnv[env];
+      const compatibleBundles = bundles.map((b: any) => ({
+        bundle_id: b.uid,
+        name: b.name,
+        version: b.version ?? 1,
+        status: b.status || 'DRAFT',
+      }));
+
+      map.set(env, {
+        ok_for_env: missingTypes.length === 0 && compatibleBundles.length > 0,
+        compatible_bundles: compatibleBundles,
+        missing_types_global: missingTypes,
+      });
+    }
+    return map;
+  }, [requiredTypes, instancesData, bundlesDataDev, bundlesDataPreprod, bundlesDataPilot, bundlesDataProd]);
 
   if (requiredTypes.length === 0) {
     return null; // Pas de dataset requis, ne rien afficher
   }
 
-  const envMap = validationByEnv || new Map<TargetEnv, ScenarioDatasetValidation>();
   const okCount = Array.from(envMap.values()).filter(v => v.ok_for_env).length;
 
   return (

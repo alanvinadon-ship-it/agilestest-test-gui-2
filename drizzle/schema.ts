@@ -250,6 +250,7 @@ export const probes = mysqlTable("probes", {
   capabilities: json("capabilities"),
   config: json("config"),
   lastSeenAt: timestamp("lastSeenAt"),
+  probeToken: varchar("probeToken", { length: 128 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -573,3 +574,48 @@ export const driveRunSummaries = mysqlTable("drive_run_summaries", {
 
 export type DriveRunSummaryRow = typeof driveRunSummaries.$inferSelect;
 export type InsertDriveRunSummaryRow = typeof driveRunSummaries.$inferInsert;
+
+// ─── Collector Sessions (active capture sessions) ──────────────────────────
+export const collectorSessions = mysqlTable("collector_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  captureId: int("capture_id").notNull(),
+  probeId: int("probe_id").notNull(),
+  status: mysqlEnum("status", ["QUEUED", "RUNNING", "STOPPED", "FAILED"]).default("QUEUED").notNull(),
+  startedAt: timestamp("started_at"),
+  stoppedAt: timestamp("stopped_at"),
+  lastHeartbeatAt: timestamp("last_heartbeat_at"),
+  metaJson: json("meta_json"),
+  createdBy: varchar("created_by", { length: 64 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CollectorSessionRow = typeof collectorSessions.$inferSelect;
+export type InsertCollectorSession = typeof collectorSessions.$inferInsert;
+
+// ─── Collector Events (session lifecycle events) ───────────────────────────
+export const collectorEvents = mysqlTable("collector_events", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  sessionId: int("session_id").notNull(),
+  level: mysqlEnum("level", ["INFO", "WARN", "ERROR"]).default("INFO").notNull(),
+  eventType: mysqlEnum("event_type", ["STARTED", "STOPPED", "HEARTBEAT", "UPLOAD", "ERROR", "CUSTOM"]).default("CUSTOM").notNull(),
+  message: text("message"),
+  dataJson: json("data_json"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type CollectorEventRow = typeof collectorEvents.$inferSelect;
+export type InsertCollectorEvent = typeof collectorEvents.$inferInsert;
+
+// ─── Dataset Secrets (key-level secret flags) ────────────────────────────────
+export const datasetSecrets = mysqlTable("dataset_secrets", {
+  id: int("id").autoincrement().primaryKey(),
+  datasetId: varchar("dataset_id", { length: 36 }).notNull(),
+  keyPath: varchar("key_path", { length: 255 }).notNull(),
+  isSecret: boolean("is_secret").default(false).notNull(),
+});
+
+export type DatasetSecretRow = typeof datasetSecrets.$inferSelect;
+export type InsertDatasetSecret = typeof datasetSecrets.$inferInsert;

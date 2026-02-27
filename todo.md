@@ -272,3 +272,15 @@
 - [x] Sprint ZÉRO Étape 2B: Frontend Charger plus ProbesPage (cursor+accumulation+resetCursor), DatasetTypesPage (cursor+pageSize=50), BundlesPage (cursor+pageSize=30+resetCursor)
 - [x] Sprint ZÉRO Étape 3: Supprimé localStore.ts + repositoryApi.ts + ImportResultsModal.tsx + nettoyé collectorApi/datasetStorageAdapter/scenarioSuggestionEngine + gate ESLint globale client/src/**
 - [x] Sprint ZÉRO: Tests finaux (470 passés, 0 échecs) + lint 0 erreurs + TS=0 erreurs + checkpoint
+- [x] Sprint Collector Étape 1A: Tables collector_sessions + collector_events (Drizzle schema + indexes)
+- [x] Sprint Collector Étape 1A: Ajouter champ probeToken à la table probes (agent auth)
+- [x] Sprint Collector Étape 1B: Routeur tRPC collector.ts (start/stop/status/heartbeat/appendEvent/listSessions/listEvents)
+- [x] Sprint Collector Étape 1C: Tests backend collector (idempotence start, org scope, heartbeat, status)
+- [x] Sprint Collector Étape 1D: Frontend — supprimer collectorApi.ts + useCaptureQueries.ts + useProbeQueries.ts (code mort)
+- [x] Sprint Collector Étape 1D: Frontend — UI CapturesPage Start/Stop collecte + badge status + polling
+- [x] Sprint Étape 2: Indexes DB perf sur test_profiles, test_scenarios, executions (cursor pagination)
+- [x] Sprint Étape 2: Migration Drizzle + doc OPERATIONS
+- [x] Sprint Étape 3A: Identifier usages DatasetStorageContext (5 fichiers)
+- [x] Sprint Étape 3B: Remplacer useDatasetStorage par hooks tRPC directs dans composants
+- [x] Sprint Étape 3C: Supprimer DatasetStorageContext.tsx + datasetStorageAdapter.ts + DatasetStorageProvider dans App.tsx
+- [x] Sprint Final: Tests finaux + lint + TS + checkpoint (497 tests passés, 0 échecs)

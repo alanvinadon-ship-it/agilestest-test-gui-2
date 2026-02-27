@@ -25,6 +25,7 @@ import {
   bundleItemsRouter,
   datasetInstancesRouter,
   datasetTypesRouter,
+  datasetSecretsRouter,
 } from "./routers/bundles";
 import { driveCampaignsRouter } from "./routers/driveCampaigns";
 import {
@@ -35,6 +36,7 @@ import {
 } from "./routers/driveEntities";
 import { capturePoliciesRouter } from "./routers/capturePolicies";
 import { kpiSamplesRouter, driveRunSummariesRouter } from "./routers/kpiData";
+import { collectorRouter } from "./routers/collector";
 
 export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -84,6 +86,7 @@ export const appRouter = router({
   bundleItems: bundleItemsRouter,
   datasetInstances: datasetInstancesRouter,
   datasetTypes: datasetTypesRouter,
+  datasetSecrets: datasetSecretsRouter,
 
   // Drive campaigns
   driveCampaigns: driveCampaignsRouter,
@@ -100,6 +103,9 @@ export const appRouter = router({
   // KPI data (samples + run summaries)
   kpiSamples: kpiSamplesRouter,
   driveRunSummaries: driveRunSummariesRouter,
+
+  // Collector (active capture sessions)
+  collector: collectorRouter,
 });
 
 export type AppRouter = typeof appRouter;

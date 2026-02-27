@@ -2,11 +2,11 @@
  * GeneratePromptModal — Affiche le prompt IA généré à partir de
  * Profile + Scenario + Bundle, prêt à copier.
  */
-import { useState, useMemo } from 'react';
-import { X, Copy, CheckCircle2, ChevronDown, Sparkles, AlertTriangle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, Copy, CheckCircle2, Sparkles, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useProject } from '../state/projectStore';
-import { useDatasetStorage } from '../contexts/DatasetStorageContext';
+import { trpc } from '@/lib/trpc';
 import { buildAiScriptContext } from '../ai/buildContext';
 import { PROMPT_SCRIPT_PLAN_v1, PROMPT_SCRIPT_GEN_v1 } from '../ai/promptTemplates';
 import type { TestProfile, TestScenario, TargetEnv, DatasetInstance, DatasetSecretKey } from '../types';
@@ -27,7 +27,7 @@ interface Props {
 
 export default function GeneratePromptModal({ scenario, profile, onClose }: Props) {
   const { currentProject } = useProject();
-  const { adapter } = useDatasetStorage();
+  const utils = trpc.useUtils();
   const [selectedEnv, setSelectedEnv] = useState<TargetEnv>('DEV');
   const [selectedTemplateId, setSelectedTemplateId] = useState('PROMPT_SCRIPT_PLAN_v1');
   const [copied, setCopied] = useState(false);
@@ -40,19 +40,24 @@ export default function GeneratePromptModal({ scenario, profile, onClose }: Prop
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
-  // Load bundles when env changes
-  useMemo(() => {
-    if (!currentProject?.id) return;
-    adapter.bundles.list(currentProject.id, { env: selectedEnv, status: 'ACTIVE' })
-      .then(res => {
-        setBundles(res.data);
-        if (res.data.length > 0 && !selectedBundleId) {
-          setSelectedBundleId(res.data[0].bundle_id);
-        }
-      })
-      .catch(() => setBundles([]));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedEnv, currentProject?.id]);
+  // Load bundles when env changes via tRPC
+  const { data: bundlesData } = trpc.bundles.list.useQuery(
+    {
+      projectId: String(currentProject?.id || ''),
+      env: selectedEnv,
+      status: 'ACTIVE' as any,
+    },
+    { enabled: !!currentProject?.id },
+  );
+
+  useEffect(() => {
+    if (bundlesData?.data) {
+      setBundles(bundlesData.data);
+      if (bundlesData.data.length > 0 && !selectedBundleId) {
+        setSelectedBundleId(bundlesData.data[0].uid);
+      }
+    }
+  }, [bundlesData]);
 
   const handleGenerate = async () => {
     if (!currentProject || !selectedBundleId) {
@@ -62,16 +67,17 @@ export default function GeneratePromptModal({ scenario, profile, onClose }: Prop
     setLoading(true);
     setError('');
     try {
-      const bundle = await adapter.bundles.get(selectedBundleId);
-      const items = await adapter.bundleItems.list(selectedBundleId);
+      const bundle = await utils.bundles.get.fetch({ bundleId: selectedBundleId });
+      const itemsResult = await utils.bundleItems.list.fetch({ bundleId: selectedBundleId });
+      const items = itemsResult.data;
       const datasets: DatasetInstance[] = [];
       const allSecrets: DatasetSecretKey[] = [];
       for (const item of items) {
         try {
-          const ds = await adapter.instances.get(item.dataset_id);
-          datasets.push(ds);
-          const secrets = await adapter.secrets.list(item.dataset_id);
-          allSecrets.push(...secrets);
+          const ds = await utils.datasetInstances.get.fetch({ datasetId: item.datasetId });
+          datasets.push(ds as any);
+          const secretsResult = await utils.datasetSecrets.list.fetch({ datasetId: item.datasetId });
+          allSecrets.push(...(secretsResult.data as any[]));
         } catch { /* skip */ }
       }
 
@@ -79,7 +85,7 @@ export default function GeneratePromptModal({ scenario, profile, onClose }: Prop
         project: currentProject as any,
         profile,
         scenario,
-        bundle,
+        bundle: bundle as any,
         bundleDatasets: datasets,
         secrets: allSecrets,
       });
@@ -145,7 +151,7 @@ export default function GeneratePromptModal({ scenario, profile, onClose }: Prop
                 className="text-xs px-3 py-1.5 bg-secondary/30 border border-border rounded-md text-foreground min-w-[180px]"
               >
                 <option value="">-- Sélectionner --</option>
-                {bundles.map(b => <option key={b.bundle_id} value={b.bundle_id}>{b.name} v{b.version}</option>)}
+                {bundles.map((b: any) => <option key={b.uid} value={b.uid}>{b.name}</option>)}
               </select>
             </div>
 
@@ -195,7 +201,7 @@ export default function GeneratePromptModal({ scenario, profile, onClose }: Prop
                 {prompt}
               </pre>
               <div className="mt-3 text-[10px] text-muted-foreground">
-                Template: {selectedTemplateId} | Env: {selectedEnv} | Bundle: {bundles.find(b => b.bundle_id === selectedBundleId)?.name || '?'}
+                Template: {selectedTemplateId} | Env: {selectedEnv} | Bundle: {bundles.find((b: any) => b.uid === selectedBundleId)?.name || '?'}
                 {context && ` | Framework: ${context.generation_constraints.framework_preferences.join(', ')}`}
               </div>
             </div>
