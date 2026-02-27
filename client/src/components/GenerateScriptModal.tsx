@@ -1,24 +1,22 @@
 /**
- * GenerateScriptModal — Génère un script de test via l'IA (simulation locale)
- * et permet de sauvegarder dans le ScriptRepository.
+ * GenerateScriptModal — Génère un script de test via l'IA réelle (LLM server-side)
+ * et permet de sauvegarder dans la DB via tRPC.
  *
- * Flow: Sélection env+bundle → Plan → Génération → Affichage fichiers → Save to Repo
+ * Flow: Sélection env+bundle → Plan (LLM) → Génération (LLM) → Affichage fichiers → Save to DB
  */
 import { useState, useEffect } from 'react';
-import { X, Sparkles, AlertTriangle, CheckCircle2, Copy, Save, Loader2, FileCode, ChevronRight } from 'lucide-react';
+import { X, Sparkles, AlertTriangle, CheckCircle2, Copy, Save, Loader2, FileCode, ChevronRight, Brain, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { useProject } from '../state/projectStore';
 import { trpc } from '@/lib/trpc';
 import { buildAiScriptContext } from '../ai/buildContext';
-import { PROMPT_SCRIPT_PLAN_v1, PROMPT_SCRIPT_GEN_v1 } from '../ai/promptTemplates';
-import { localScriptRepository } from '../ai/scriptRepository';
 import { ScriptPlanResultSchema, ScriptPackageSchema } from '../ai/types';
 import type { TestProfile, TestScenario, TargetEnv, DatasetInstance, DatasetSecretKey } from '../types';
 import type { AiScriptContext, ScriptPlanResult, ScriptPackage, ScriptFramework, CodeLanguage } from '../ai/types';
 
 const ALL_ENVS: TargetEnv[] = ['DEV', 'PREPROD', 'PILOT_ORANGE', 'PROD'];
 
-type Step = 'config' | 'planning' | 'generating' | 'result';
+type Step = 'config' | 'planning' | 'plan_review' | 'generating' | 'result';
 
 interface Props {
   scenario: TestScenario;
@@ -41,6 +39,13 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
   const [scriptPackage, setScriptPackage] = useState<ScriptPackage | null>(null);
   const [viewFileIdx, setViewFileIdx] = useState(0);
   const [saved, setSaved] = useState(false);
+  const [planUsage, setPlanUsage] = useState<{ prompt_tokens: number; completion_tokens: number } | null>(null);
+  const [genUsage, setGenUsage] = useState<{ prompt_tokens: number; completion_tokens: number } | null>(null);
+
+  // tRPC mutations
+  const planMutation = trpc.aiGeneration.planScript.useMutation();
+  const generateMutation = trpc.aiGeneration.generateScript.useMutation();
+  const saveMutation = trpc.aiGeneration.saveScript.useMutation();
 
   // Load bundles via tRPC
   const { data: bundlesData } = trpc.bundles.list.useQuery(
@@ -86,236 +91,88 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
     });
   };
 
-  /** Simulate AI plan generation (in production, this calls the API) */
-  const simulatePlan = (ctx: AiScriptContext): ScriptPlanResult => {
-    const fw = ctx.generation_constraints.framework_preferences[0] || 'playwright';
-    const lang = ctx.generation_constraints.code_language;
-    const isRobot = fw === 'robotframework';
-
-    const files = isRobot
-      ? [
-          { path: `tests/${scenario.scenario_code || scenario.id}.robot`, purpose: 'Main test suite' },
-          { path: 'resources/keywords.robot', purpose: 'Reusable keywords' },
-          { path: 'resources/variables.robot', purpose: 'Centralized variables from dataset' },
-        ]
-      : [
-          { path: `tests/${(scenario.scenario_code || scenario.id).toLowerCase().replace(/[^a-z0-9]/g, '-')}.spec.ts`, purpose: 'Main test spec' },
-          { path: 'helpers/selectors.ts', purpose: 'Selector constants from dataset' },
-          { path: 'helpers/test-data.ts', purpose: 'Test data from dataset bundle' },
-          { path: 'helpers/utils.ts', purpose: 'Shared utility functions' },
-        ];
-
-    const stepMapping = ctx.scenario.steps.map(s => ({
-      step_id: s.id,
-      step_order: s.order,
-      action: s.action,
-      target_file: files[0].path,
-      target_function: isRobot
-        ? s.action.replace(/\s+/g, ' ').trim()
-        : `step${s.order}_${s.action.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 30)}`,
-      dataset_keys_used: Object.keys(s.parameters),
-    }));
-
-    // Check missing inputs
-    const availableKeys = new Set(Object.keys(ctx.dataset.resolved.merged_json));
-    const missingInputs: ScriptPlanResult['missing_inputs'] = [];
-    for (const s of ctx.scenario.steps) {
-      for (const key of Object.keys(s.parameters)) {
-        if (!availableKeys.has(key) && !availableKeys.has(`${key}`)) {
-          missingInputs.push({ key, reason: `Key "${key}" not found in bundle dataset`, severity: 'WARNING' });
-        }
-      }
-    }
-
-    return {
-      framework_choice: fw,
-      code_language: lang,
-      file_plan: files,
-      step_mapping: stepMapping,
-      missing_inputs: missingInputs,
-      notes: `Plan generated for ${ctx.scenario.title} using ${fw}`,
-      warnings: missingInputs.length > 0 ? [`${missingInputs.length} input(s) potentially missing from dataset`] : [],
-    };
-  };
-
-  /** Simulate AI script generation (in production, this calls the API) */
-  const simulateGenerate = (ctx: AiScriptContext, plan: ScriptPlanResult): ScriptPackage => {
-    const isRobot = plan.framework_choice === 'robotframework';
-    const dataKeys = Object.entries(ctx.dataset.resolved.merged_json);
-    const maskedKeys = new Set(ctx.dataset.secrets_policy.masked_keys);
-
-    if (isRobot) {
-      const variables = dataKeys.map(([k, v]) =>
-        maskedKeys.has(k) ? `\${${k}}    %{${k.toUpperCase()}}` : `\${${k}}    ${JSON.stringify(v)}`
-      ).join('\n');
-
-      const keywords = ctx.scenario.steps.map(s =>
-        `${s.action}\n    [Documentation]    ${s.description}\n    Log    Executing: ${s.action}\n    # Expected: ${s.expected_result}`
-      ).join('\n\n');
-
-      const testCases = ctx.scenario.steps.map(s => `    ${s.action}`).join('\n');
-
-      return {
-        files: [
-          {
-            path: plan.file_plan[0]?.path || 'tests/test.robot',
-            content: `*** Settings ***\nDocumentation    ${ctx.scenario.title}\nResource    ../resources/keywords.robot\nResource    ../resources/variables.robot\n\n*** Test Cases ***\n${ctx.scenario.title}\n    [Documentation]    ${ctx.scenario.scenario_code || ctx.scenario.id}\n    [Tags]    ${ctx.profile.test_type}    ${ctx.dataset.env}\n${testCases}\n`,
-            language: 'robot',
-          },
-          {
-            path: 'resources/keywords.robot',
-            content: `*** Settings ***\nDocumentation    Reusable keywords for ${ctx.scenario.title}\nLibrary    Browser\nResource    variables.robot\n\n*** Keywords ***\n${keywords}\n`,
-            language: 'robot',
-          },
-          {
-            path: 'resources/variables.robot',
-            content: `*** Variables ***\n# Generated from bundle: ${ctx.dataset.bundle.name} v${ctx.dataset.bundle.version}\n# Environment: ${ctx.dataset.env}\n${variables}\n`,
-            language: 'robot',
-          },
-        ],
-        notes: `Generated RobotFramework scripts for ${ctx.scenario.title}`,
-        warnings: plan.warnings,
-        metadata: {
-          framework: plan.framework_choice,
-          code_language: plan.code_language,
-          scenario_id: ctx.scenario.id,
-          bundle_id: ctx.dataset.bundle.id,
-          generated_at: new Date().toISOString(),
-          prompt_version: 'PROMPT_SCRIPT_GEN_v1',
-        },
-      };
-    }
-
-    // Playwright TypeScript
-    const selectorsContent = dataKeys
-      .filter(([k]) => k.includes('selector'))
-      .map(([k, v]) => `export const ${k.replace(/\./g, '_').toUpperCase()} = ${JSON.stringify(v)};`)
-      .join('\n') || '// No selectors found in dataset';
-
-    const testDataContent = dataKeys
-      .filter(([k]) => !k.includes('selector'))
-      .map(([k, v]) => {
-        if (maskedKeys.has(k)) return `export const ${k.replace(/\./g, '_')} = process.env.${k.toUpperCase().replace(/\./g, '_')} || '';`;
-        return `export const ${k.replace(/\./g, '_')} = ${JSON.stringify(v)};`;
-      })
-      .join('\n');
-
-    const testSteps = ctx.scenario.steps.map(s =>
-      `  test('Step ${s.order}: ${s.action}', async ({ page }) => {\n    // ${s.description}\n    // Expected: ${s.expected_result}\n    // TODO: Implement step using dataset keys\n  });`
-    ).join('\n\n');
-
-    return {
-      files: [
-        {
-          path: plan.file_plan[0]?.path || 'tests/test.spec.ts',
-          content: `import { test, expect } from '@playwright/test';\nimport * as selectors from '../helpers/selectors';\nimport * as data from '../helpers/test-data';\n\ntest.describe('${ctx.scenario.title}', () => {\n  test.beforeEach(async ({ page }) => {\n    // Setup: navigate to SUT\n  });\n\n${testSteps}\n});\n`,
-          language: 'typescript',
-        },
-        {
-          path: 'helpers/selectors.ts',
-          content: `/**\n * Selectors extracted from dataset bundle: ${ctx.dataset.bundle.name}\n * Environment: ${ctx.dataset.env}\n */\n${selectorsContent}\n`,
-          language: 'typescript',
-        },
-        {
-          path: 'helpers/test-data.ts',
-          content: `/**\n * Test data from bundle: ${ctx.dataset.bundle.name} v${ctx.dataset.bundle.version}\n * Environment: ${ctx.dataset.env}\n * Secret keys use process.env\n */\n${testDataContent}\n`,
-          language: 'typescript',
-        },
-        {
-          path: 'helpers/utils.ts',
-          content: `/**\n * Shared utilities for ${ctx.scenario.title}\n */\nexport async function waitForLoad(page: any) {\n  await page.waitForLoadState('networkidle');\n}\n\nexport function formatDate(date: Date): string {\n  return date.toISOString().split('T')[0];\n}\n`,
-          language: 'typescript',
-        },
-      ],
-      notes: `Generated Playwright TypeScript scripts for ${ctx.scenario.title}`,
-      warnings: plan.warnings,
-      metadata: {
-        framework: plan.framework_choice,
-        code_language: plan.code_language,
-        scenario_id: ctx.scenario.id,
-        bundle_id: ctx.dataset.bundle.id,
-        generated_at: new Date().toISOString(),
-        prompt_version: 'PROMPT_SCRIPT_GEN_v1',
-      },
-    };
-  };
-
-  const handleStartGeneration = async () => {
+  /** Phase 1: Call LLM to generate the plan */
+  const handleStartPlanning = async () => {
     setError('');
     setStep('planning');
     try {
       const ctx = await buildContext();
       setContext(ctx);
 
-      // Check missing inputs blocking
-      const missingTypes = scenario.required_dataset_types || [];
-      // Simulate plan
-      await new Promise(r => setTimeout(r, 600));
-      const generatedPlan = simulatePlan(ctx);
-
-      // Validate plan with Zod
-      const planResult = ScriptPlanResultSchema.safeParse(generatedPlan);
-      if (!planResult.success) {
-        setError('Plan invalide: ' + planResult.error.message);
-        setStep('config');
-        return;
-      }
-      setPlan(planResult.data);
+      const result = await planMutation.mutateAsync({ context: ctx });
+      setPlan(result.plan);
+      setPlanUsage(result.usage as any);
 
       // Check blocking missing inputs
-      const blocking = planResult.data.missing_inputs.filter(m => m.severity === 'BLOCKING');
+      const blocking = result.plan.missing_inputs.filter((m: any) => m.severity === 'BLOCKING');
       if (blocking.length > 0) {
-        setError(`Inputs manquants bloquants: ${blocking.map(b => b.key).join(', ')}`);
+        setError(`Inputs manquants bloquants: ${blocking.map((b: any) => b.key).join(', ')}`);
         setStep('config');
         return;
       }
 
-      // Generate scripts
-      setStep('generating');
-      await new Promise(r => setTimeout(r, 800));
-      const pkg = simulateGenerate(ctx, planResult.data);
-
-      // Validate package with Zod
-      const pkgResult = ScriptPackageSchema.safeParse(pkg);
-      if (!pkgResult.success) {
-        setError('Package invalide: ' + pkgResult.error.message);
-        setStep('config');
-        return;
-      }
-      setScriptPackage(pkgResult.data);
-      setStep('result');
+      setStep('plan_review');
     } catch (e: any) {
-      setError(e.message || 'Erreur lors de la génération');
+      setError(e.message || 'Erreur lors de la planification IA');
       setStep('config');
     }
   };
 
-  const handleSaveToRepo = () => {
+  /** Phase 2: Call LLM to generate scripts from the plan */
+  const handleStartGeneration = async () => {
+    if (!context || !plan) return;
+    setError('');
+    setStep('generating');
+    try {
+      const result = await generateMutation.mutateAsync({ context, plan });
+      setScriptPackage(result.package);
+      setGenUsage(result.usage as any);
+      setStep('result');
+    } catch (e: any) {
+      setError(e.message || 'Erreur lors de la génération IA');
+      setStep('plan_review');
+    }
+  };
+
+  /** Save to DB via tRPC */
+  const handleSaveToRepo = async () => {
     if (!currentProject || !scriptPackage || !context || !plan) return;
     try {
-      localScriptRepository.create({
-        project_id: currentProject.id,
-        scenario_id: scenario.id,
-        bundle_id: selectedBundleId,
+      await saveMutation.mutateAsync({
+        projectId: currentProject.id,
+        scenarioId: scenario.id,
+        bundleId: selectedBundleId,
         env: selectedEnv,
-        framework: plan.framework_choice as ScriptFramework,
-        code_language: plan.code_language as CodeLanguage,
-        files: scriptPackage.files,
+        framework: plan.framework_choice,
+        codeLanguage: plan.code_language,
+        files: scriptPackage.files.map(f => ({
+          path: f.path,
+          content: f.content,
+          language: f.language,
+        })),
         plan,
         notes: scriptPackage.notes,
         warnings: scriptPackage.warnings,
       });
       setSaved(true);
-      toast.success('Script sauvegardé dans le repository');
+      toast.success('Script sauvegardé en base de données');
       onSaved?.();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error(e.message || 'Erreur lors de la sauvegarde');
     }
   };
 
   const handleCopyFile = (content: string) => {
     navigator.clipboard.writeText(content);
     toast.success('Contenu copié');
+  };
+
+  const stepLabels: Record<Step, string> = {
+    config: 'Configuration',
+    planning: 'Plan IA',
+    plan_review: 'Revue du plan',
+    generating: 'Génération IA',
+    result: 'Résultat',
   };
 
   return (
@@ -326,10 +183,11 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-primary" />
-            <h2 className="text-lg font-heading font-semibold text-foreground">Générer Script</h2>
+            <h2 className="text-lg font-heading font-semibold text-foreground">Générer Script IA</h2>
             <span className="text-xs text-muted-foreground font-mono">
               {scenario.scenario_code || scenario.name}
             </span>
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-semibold">LLM</span>
           </div>
           <button onClick={onClose} className="p-1.5 rounded hover:bg-secondary/50 text-muted-foreground hover:text-foreground transition-colors">
             <X className="w-5 h-5" />
@@ -338,11 +196,11 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
 
         {/* Progress */}
         <div className="px-6 py-3 border-b border-border flex items-center gap-2 text-xs">
-          {(['config', 'planning', 'generating', 'result'] as Step[]).map((s, i) => (
+          {(['config', 'planning', 'plan_review', 'generating', 'result'] as Step[]).map((s, i) => (
             <div key={s} className="flex items-center gap-1.5">
               {i > 0 && <ChevronRight className="w-3 h-3 text-muted-foreground" />}
-              <span className={step === s ? 'text-primary font-semibold' : s < step ? 'text-green-400' : 'text-muted-foreground'}>
-                {s === 'config' ? 'Configuration' : s === 'planning' ? 'Plan' : s === 'generating' ? 'Génération' : 'Résultat'}
+              <span className={step === s ? 'text-primary font-semibold' : 'text-muted-foreground'}>
+                {stepLabels[s]}
               </span>
             </div>
           ))}
@@ -390,33 +248,147 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
                 </div>
               )}
 
+              <div className="bg-primary/5 border border-primary/10 rounded-md p-3 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1.5 mb-1 text-primary font-semibold">
+                  <Brain className="w-3.5 h-3.5" />
+                  Génération IA réelle
+                </div>
+                Le script sera généré par un modèle de langage (LLM) en 2 étapes : planification puis génération de code.
+                Les fichiers produits sont complets et exécutables.
+              </div>
+
               <button
-                onClick={handleStartGeneration}
-                disabled={!selectedBundleId}
+                onClick={handleStartPlanning}
+                disabled={!selectedBundleId || planMutation.isPending}
                 className="px-6 py-2 text-sm font-semibold rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center gap-2"
               >
                 <Sparkles className="w-4 h-4" />
-                Lancer la génération
+                Lancer la planification IA
               </button>
             </div>
           )}
 
-          {/* Planning step */}
+          {/* Planning step (loading) */}
           {step === 'planning' && (
             <div className="flex flex-col items-center justify-center py-12">
               <Loader2 className="w-8 h-8 text-primary animate-spin mb-4" />
-              <p className="text-sm text-muted-foreground">Analyse du scénario et planification des fichiers...</p>
+              <p className="text-sm text-muted-foreground">Analyse du scénario par l'IA...</p>
+              <p className="text-xs text-muted-foreground/60 mt-2">Le LLM planifie les fichiers et le mapping des étapes</p>
             </div>
           )}
 
-          {/* Generating step */}
+          {/* Plan review step */}
+          {step === 'plan_review' && plan && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-green-400" />
+                  <span className="text-sm font-semibold text-foreground">Plan de génération prêt</span>
+                  <span className="text-xs text-muted-foreground font-mono">
+                    {plan.framework_choice} / {plan.code_language}
+                  </span>
+                </div>
+                {planUsage && (
+                  <span className="text-[10px] text-muted-foreground font-mono">
+                    {planUsage.prompt_tokens + planUsage.completion_tokens} tokens
+                  </span>
+                )}
+              </div>
+
+              {/* File plan */}
+              <div className="bg-secondary/10 rounded-md p-3">
+                <h4 className="text-xs font-semibold text-foreground mb-2">Fichiers planifiés ({plan.file_plan.length})</h4>
+                <div className="space-y-1">
+                  {plan.file_plan.map((f, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <FileCode className="w-3 h-3 text-primary shrink-0" />
+                      <span className="font-mono text-foreground">{f.path}</span>
+                      <span className="text-muted-foreground">— {f.purpose}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Step mapping */}
+              <div className="bg-secondary/10 rounded-md p-3">
+                <h4 className="text-xs font-semibold text-foreground mb-2">Mapping étapes ({plan.step_mapping.length})</h4>
+                <div className="space-y-1">
+                  {plan.step_mapping.map((m, i) => (
+                    <div key={i} className="text-xs flex items-start gap-2">
+                      <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center shrink-0">
+                        {m.step_order}
+                      </span>
+                      <div>
+                        <span className="text-foreground font-medium">{m.action}</span>
+                        <span className="text-muted-foreground"> → {m.target_file}::{m.target_function}</span>
+                        {m.dataset_keys_used.length > 0 && (
+                          <span className="text-muted-foreground/60"> [{m.dataset_keys_used.join(', ')}]</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Warnings */}
+              {plan.warnings && plan.warnings.length > 0 && (
+                <div className="bg-amber-500/5 border border-amber-500/10 rounded-md p-3">
+                  {plan.warnings.map((w, i) => (
+                    <div key={i} className="flex items-center gap-1.5 text-[11px] text-amber-400">
+                      <AlertTriangle className="w-3 h-3 shrink-0" />{w}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Missing inputs */}
+              {plan.missing_inputs.length > 0 && (
+                <div className="bg-red-500/5 border border-red-500/10 rounded-md p-3">
+                  <h4 className="text-xs font-semibold text-red-400 mb-1">Inputs manquants</h4>
+                  {plan.missing_inputs.map((m, i) => (
+                    <div key={i} className="flex items-center gap-1.5 text-[11px] text-red-400/80">
+                      <span className={`px-1 py-0.5 rounded text-[9px] font-bold ${m.severity === 'BLOCKING' ? 'bg-red-500/20' : 'bg-amber-500/20 text-amber-400'}`}>
+                        {m.severity}
+                      </span>
+                      <span className="font-mono">{m.key}</span> — {m.reason}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {error && (
+                <div className="flex items-center gap-1.5 text-xs text-red-400 bg-red-500/5 p-3 rounded-md">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />{error}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setStep('config'); setPlan(null); setError(''); }}
+                  className="px-4 py-2 text-xs font-semibold rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-secondary/30 transition-colors"
+                >
+                  Retour
+                </button>
+                <button
+                  onClick={handleStartGeneration}
+                  disabled={generateMutation.isPending}
+                  className="px-6 py-2 text-sm font-semibold rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center gap-2"
+                >
+                  <Zap className="w-4 h-4" />
+                  Générer les scripts
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Generating step (loading) */}
           {step === 'generating' && (
             <div className="flex flex-col items-center justify-center py-12">
               <Loader2 className="w-8 h-8 text-primary animate-spin mb-4" />
-              <p className="text-sm text-muted-foreground">Génération des scripts de test...</p>
+              <p className="text-sm text-muted-foreground">Génération des scripts par l'IA...</p>
               {plan && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  Framework: {plan.framework_choice} | {plan.file_plan.length} fichier(s) planifié(s)
+                <p className="text-xs text-muted-foreground/60 mt-2">
+                  Framework: {plan.framework_choice} | {plan.file_plan.length} fichier(s) en cours de génération
                 </p>
               )}
             </div>
@@ -430,7 +402,7 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-5 h-5 text-green-400" />
                   <span className="text-sm font-semibold text-foreground">
-                    {scriptPackage.files.length} fichier(s) générés
+                    {scriptPackage.files.length} fichier(s) générés par l'IA
                   </span>
                   {plan && (
                     <span className="text-xs text-muted-foreground font-mono">
@@ -438,14 +410,27 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
                     </span>
                   )}
                 </div>
-                <button
-                  onClick={handleSaveToRepo}
-                  disabled={saved}
-                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
-                >
-                  {saved ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
-                  {saved ? 'Sauvegardé' : 'Save to Repo'}
-                </button>
+                <div className="flex items-center gap-3">
+                  {genUsage && (
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      {(planUsage?.prompt_tokens || 0) + (planUsage?.completion_tokens || 0) + genUsage.prompt_tokens + genUsage.completion_tokens} tokens total
+                    </span>
+                  )}
+                  <button
+                    onClick={handleSaveToRepo}
+                    disabled={saved || saveMutation.isPending}
+                    className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
+                  >
+                    {saveMutation.isPending ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : saved ? (
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                    ) : (
+                      <Save className="w-3.5 h-3.5" />
+                    )}
+                    {saved ? 'Sauvegardé' : saveMutation.isPending ? 'Sauvegarde...' : 'Sauvegarder en DB'}
+                  </button>
+                </div>
               </div>
 
               {/* Warnings */}
@@ -490,6 +475,13 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
                   <pre className="p-4 text-xs font-mono text-foreground/90 overflow-x-auto max-h-[350px] overflow-y-auto bg-black/20 rounded-lg">
                     <code>{scriptPackage.files[viewFileIdx].content}</code>
                   </pre>
+                </div>
+              )}
+
+              {/* Notes */}
+              {scriptPackage.notes && (
+                <div className="text-xs text-muted-foreground bg-secondary/10 rounded-md p-3">
+                  <span className="font-semibold text-foreground">Notes IA :</span> {scriptPackage.notes}
                 </div>
               )}
             </div>

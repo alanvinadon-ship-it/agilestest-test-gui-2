@@ -284,3 +284,9 @@
 - [x] Sprint Étape 3B: Remplacer useDatasetStorage par hooks tRPC directs dans composants
 - [x] Sprint Étape 3C: Supprimer DatasetStorageContext.tsx + datasetStorageAdapter.ts + DatasetStorageProvider dans App.tsx
 - [x] Sprint Final: Tests finaux + lint + TS + checkpoint (497 tests passés, 0 échecs)
+- [x] Sprint IA Étape 1: Analyser simulatePlan/simulateGenerate, promptTemplates, types AI, invokeLLM
+- [x] Sprint IA Étape 2: Backend — routeur tRPC aiGeneration (planScript + generateScript + saveScript) avec invokeLLM + structured JSON
+- [x] Sprint IA Étape 3: Frontend — brancher GenerateScriptModal sur tRPC aiGeneration (remplacer simulations locales)
+- [x] Sprint IA Étape 4: Frontend — GeneratePromptModal déjà sur tRPC (construit prompt pour copier-coller, pas d'appel LLM)
+- [x] Sprint IA Étape 5: Tests backend — 17 tests aiGeneration.test.ts (structure, Zod schemas, parseJSON, context validation)
+- [x] Sprint IA Final: Tests finaux (514 tests passés, 0 échecs) + TS=0 erreurs + checkpoint
