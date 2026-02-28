@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE IF NOT EXISTS `app_settings` (\n  `id` int AUTO_INCREMENT PRIMARY KEY,\n  `setting_key` varchar(100) NOT NULL UNIQUE,\n  `setting_value` text,\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  `updated_by` varchar(64)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute CREATE TABLE IF NOT EXISTS `app_settings` (\n  `id` int AUTO_INCREMENT PRIMARY KEY,\n  `setting_key` varchar(100) NOT NULL UNIQUE,\n  `setting_value` text,\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  `updated_by` varchar(64)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 511
+}

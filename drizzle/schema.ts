@@ -1074,3 +1074,14 @@ export const webhookDeliveries = mysqlTable("webhook_deliveries", {
 });
 export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
 
+
+// ─── AppSettings ───────────────────────────────────────────────────────────
+// Key-value store for application-wide settings (branding, etc.)
+export const appSettings = mysqlTable("app_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  settingKey: varchar("setting_key", { length: 100 }).notNull().unique(),
+  settingValue: text("setting_value"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+  updatedBy: varchar("updated_by", { length: 64 }),
+});
+export type AppSetting = typeof appSettings.$inferSelect;

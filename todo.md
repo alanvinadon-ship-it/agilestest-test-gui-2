@@ -454,3 +454,14 @@
 - [x] Feature Avatar: Tests — 13 Vitest backend (upload success, size validation, mime types, empty, remove, no avatar, auth required, structural)
 - [x] Feature Avatar: Tests — TS=0, 726 tests verts
 - [x] Feature Avatar Admin: Afficher la photo de profil (ou initiales) dans la liste AdminUsersPage + modal ViewUser
+- [x] Feature Branding Admin: DB — table app_settings (clé/valeur) pour stocker branding_logo_url et branding_favicon_url
+- [x] Feature Branding Admin: Backend — endpoint branding.get (publicProcedure, retourne logoUrl + faviconUrl)
+- [x] Feature Branding Admin: Backend — endpoint branding.uploadLogo (adminProcedure, base64 → S3 → update DB)
+- [x] Feature Branding Admin: Backend — endpoint branding.uploadFavicon (adminProcedure, base64 → S3 → update DB)
+- [x] Feature Branding Admin: Backend — endpoint branding.removeLogo / removeFavicon
+- [x] Feature Branding Admin: Frontend — page /admin/branding avec upload logo + favicon + preview + drag & drop
+- [x] Feature Branding Admin: Frontend — lien "Personnalisation" dans sidebar Administration
+- [x] Feature Branding Admin: Frontend — mise à jour dynamique du logo dans DashboardLayout sidebar (mini + expanded)
+- [x] Feature Branding Admin: Frontend — mise à jour dynamique du favicon dans <head> via useEffect
+- [x] Feature Branding Admin: Tests — 18 Vitest backend (get defaults, get stored, upload logo/favicon, remove, size validation, mime, admin-only, structural)
+- [x] Feature Branding Admin: Tests — TS=0, 744 tests verts

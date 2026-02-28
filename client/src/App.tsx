@@ -45,6 +45,7 @@ import CompareExecutionsPage from "./pages/CompareExecutionsPage";
 import GlobalAnalyticsPage from "./pages/GlobalAnalyticsPage";
 import ImportExportPage from "./pages/ImportExportPage";
 import AccountSettingsPage from "./pages/AccountSettingsPage";
+import AdminBrandingPage from "./pages/AdminBrandingPage";
 
 // ─── Auth Guards ────────────────────────────────────────────────────────────
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -202,6 +203,9 @@ function AppRouter() {
               </Route>
               <Route path="/admin/notifications">
                 <RequireAdmin><AdminNotificationsPage /></RequireAdmin>
+              </Route>
+              <Route path="/admin/branding">
+                <RequireAdmin><AdminBrandingPage /></RequireAdmin>
               </Route>
               <Route path="/docs/:slug" component={DocsPage} />
               <Route path="/docs">

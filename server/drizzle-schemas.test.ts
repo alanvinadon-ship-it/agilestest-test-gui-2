@@ -324,6 +324,7 @@ describe("Drizzle Schemas — Total coverage", () => {
       "drive_run_summaries",
       "dataset_secrets",
       "password_reset_tokens",
+      "app_settings",
     ]);
     const failures: string[] = [];
     for (const key of Object.keys(schema)) {

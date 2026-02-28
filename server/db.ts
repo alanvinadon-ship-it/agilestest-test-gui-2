@@ -1,6 +1,6 @@
 import { eq, and, gt, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, passwordResetTokens } from "../drizzle/schema";
+import { InsertUser, users, passwordResetTokens, appSettings } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -166,6 +166,39 @@ export async function updateUserAvatar(userId: number, avatarUrl: string | null)
     .update(users)
     .set({ avatarUrl })
     .where(eq(users.id, userId));
+}
+
+// ─── App Settings (Branding) ─────────────────────────────────────────────
+
+export async function getAppSetting(key: string): Promise<string | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(appSettings).where(eq(appSettings.settingKey, key)).limit(1);
+  return rows[0]?.settingValue ?? null;
+}
+
+export async function getAppSettings(keys: string[]): Promise<Record<string, string | null>> {
+  const db = await getDb();
+  const result: Record<string, string | null> = {};
+  for (const k of keys) result[k] = null;
+  if (!db) return result;
+  const { inArray } = await import("drizzle-orm");
+  const rows = await db.select().from(appSettings).where(inArray(appSettings.settingKey, keys));
+  for (const row of rows) {
+    result[row.settingKey] = row.settingValue;
+  }
+  return result;
+}
+
+export async function setAppSetting(key: string, value: string | null, updatedBy?: string): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const existing = await db.select().from(appSettings).where(eq(appSettings.settingKey, key)).limit(1);
+  if (existing.length > 0) {
+    await db.update(appSettings).set({ settingValue: value, updatedBy: updatedBy ?? null }).where(eq(appSettings.settingKey, key));
+  } else {
+    await db.insert(appSettings).values({ settingKey: key, settingValue: value, updatedBy: updatedBy ?? null });
+  }
 }
 
 // TODO: add feature queries here as your schema grows.

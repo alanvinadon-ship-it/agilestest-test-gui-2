@@ -32,6 +32,7 @@ import {
   BookTemplate,
   GitCompareArrows,
   TrendingUp,
+  Palette,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -128,6 +129,7 @@ const baseNavSections: NavSection[] = [
       { href: "/admin/rbac", icon: ShieldCheck, label: "Matrice RBAC" },
       { href: "/admin/audit", icon: ScrollText, label: "Journal d'audit" },
       { href: "/admin/notifications", icon: Bell, label: "Notifications" },
+      { href: "/admin/branding", icon: Palette, label: "Personnalisation" },
     ],
   },
   {
@@ -422,6 +424,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const meQuery = trpc.auth.me.useQuery(undefined, { staleTime: 60_000 });
   const avatarUrl = meQuery.data?.avatarUrl ?? null;
 
+  // Fetch branding (logo + favicon)
+  const brandingQuery = trpc.branding.get.useQuery(undefined, { staleTime: 60_000 });
+  const customLogoUrl = brandingQuery.data?.logoUrl ?? null;
+  const customFaviconUrl = brandingQuery.data?.faviconUrl ?? null;
+
+  // Dynamic favicon injection
+  useEffect(() => {
+    if (!customFaviconUrl) {
+      // Remove any custom favicon link to revert to default
+      const existing = document.querySelector('link[data-branding-favicon]');
+      if (existing) existing.remove();
+      return;
+    }
+    let link = document.querySelector('link[data-branding-favicon]') as HTMLLinkElement | null;
+    if (!link) {
+      link = document.createElement('link');
+      link.setAttribute('data-branding-favicon', 'true');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.href = customFaviconUrl;
+  }, [customFaviconUrl]);
+
   // Persisted mini-sidebar state via uiStorage
   const [mini, setMini] = useState(() => uiGet("sidebarMini"));
 
@@ -465,10 +490,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <TooltipTrigger asChild>
                 <button
                   onClick={toggleMini}
-                  className="w-8 h-8 rounded-md bg-primary flex items-center justify-center shrink-0 hover:opacity-80 transition-opacity"
+                  className="w-8 h-8 rounded-md bg-primary flex items-center justify-center shrink-0 hover:opacity-80 transition-opacity overflow-hidden"
                   aria-label="Étendre la barre latérale"
                 >
-                  <span className="text-primary-foreground font-heading font-bold text-sm">AT</span>
+                  {customLogoUrl ? (
+                    <img src={customLogoUrl} alt="Logo" className="w-8 h-8 object-contain" />
+                  ) : (
+                    <span className="text-primary-foreground font-heading font-bold text-sm">AT</span>
+                  )}
                 </button>
               </TooltipTrigger>
               <TooltipContent side="right" sideOffset={8}>
@@ -477,8 +506,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </Tooltip>
           ) : (
             <>
-              <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center shrink-0">
-                <span className="text-primary-foreground font-heading font-bold text-sm">AT</span>
+              <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center shrink-0 overflow-hidden">
+                {customLogoUrl ? (
+                  <img src={customLogoUrl} alt="Logo" className="w-8 h-8 object-contain" />
+                ) : (
+                  <span className="text-primary-foreground font-heading font-bold text-sm">AT</span>
+                )}
               </div>
               <div className="overflow-hidden flex-1">
                 <p className="font-heading font-semibold text-sm text-foreground truncate">

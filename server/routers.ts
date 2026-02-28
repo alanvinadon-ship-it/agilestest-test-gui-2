@@ -6,7 +6,7 @@ import { COOKIE_NAME, ONE_YEAR_MS, PASSWORD_RESET_TOKEN_EXPIRY_MS, PASSWORD_RESE
 import { getSessionCookieOptions } from "./_core/cookies";
 import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
 import * as db from "./db";
 import { writeAuditLog } from "./lib/auditLog";
 import { sendEmail } from "./emailService";
@@ -542,6 +542,82 @@ export const appRouter = router({
 
   // Scenario Templates (pre-built library)
   scenarioTemplates: scenarioTemplatesRouter,
+
+  // Branding (logo + favicon)
+  branding: router({
+    /** Public: get current branding settings (logo + favicon URLs) */
+    get: publicProcedure.query(async () => {
+      const settings = await db.getAppSettings(["branding_logo_url", "branding_favicon_url"]);
+      return {
+        logoUrl: settings["branding_logo_url"] ?? null,
+        faviconUrl: settings["branding_favicon_url"] ?? null,
+      };
+    }),
+
+    /** Admin: upload a new logo */
+    uploadLogo: adminProcedure
+      .input(
+        z.object({
+          base64: z.string().min(1, "Image data is required"),
+          mimeType: z.enum(["image/png", "image/jpeg", "image/webp", "image/svg+xml"], {
+            message: "Format autorisé : PNG, JPEG, WebP ou SVG",
+          }),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const buffer = Buffer.from(input.base64, "base64");
+        const MAX_SIZE = 2 * 1024 * 1024; // 2 MB
+        if (buffer.length > MAX_SIZE) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Le fichier ne doit pas dépasser 2 Mo." });
+        }
+        const ext = input.mimeType === "image/svg+xml" ? "svg" : input.mimeType.split("/")[1];
+        const key = `branding/logo-${Date.now()}.${ext}`;
+        const { storagePut } = await import("./storage");
+        const { url } = await storagePut(key, buffer, input.mimeType);
+        await db.setAppSetting("branding_logo_url", url, ctx.user.openId);
+        await writeAuditLog({ userId: ctx.user.openId, action: "BRANDING_LOGO_UPDATED", entity: "BRANDING", details: { url } });
+        return { logoUrl: url };
+      }),
+
+    /** Admin: remove the logo (revert to default) */
+    removeLogo: adminProcedure.mutation(async ({ ctx }) => {
+      await db.setAppSetting("branding_logo_url", null, ctx.user.openId);
+      await writeAuditLog({ userId: ctx.user.openId, action: "BRANDING_LOGO_REMOVED", entity: "BRANDING" });
+      return { success: true };
+    }),
+
+    /** Admin: upload a new favicon */
+    uploadFavicon: adminProcedure
+      .input(
+        z.object({
+          base64: z.string().min(1, "Image data is required"),
+          mimeType: z.enum(["image/png", "image/x-icon", "image/svg+xml", "image/ico", "image/vnd.microsoft.icon"], {
+            message: "Format autorisé : PNG, ICO ou SVG",
+          }),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const buffer = Buffer.from(input.base64, "base64");
+        const MAX_SIZE = 512 * 1024; // 512 KB
+        if (buffer.length > MAX_SIZE) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Le favicon ne doit pas dépasser 512 Ko." });
+        }
+        const ext = input.mimeType.includes("svg") ? "svg" : input.mimeType.includes("png") ? "png" : "ico";
+        const key = `branding/favicon-${Date.now()}.${ext}`;
+        const { storagePut } = await import("./storage");
+        const { url } = await storagePut(key, buffer, input.mimeType);
+        await db.setAppSetting("branding_favicon_url", url, ctx.user.openId);
+        await writeAuditLog({ userId: ctx.user.openId, action: "BRANDING_FAVICON_UPDATED", entity: "BRANDING", details: { url } });
+        return { faviconUrl: url };
+      }),
+
+    /** Admin: remove the favicon (revert to default) */
+    removeFavicon: adminProcedure.mutation(async ({ ctx }) => {
+      await db.setAppSetting("branding_favicon_url", null, ctx.user.openId);
+      await writeAuditLog({ userId: ctx.user.openId, action: "BRANDING_FAVICON_REMOVED", entity: "BRANDING" });
+      return { success: true };
+    }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;
