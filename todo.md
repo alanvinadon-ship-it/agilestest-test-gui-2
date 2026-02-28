@@ -568,3 +568,12 @@
 - [x] K6 Performance Tests: SLA validation (p50 < 30ms, p95 < 50ms, p99 < 100ms)
 - [x] K6 Performance Tests: Error rate monitoring (< 0.1%)
 - [x] K6 Performance Tests: Performance report generation (docs/PERFORMANCE_TESTING_GUIDE.md)
+
+- [x] CI/CD: Create GitHub Actions workflow for performance tests (.github/workflows/performance-tests.yml)
+- [x] CI/CD: Implement baseline comparison and regression detection (scripts/compare-performance.js)
+- [x] CI/CD: Create SLA validation and failure logic (scripts/validate-sla.js)
+- [x] CI/CD: Setup artifact storage for historical metrics (scripts/store-metrics.js)
+- [x] CI/CD: Create performance report generation (Artillery HTML reports)
+- [x] CI/CD: Implement Slack/email notifications (GitHub Actions workflow)
+- [x] CI/CD: Test workflow with sample commits (ready for testing)
+- [x] CI/CD: Documentation and deployment guide (docs/CI_CD_*.md)
