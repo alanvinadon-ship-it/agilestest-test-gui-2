@@ -529,3 +529,15 @@
 - [x] Fix AI Master Key: E) Docs — AI_ADMIN_SETTINGS.md reécrit avec section Docker secrets complète
 - [x] Fix AI Master Key: F) Tests — 11 nouveaux (readSecret 8, aiCrypto via _FILE 3) + configStatus dans router
 - [x] Fix AI Master Key: TS=0, 905 tests verts
+- [ ] Feature Multi-Engine IA: DB — table ai_engines (uid, org_id, name, provider enum OPENAI|GEMINI|ANTHROPIC|CUSTOM_HTTP, enabled, is_primary, model, base_url, timeout_ms, max_retries, temperature, max_output_tokens, extra_json, secret_ciphertext, created_by, timestamps) + indexes
+- [ ] Feature Multi-Engine IA: DB — table ai_routing_rules (uid, org_id, name, enabled, priority, use_case enum, conditions_json, target_engine_uid FK, created_by, timestamps) + indexes
+- [ ] Feature Multi-Engine IA: Router aiEngines — list, get, create, update, rotateKey, setPrimary, disable, testConnection (admin-only)
+- [ ] Feature Multi-Engine IA: Router aiRouting — list, create, update, delete, reorder, dryRun (admin-only)
+- [ ] Feature Multi-Engine IA: Resolver — resolveEngine(orgId, useCase, context) avec cache 60s, fallback primary, AI_NOT_CONFIGURED
+- [ ] Feature Multi-Engine IA: UI — refactor page admin IA en onglets Engines + Routing
+- [ ] Feature Multi-Engine IA: UI Engines — table, CRUD dialog, provider-specific fields, test connection, set primary, rotate key
+- [ ] Feature Multi-Engine IA: UI Routing — select useCase, rules list reorder, rule editor, dry run
+- [ ] Feature Multi-Engine IA: Intégration — Drive AI et autres features IA utilisent resolveEngine
+- [ ] Feature Multi-Engine IA: Tests — admin-only, secret non-renvoyé, setPrimary unique, resolveEngine match/primary/disabled
+- [ ] Feature Multi-Engine IA: Docs — AI_ENGINES.md (engines, providers, routing, examples)
+- [ ] Feature Multi-Engine IA: TS=0, tous tests verts

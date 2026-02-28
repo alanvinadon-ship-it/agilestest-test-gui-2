@@ -1242,3 +1242,50 @@ export const aiProviderConfigs = mysqlTable("ai_provider_configs", {
 });
 export type AiProviderConfig = typeof aiProviderConfigs.$inferSelect;
 export type InsertAiProviderConfig = typeof aiProviderConfigs.$inferInsert;
+
+
+// ─── AI Engines (multi-engine support) ─────────────────────────────────────
+// Each org can configure multiple AI engines with different providers/models.
+// One engine per org is marked as primary (fallback).
+export const aiEngines = mysqlTable("ai_engines", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  orgId: varchar("org_id", { length: 64 }).notNull(),
+  name: varchar("name", { length: 128 }).notNull(),
+  provider: mysqlEnum("provider", ["OPENAI", "GEMINI", "ANTHROPIC", "CUSTOM_HTTP"]).notNull().default("OPENAI"),
+  enabled: boolean("enabled").notNull().default(true),
+  isPrimary: boolean("is_primary").notNull().default(false),
+  model: varchar("model", { length: 128 }).notNull(),
+  baseUrl: varchar("base_url", { length: 512 }),
+  timeoutMs: int("timeout_ms").notNull().default(30000),
+  maxRetries: int("max_retries").notNull().default(2),
+  temperature: decimal("temperature", { precision: 3, scale: 2 }),
+  maxOutputTokens: int("max_output_tokens"),
+  extraJson: json("extra_json"),
+  secretCiphertext: text("secret_ciphertext"),
+  createdBy: varchar("created_by", { length: 64 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+export type AiEngine = typeof aiEngines.$inferSelect;
+export type InsertAiEngine = typeof aiEngines.$inferInsert;
+
+// ─── AI Routing Rules ──────────────────────────────────────────────────────
+// Rules determine which engine to use for a given use case.
+// Evaluated in priority order (lower = higher priority).
+export const aiRoutingRules = mysqlTable("ai_routing_rules", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  orgId: varchar("org_id", { length: 64 }).notNull(),
+  name: varchar("name", { length: 128 }).notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  priority: int("priority").notNull().default(100),
+  useCase: mysqlEnum("use_case", ["DRIVE_DIAG", "ANALYTICS", "SUMMARIZE", "INGEST_LONG", "GENERAL"]).notNull(),
+  conditionsJson: json("conditions_json"),
+  targetEngineUid: varchar("target_engine_uid", { length: 36 }).notNull(),
+  createdBy: varchar("created_by", { length: 64 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+export type AiRoutingRule = typeof aiRoutingRules.$inferSelect;
+export type InsertAiRoutingRule = typeof aiRoutingRules.$inferInsert;
