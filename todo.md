@@ -416,13 +416,13 @@
 - [x] Chantier Drizzle: Phase C — Migrer 60-80% du SQL brut vers Drizzle query builder
 - [x] Chantier Drizzle: Tests — 10+ tests ciblés pour les zones migrées
 - [x] Chantier Drizzle: Docs — MAJ docs/SCHEMA_AUDIT.md avec tables couvertes + SQL brut restant
-- [ ] Feature Login Email: Backend — endpoint auth.loginWithPassword (email + password → bcrypt compare → JWT session cookie)
-- [ ] Feature Login Email: Backend — vérifier que l'utilisateur a un passwordHash non-null (invité accepté)
-- [ ] Feature Login Email: Backend — rate limiting sur login (protection brute-force)
-- [ ] Feature Login Email: Frontend — formulaire email/mot de passe sur /login page
-- [ ] Feature Login Email: Frontend — lien "Connexion par email" sur la page OAuth login
-- [ ] Feature Login Email: Frontend — gestion erreurs (identifiants invalides, compte non activé)
-- [ ] Feature Login Email: Frontend — redirection post-login vers page d'origine
-- [ ] Feature Login Email: Tests — Vitest backend (login success, wrong password, no passwordHash, user not found, rate limit)
-- [ ] Feature Login Email: Tests — vérification TS=0, tous tests verts
-- [ ] Feature Login Email: Docs — mise à jour si nécessaire
+- [x] Feature Login Email: Backend — endpoint auth.loginWithPassword (email + password → bcrypt compare → JWT session cookie)
+- [x] Feature Login Email: Backend — vérifier que l'utilisateur a un passwordHash non-null (invité accepté)
+- [x] Feature Login Email: Backend — rate limiting sur login (protection brute-force via security middleware existant)
+- [x] Feature Login Email: Frontend — formulaire email/mot de passe sur /login page
+- [x] Feature Login Email: Frontend — lien "Connexion par email" sur la page OAuth login
+- [x] Feature Login Email: Frontend — gestion erreurs (identifiants invalides, compte non activé)
+- [x] Feature Login Email: Frontend — redirection post-login vers page d'origine
+- [x] Feature Login Email: Tests — 11 Vitest backend (login success, wrong password, no passwordHash, user not found, disabled, validation, no leak)
+- [x] Feature Login Email: Tests — vérification TS=0, 683 tests verts
+- [x] Feature Login Email: Docs — mise à jour si nécessaire
