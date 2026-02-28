@@ -1,6 +1,6 @@
 import {
   int, mysqlEnum, mysqlTable, text, timestamp, varchar,
-  boolean, json, bigint, double,
+  boolean, json, bigint, double, decimal,
 } from "drizzle-orm/mysql-core";
 
 // ─── Users ──────────────────────────────────────────────────────────────────
@@ -738,3 +738,325 @@ export const templateComments = mysqlTable("template_comments", {
 });
 export type TemplateCommentRow = typeof templateComments.$inferSelect;
 export type InsertTemplateComment = typeof templateComments.$inferInsert;
+
+// ─── Analyses ──────────────────────────────────────────────────────────────
+export const analyses = mysqlTable("analyses", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).unique().notNull(),
+  incidentId: varchar("incident_id", { length: 36 }).notNull(),
+  status: mysqlEnum("status", ["PENDING", "IN_PROGRESS", "COMPLETED", "FAILED"]).notNull().default("PENDING"),
+  observation: text("observation"),
+  hypotheses: json("hypotheses"),
+  rootCause: text("root_cause"),
+  rootCauseJustification: text("root_cause_justification"),
+  recommendedSolution: text("recommended_solution"),
+  confidenceScore: double("confidence_score"),
+  pipelinePhases: json("pipeline_phases"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+export type Analysis = typeof analyses.$inferSelect;
+
+// ─── CaptureArtifacts ──────────────────────────────────────────────────────
+export const captureArtifacts = mysqlTable("capture_artifacts", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).unique().notNull(),
+  executionId: varchar("execution_id", { length: 36 }).notNull(),
+  type: varchar("type", { length: 50 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  storageUrl: varchar("storage_url", { length: 500 }),
+  s3Uri: varchar("s3_uri", { length: 500 }),
+  contentType: varchar("content_type", { length: 100 }),
+  sizeBytes: int("size_bytes"),
+  checksum: varchar("checksum", { length: 128 }),
+  captureJobId: varchar("capture_job_id", { length: 36 }),
+  uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
+  downloadUrl: varchar("download_url", { length: 500 }),
+});
+export type CaptureArtifact = typeof captureArtifacts.$inferSelect;
+
+// ─── CaptureJobs ───────────────────────────────────────────────────────────
+export const captureJobs = mysqlTable("capture_jobs", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).unique().notNull(),
+  executionId: varchar("execution_id", { length: 36 }).notNull(),
+  incidentId: varchar("incident_id", { length: 36 }),
+  projectId: varchar("project_id", { length: 36 }).notNull(),
+  triggeredBy: varchar("triggered_by", { length: 64 }),
+  status: mysqlEnum("status", ["QUEUED", "RUNNING", "COMPLETED", "FAILED", "CANCELLED"]).notNull().default("QUEUED"),
+  captureType: mysqlEnum("capture_type", ["LOGS", "PCAP"]).notNull(),
+  targetType: mysqlEnum("target_type", ["K8S", "SSH", "PROBE"]).notNull(),
+  durationSeconds: int("duration_seconds").default(60),
+  maxSizeMb: int("max_size_mb").default(100),
+  profile: varchar("profile", { length: 50 }),
+  params: json("params"),
+  errorMessage: text("error_message"),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type CaptureJob = typeof captureJobs.$inferSelect;
+
+// ─── CaptureSessions ───────────────────────────────────────────────────────
+export const captureSessions = mysqlTable("capture_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).unique().notNull(),
+  policyId: varchar("policy_id", { length: 36 }).notNull(),
+  executionId: varchar("execution_id", { length: 36 }),
+  probeId: varchar("probe_id", { length: 36 }),
+  status: mysqlEnum("status", ["QUEUED", "RUNNING", "COMPLETED", "FAILED", "CANCELLED"]).notNull().default("QUEUED"),
+  pcapPath: varchar("pcap_path", { length: 500 }),
+  pcapSize: int("pcap_size"),
+  packetCount: int("packet_count"),
+  errorMessage: text("error_message"),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type CaptureSession = typeof captureSessions.$inferSelect;
+
+// ─── CaptureSources ────────────────────────────────────────────────────────
+export const captureSources = mysqlTable("capture_sources", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).unique().notNull(),
+  captureId: varchar("capture_id", { length: 36 }).notNull(),
+  namespace: varchar("namespace", { length: 100 }),
+  podSelector: varchar("pod_selector", { length: 255 }),
+  containerName: varchar("container_name", { length: 100 }),
+  host: varchar("host", { length: 255 }),
+  sshPort: int("ssh_port"),
+  sshUser: varchar("ssh_user", { length: 100 }),
+  logPaths: json("log_paths"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type CaptureSource = typeof captureSources.$inferSelect;
+
+// ─── DriveImports ──────────────────────────────────────────────────────────
+export const driveImports = mysqlTable("drive_imports", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).unique().notNull(),
+  campaignId: varchar("campaign_id", { length: 36 }).notNull(),
+  sourceFilename: varchar("source_filename", { length: 500 }).notNull(),
+  sourceFormat: mysqlEnum("source_format", ["CSV", "JSON", "GPX", "GEOJSON", "IPERF3"]).notNull(),
+  samplesImported: int("samples_imported").default(0),
+  samplesSkipped: int("samples_skipped").default(0),
+  errors: json("errors"),
+  importedAt: timestamp("imported_at").notNull().defaultNow(),
+});
+export type DriveImport = typeof driveImports.$inferSelect;
+
+// ─── DriveProbeConfigs ─────────────────────────────────────────────────────
+export const driveProbeConfigs = mysqlTable("drive_probe_configs", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).unique().notNull(),
+  projectId: varchar("project_id", { length: 36 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  location: json("location"),
+  captureType: varchar("capture_type", { length: 50 }),
+  retentionDays: int("retention_days").default(30),
+  maxSizeMb: int("max_size_mb").default(500),
+  rotation: boolean("rotation").default(true),
+  outputTarget: varchar("output_target", { length: 50 }),
+  enabled: boolean("enabled").default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+export type DriveProbeConfig = typeof driveProbeConfigs.$inferSelect;
+
+// ─── NotificationDeliveryLogs ──────────────────────────────────────────────
+export const notificationDeliveryLogs = mysqlTable("notification_delivery_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).unique().notNull(),
+  ts: timestamp("ts").notNull().defaultNow(),
+  ndlChannel: mysqlEnum("ndl_channel", ["SMS", "EMAIL"]).notNull(),
+  provider: varchar("provider", { length: 50 }).notNull(),
+  eventType: varchar("event_type", { length: 100 }).notNull(),
+  ruleId: varchar("rule_id", { length: 100 }),
+  templateId: varchar("template_id", { length: 100 }),
+  recipient: varchar("recipient", { length: 320 }).notNull(),
+  ndlStatus: mysqlEnum("ndl_status", ["SENT", "FAILED", "SKIPPED", "THROTTLED"]).notNull(),
+  errorMessage: text("error_message"),
+  traceId: varchar("trace_id", { length: 64 }),
+  metadata: json("metadata"),
+});
+export type NotificationDeliveryLog = typeof notificationDeliveryLogs.$inferSelect;
+
+// ─── NotificationRules ─────────────────────────────────────────────────────
+export const notificationRules = mysqlTable("notification_rules", {
+  id: int("id").autoincrement().primaryKey(),
+  ruleId: varchar("rule_id", { length: 100 }).unique().notNull(),
+  eventType: varchar("event_type", { length: 100 }).notNull(),
+  enabled: boolean("enabled").default(true),
+  channelsEnabled: json("channels_enabled"),
+  templateSmsId: varchar("template_sms_id", { length: 100 }),
+  templateEmailId: varchar("template_email_id", { length: 100 }),
+  recipients: json("recipients"),
+  customRecipientsEmails: json("custom_recipients_emails"),
+  customRecipientsMsisdn: json("custom_recipients_msisdn"),
+  throttlePolicy: json("throttle_policy"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+  updatedBy: varchar("updated_by", { length: 64 }),
+});
+export type NotificationRule = typeof notificationRules.$inferSelect;
+
+// ─── NotificationSettings ──────────────────────────────────────────────────
+export const notificationSettings = mysqlTable("notification_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  channel: mysqlEnum("channel", ["SMS", "EMAIL"]).unique().notNull(),
+  provider: varchar("provider", { length: 50 }).notNull(),
+  enabled: boolean("enabled").default(false),
+  config: json("config"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+  updatedBy: varchar("updated_by", { length: 64 }),
+});
+export type NotificationSetting = typeof notificationSettings.$inferSelect;
+
+// ─── NotificationTemplates ─────────────────────────────────────────────────
+export const notificationTemplates = mysqlTable("notification_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  templateId: varchar("template_id", { length: 100 }).unique().notNull(),
+  notifTplChannel: mysqlEnum("notif_tpl_channel", ["SMS", "EMAIL"]).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  subject: varchar("subject", { length: 500 }),
+  bodyText: text("body_text"),
+  bodyHtml: text("body_html"),
+  variablesSchema: json("variables_schema"),
+  isSystem: boolean("is_system").default(false),
+  notifTplStatus: mysqlEnum("notif_tpl_status", ["ACTIVE", "DISABLED"]).notNull().default("ACTIVE"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+  updatedBy: varchar("updated_by", { length: 64 }),
+});
+export type NotificationTemplate = typeof notificationTemplates.$inferSelect;
+
+// ─── OutboundWebhooks ──────────────────────────────────────────────────────
+export const outboundWebhooks = mysqlTable("outbound_webhooks", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).unique().notNull(),
+  projectId: varchar("project_id", { length: 36 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  url: varchar("url", { length: 1024 }).notNull(),
+  secret: varchar("secret", { length: 255 }).notNull(),
+  events: json("events").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  createdBy: int("created_by").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+export type OutboundWebhook = typeof outboundWebhooks.$inferSelect;
+
+// ─── Permissions ───────────────────────────────────────────────────────────
+export const permissions = mysqlTable("permissions", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).unique().notNull(),
+  module: varchar("module", { length: 100 }).notNull(),
+  action: varchar("action", { length: 50 }).notNull(),
+  description: text("description"),
+});
+export type Permission = typeof permissions.$inferSelect;
+
+// ─── ProbePolicies ─────────────────────────────────────────────────────────
+export const probePolicies = mysqlTable("probe_policies", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).unique().notNull(),
+  probeId: varchar("probe_id", { length: 36 }).notNull(),
+  maxCaptureDurationSec: int("max_capture_duration_sec").default(300),
+  maxCaptureSizeMb: int("max_capture_size_mb").default(500),
+  pcapInterfacesAllowlist: json("pcap_interfaces_allowlist"),
+  pcapBpfAllowlist: json("pcap_bpf_allowlist"),
+  storageKind: varchar("storage_kind", { length: 50 }).default("minio"),
+  storageEndpoint: varchar("storage_endpoint", { length: 255 }),
+  storageBucket: varchar("storage_bucket", { length: 100 }),
+  storagePrefix: varchar("storage_prefix", { length: 255 }),
+  redactionEnabled: boolean("redaction_enabled").default(false),
+  redactionPatterns: json("redaction_patterns"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+export type ProbePolicy = typeof probePolicies.$inferSelect;
+
+// ─── RolePermissions ───────────────────────────────────────────────────────
+export const rolePermissions = mysqlTable("role_permissions", {
+  id: int("id").autoincrement().primaryKey(),
+  roleId: varchar("role_id", { length: 36 }).notNull(),
+  permissionId: varchar("permission_id", { length: 36 }).notNull(),
+});
+export type RolePermission = typeof rolePermissions.$inferSelect;
+
+// ─── Roles ─────────────────────────────────────────────────────────────────
+export const roles = mysqlTable("roles", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).unique().notNull(),
+  name: varchar("name", { length: 100 }).unique().notNull(),
+  description: text("description"),
+  scope: mysqlEnum("scope", ["GLOBAL", "PROJECT"]).notNull().default("GLOBAL"),
+  isSystem: boolean("is_system").default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+export type Role = typeof roles.$inferSelect;
+
+// ─── RunnerJobs ────────────────────────────────────────────────────────────
+export const runnerJobs = mysqlTable("runner_jobs", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).unique().notNull(),
+  executionId: varchar("execution_id", { length: 36 }).notNull(),
+  projectId: varchar("project_id", { length: 36 }).notNull(),
+  runnerId: varchar("runner_id", { length: 64 }),
+  status: mysqlEnum("status", ["PENDING", "RUNNING", "DONE", "FAILED"]).notNull().default("PENDING"),
+  scriptId: varchar("script_id", { length: 36 }),
+  scriptVersion: int("script_version"),
+  downloadUrl: varchar("download_url", { length: 500 }),
+  datasetBundleId: varchar("dataset_bundle_id", { length: 36 }),
+  targetEnv: mysqlEnum("target_env", ["DEV", "PREPROD", "PILOT_ORANGE", "PROD"]),
+  artifactUploadPolicy: json("artifact_upload_policy"),
+  metrics: json("metrics"),
+  artifactManifest: json("artifact_manifest"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  startedAt: timestamp("started_at"),
+  finishedAt: timestamp("finished_at"),
+});
+export type RunnerJob = typeof runnerJobs.$inferSelect;
+
+// ─── TestDevices ───────────────────────────────────────────────────────────
+export const testDevices = mysqlTable("test_devices", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).unique().notNull(),
+  projectId: varchar("project_id", { length: 36 }).notNull(),
+  type: varchar("type", { length: 50 }).notNull(),
+  model: varchar("model", { length: 255 }).notNull(),
+  osVersion: varchar("os_version", { length: 100 }),
+  diagCapable: boolean("diag_capable").default(false),
+  toolsEnabled: json("tools_enabled"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+export type TestDevice = typeof testDevices.$inferSelect;
+
+// ─── UserRoles ─────────────────────────────────────────────────────────────
+export const userRoles = mysqlTable("user_roles", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: varchar("user_id", { length: 64 }).notNull(),
+  roleId: varchar("role_id", { length: 36 }).notNull(),
+});
+export type UserRole = typeof userRoles.$inferSelect;
+
+// ─── WebhookDeliveries ─────────────────────────────────────────────────────
+export const webhookDeliveries = mysqlTable("webhook_deliveries", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).unique().notNull(),
+  webhookId: int("webhook_id").notNull(),
+  eventType: varchar("event_type", { length: 100 }).notNull(),
+  payload: json("payload").notNull(),
+  status: mysqlEnum("status", ["PENDING", "SUCCESS", "FAILED"]).notNull().default("PENDING"),
+  httpStatus: int("http_status"),
+  responseBody: text("response_body"),
+  attempt: int("attempt").notNull().default(1),
+  maxAttempts: int("max_attempts").notNull().default(3),
+  nextRetryAt: timestamp("next_retry_at"),
+  deliveredAt: timestamp("delivered_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
+

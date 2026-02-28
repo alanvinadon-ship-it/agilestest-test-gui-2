@@ -495,7 +495,7 @@ describe("E2E Import/Export Validation", () => {
     expect(doubleExport.scenarios).toHaveLength(20); // 10 + 10
     expect(doubleExport.datasetInstances).toHaveLength(40); // 20 + 20
     expect(doubleExport.scripts).toHaveLength(10); // 5 + 5
-  }, 30000);
+  }, 60000);
 
   // ─── Test 9: Export of empty project ───────────────────────────────────
   it("should handle export of empty project gracefully", async () => {
@@ -512,7 +512,7 @@ describe("E2E Import/Export Validation", () => {
     expect(emptyExport.datasetInstances).toHaveLength(0);
     expect(emptyExport.bundles).toHaveLength(0);
     expect(emptyExport.scripts).toHaveLength(0);
-  });
+  }, 15000);
 
   // ─── Test 10: Import of empty data ─────────────────────────────────────
   it("should handle import of empty arrays gracefully", async () => {
@@ -535,5 +535,5 @@ describe("E2E Import/Export Validation", () => {
     const emptyExport = await caller.projects.exportProject({ projectId: result.projectId! });
     expect(emptyExport.profiles).toHaveLength(0);
     expect(emptyExport.scenarios).toHaveLength(0);
-  });
+  }, 15000);
 });

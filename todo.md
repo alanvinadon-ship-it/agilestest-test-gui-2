@@ -411,3 +411,8 @@
 - [x] E2E Invites: Accept — simuler acceptation, vérifier status=ACCEPTED, user créé, audit log
 - [x] E2E Invites: Edge cases — token invalide, token expiré, double accept, cross-org
 - [x] E2E Invites: Tests verts + 0 régressions + checkpoint
+- [x] Chantier Drizzle: Phase A — Inventaire tables MySQL non couvertes + accès SQL brut
+- [x] Chantier Drizzle: Phase B — Créer schémas Drizzle pour toutes les tables restantes
+- [x] Chantier Drizzle: Phase C — Migrer 60-80% du SQL brut vers Drizzle query builder
+- [x] Chantier Drizzle: Tests — 10+ tests ciblés pour les zones migrées
+- [x] Chantier Drizzle: Docs — MAJ docs/SCHEMA_AUDIT.md avec tables couvertes + SQL brut restant

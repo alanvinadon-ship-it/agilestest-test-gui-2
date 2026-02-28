@@ -209,23 +209,25 @@ export const adminRouter = router({
 
     const total = countResult[0]?.count ?? 0;
 
-    // Fetch project counts per user via raw SQL
-    // The actual DB table uses snake_case columns (user_id varchar) referencing openId
+    // Fetch project counts per user via Drizzle query builder
     const openIds = data.map((u: User) => u.openId).filter(Boolean);
     let projectCountMap: Record<string, number> = {};
     if (openIds.length > 0) {
       try {
-        const projectCounts = await db.execute(
-          sql`SELECT user_id, COUNT(*) as cnt FROM project_memberships WHERE user_id IN (${sql.join(openIds.map(id => sql`${id}`), sql`, `)}) GROUP BY user_id`
-        );
-        const rows = (projectCounts as any)?.[0] ?? projectCounts;
-        if (Array.isArray(rows)) {
-          for (const row of rows) {
-            projectCountMap[row.user_id] = Number(row.cnt);
-          }
+        const { count, inArray } = await import("drizzle-orm");
+        const rows = await db
+          .select({
+            userId: projectMemberships.userId,
+            cnt: count(projectMemberships.id),
+          })
+          .from(projectMemberships)
+          .where(inArray(projectMemberships.userId, openIds))
+          .groupBy(projectMemberships.userId);
+        for (const row of rows) {
+          projectCountMap[row.userId] = Number(row.cnt);
         }
       } catch {
-        // Table schema mismatch — gracefully return 0 counts
+        // Table may not exist yet — gracefully return 0 counts
       }
     }
 
