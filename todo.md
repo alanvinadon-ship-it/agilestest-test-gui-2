@@ -453,3 +453,4 @@
 - [x] Feature Avatar: Frontend — afficher avatar dans la liste admin utilisateurs (via auth.me dans sidebar)
 - [x] Feature Avatar: Tests — 13 Vitest backend (upload success, size validation, mime types, empty, remove, no avatar, auth required, structural)
 - [x] Feature Avatar: Tests — TS=0, 726 tests verts
+- [x] Feature Avatar Admin: Afficher la photo de profil (ou initiales) dans la liste AdminUsersPage + modal ViewUser

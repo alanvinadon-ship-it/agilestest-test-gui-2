@@ -183,6 +183,7 @@ export default function AdminUsersPage() {
         createdAt: u.createdAt,
         lastSignedIn: u.lastSignedIn,
         openId: u.openId,
+        avatarUrl: u.avatarUrl ?? null,
         isInvite: false,
       };
     });
@@ -203,6 +204,7 @@ export default function AdminUsersPage() {
       createdAt: inv.createdAt,
       lastSignedIn: null,
       openId: null,
+      avatarUrl: null,
       isInvite: true,
       inviteId: inv.id,
     }));
@@ -326,11 +328,19 @@ export default function AdminUsersPage() {
                   <tr key={u.id} className="border-b border-border last:border-0 hover:bg-secondary/20 transition-colors">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-                          <span className="text-xs font-bold text-primary">
-                            {u.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
-                          </span>
-                        </div>
+                        {u.avatarUrl ? (
+                          <img
+                            src={u.avatarUrl}
+                            alt={u.name}
+                            className="w-8 h-8 rounded-md object-cover shrink-0"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                            <span className="text-xs font-bold text-primary">
+                              {u.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
+                            </span>
+                          </div>
+                        )}
                         <div>
                           <span className="font-medium text-foreground">{u.name}</span>
                           {u.isOwner && (
@@ -550,11 +560,19 @@ function ViewUserModal({ user, onClose }: { user: any; onClose: () => void }) {
         </div>
         <div className="p-6 space-y-4">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-lg bg-primary/10 flex items-center justify-center">
-              <span className="text-lg font-bold text-primary">
-                {user.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
-              </span>
-            </div>
+            {user.avatarUrl ? (
+              <img
+                src={user.avatarUrl}
+                alt={user.name}
+                className="w-14 h-14 rounded-lg object-cover shrink-0"
+              />
+            ) : (
+              <div className="w-14 h-14 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <span className="text-lg font-bold text-primary">
+                  {user.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
+                </span>
+              </div>
+            )}
             <div>
               <h4 className="text-lg font-semibold text-foreground">{user.name}</h4>
               <p className="text-sm text-muted-foreground font-mono">{user.email}</p>
