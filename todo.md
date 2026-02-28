@@ -498,3 +498,6 @@
 - [x] Feature Run Name: Frontend — champ nom dans le dialog de création de run
 - [x] Feature Run Name: Frontend — afficher le nom du run dans la liste et la page détail
 - [x] Feature Run Name: Tests — TS=0, 831 tests verts (7 nouveaux pour name/rename)
+- [x] Feature Search Runs: Backend — ajouté paramètre `search` au endpoint driveRuns.list (filtre LIKE sur name+uid)
+- [x] Feature Search Runs: Frontend — champ de recherche avec icône, bouton clear, debounce 300ms, compteur résultats
+- [x] Feature Search Runs: Tests — TS=0, 834 tests verts (3 nouveaux pour search)

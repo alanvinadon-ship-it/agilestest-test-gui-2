@@ -23,6 +23,7 @@ export const driveRunsRouter = router({
         projectUid: z.string().optional(),
         campaignUid: z.string().optional(),
         status: driveRunStatusEnum.optional(),
+        search: z.string().max(255).optional(),
         limit: z.number().min(1).max(100).default(50),
         cursor: z.number().optional(),
       })
@@ -33,6 +34,7 @@ export const driveRunsRouter = router({
         projectUid: input.projectUid,
         campaignUid: input.campaignUid,
         status: input.status,
+        search: input.search?.trim() || undefined,
         limit: input.limit,
         cursor: input.cursor,
       });

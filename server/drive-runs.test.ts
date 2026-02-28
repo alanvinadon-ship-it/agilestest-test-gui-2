@@ -117,6 +117,24 @@ describe("driveRunsRouter", () => {
     expect(listDriveRunsCursor).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-1" }));
   });
 
+  it("list — passes search parameter to DB", async () => {
+    const caller = createCaller(driveRunsRouter);
+    await caller.list({ orgId: "org-1", search: "Abidjan", limit: 50 });
+    expect(listDriveRunsCursor).toHaveBeenCalledWith(expect.objectContaining({ search: "Abidjan" }));
+  });
+
+  it("list — trims search and ignores empty string", async () => {
+    const caller = createCaller(driveRunsRouter);
+    await caller.list({ orgId: "org-1", search: "   ", limit: 50 });
+    expect(listDriveRunsCursor).toHaveBeenCalledWith(expect.objectContaining({ search: undefined }));
+  });
+
+  it("list — combines search with status filter", async () => {
+    const caller = createCaller(driveRunsRouter);
+    await caller.list({ orgId: "org-1", search: "test", status: "COMPLETED", limit: 50 });
+    expect(listDriveRunsCursor).toHaveBeenCalledWith(expect.objectContaining({ search: "test", status: "COMPLETED" }));
+  });
+
   it("get — returns a single run by uid", async () => {
     const caller = createCaller(driveRunsRouter);
     const result = await caller.get({ runUid: "run-test-uid-001" });

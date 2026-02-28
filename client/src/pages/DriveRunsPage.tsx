@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useProject } from '../state/projectStore';
 import { useAuth } from '@/auth/AuthContext';
 import { trpc } from '@/lib/trpc';
@@ -33,6 +33,8 @@ import {
   ChevronRight,
   Navigation,
   Smartphone,
+  Search,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'wouter';
@@ -59,11 +61,28 @@ export default function DriveRunsPage() {
 
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [showCreate, setShowCreate] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Debounce search input (300ms)
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setSearchQuery(searchInput.trim());
+    }, 300);
+    return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
+  }, [searchInput]);
 
   const utils = trpc.useUtils();
 
   const { data, isLoading } = trpc.driveRuns.list.useQuery(
-    { orgId: projectId, status: statusFilter === 'ALL' ? undefined : statusFilter as RunStatus, limit: 50 },
+    {
+      orgId: projectId,
+      status: statusFilter === 'ALL' ? undefined : statusFilter as RunStatus,
+      search: searchQuery || undefined,
+      limit: 50,
+    },
     { enabled: !!projectId }
   );
 
@@ -158,6 +177,23 @@ export default function DriveRunsPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
+        <div className="relative w-64">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          <Input
+            className="pl-8 pr-8"
+            placeholder="Rechercher par nom ou ID…"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
+          {searchInput && (
+            <button
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              onClick={() => { setSearchInput(''); setSearchQuery(''); }}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-44">
             <SelectValue placeholder="Statut" />
@@ -173,7 +209,8 @@ export default function DriveRunsPage() {
           </SelectContent>
         </Select>
         <span className="text-xs text-muted-foreground">
-          {runs.length} run{runs.length !== 1 ? 's' : ''}
+          {data?.total ?? runs.length} run{(data?.total ?? runs.length) !== 1 ? 's' : ''}
+          {searchQuery && <> pour « {searchQuery} »</>}
         </span>
       </div>
 

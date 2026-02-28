@@ -1,4 +1,4 @@
-import { eq, and, gt, isNull, desc, lt, sql } from "drizzle-orm";
+import { eq, and, gt, isNull, desc, lt, sql, like, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, passwordResetTokens, appSettings, driveRuns, driveLocationSamples, driveRunEvents, type InsertDriveRun, type InsertDriveLocationSample, type InsertDriveRunEvent } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -228,6 +228,7 @@ export async function listDriveRunsCursor(opts: {
   projectUid?: string;
   campaignUid?: string;
   status?: string;
+  search?: string;
   limit: number;
   cursor?: number;
 }) {
@@ -238,6 +239,15 @@ export async function listDriveRunsCursor(opts: {
   if (opts.projectUid) conditions.push(eq(driveRuns.projectUid, opts.projectUid));
   if (opts.campaignUid) conditions.push(eq(driveRuns.campaignUid, opts.campaignUid));
   if (opts.status) conditions.push(eq(driveRuns.status, opts.status as any));
+  if (opts.search) {
+    const pattern = `%${opts.search}%`;
+    conditions.push(
+      or(
+        like(driveRuns.name, pattern),
+        like(driveRuns.uid, pattern),
+      )
+    );
+  }
   if (opts.cursor) conditions.push(lt(driveRuns.id, opts.cursor));
 
   const items = await db
@@ -258,6 +268,15 @@ export async function listDriveRunsCursor(opts: {
   if (opts.projectUid) countConditions.push(eq(driveRuns.projectUid, opts.projectUid));
   if (opts.campaignUid) countConditions.push(eq(driveRuns.campaignUid, opts.campaignUid));
   if (opts.status) countConditions.push(eq(driveRuns.status, opts.status as any));
+  if (opts.search) {
+    const pattern = `%${opts.search}%`;
+    countConditions.push(
+      or(
+        like(driveRuns.name, pattern),
+        like(driveRuns.uid, pattern),
+      )
+    );
+  }
 
   const [{ cnt }] = await db
     .select({ cnt: sql<number>`COUNT(*)` })
