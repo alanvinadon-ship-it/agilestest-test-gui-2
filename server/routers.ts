@@ -6,7 +6,7 @@ import { COOKIE_NAME, ONE_YEAR_MS, PASSWORD_RESET_TOKEN_EXPIRY_MS, PASSWORD_RESE
 import { getSessionCookieOptions } from "./_core/cookies";
 import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import * as db from "./db";
 import { writeAuditLog } from "./lib/auditLog";
 import { sendEmail } from "./emailService";
@@ -334,6 +334,65 @@ export const appRouter = router({
 
       return { success: true, message: "Votre mot de passe a été réinitialisé avec succès." };
     }),
+
+    /** Change password for the currently authenticated user (requires old password) */
+    changePassword: protectedProcedure
+      .input(
+        z.object({
+          currentPassword: z.string().min(1, "Le mot de passe actuel est requis"),
+          newPassword: z
+            .string()
+            .min(8, "Le nouveau mot de passe doit contenir au moins 8 caractères")
+            .regex(
+              /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
+              "Le mot de passe doit contenir au moins une majuscule, une minuscule et un chiffre"
+            ),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const user = ctx.user;
+
+        // 1. Check that user has a password (invite-based account)
+        if (!user.passwordHash) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Ce compte utilise la connexion OAuth et ne dispose pas de mot de passe à modifier.",
+          });
+        }
+
+        // 2. Verify current password
+        const isValid = await bcrypt.compare(input.currentPassword, user.passwordHash);
+        if (!isValid) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Le mot de passe actuel est incorrect.",
+          });
+        }
+
+        // 3. Prevent setting the same password
+        const isSame = await bcrypt.compare(input.newPassword, user.passwordHash);
+        if (isSame) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Le nouveau mot de passe doit être différent de l'ancien.",
+          });
+        }
+
+        // 4. Hash and update
+        const newHash = await bcrypt.hash(input.newPassword, 12);
+        await db.updateUserPassword(user.id, newHash);
+
+        // 5. Audit log
+        await writeAuditLog({
+          userId: user.id,
+          action: "PASSWORD_CHANGED",
+          entity: "user",
+          entityId: String(user.id),
+          details: { email: user.email, method: "self-service" },
+        });
+
+        return { success: true, message: "Votre mot de passe a été modifié avec succès." };
+      }),
   }),
 
   notifications: notificationsRouter,

@@ -44,6 +44,7 @@ import ScenarioTemplatesPage from "./pages/ScenarioTemplatesPage";
 import CompareExecutionsPage from "./pages/CompareExecutionsPage";
 import GlobalAnalyticsPage from "./pages/GlobalAnalyticsPage";
 import ImportExportPage from "./pages/ImportExportPage";
+import AccountSettingsPage from "./pages/AccountSettingsPage";
 
 // ─── Auth Guards ────────────────────────────────────────────────────────────
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -206,6 +207,9 @@ function AppRouter() {
               <Route path="/docs">
                 <DocsPage />
               </Route>
+
+              {/* Account settings */}
+              <Route path="/account" component={AccountSettingsPage} />
 
               {/* 404 fallback */}
               <Route>

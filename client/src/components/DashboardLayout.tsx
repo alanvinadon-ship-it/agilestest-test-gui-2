@@ -530,14 +530,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className="flex flex-col items-center py-2 gap-1">
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="w-8 h-8 rounded-md bg-primary/20 flex items-center justify-center">
-                      <User className="w-3.5 h-3.5 text-primary" />
-                    </div>
+                    <Link href="/account">
+                      <div className="w-8 h-8 rounded-md bg-primary/20 flex items-center justify-center cursor-pointer hover:bg-primary/30 transition-colors">
+                        <User className="w-3.5 h-3.5 text-primary" />
+                      </div>
+                    </Link>
                   </TooltipTrigger>
                   <TooltipContent side="right" sideOffset={8}>
                     <div>
                       <p className="font-medium">{user.full_name}</p>
                       <p className="text-[10px] opacity-70">{user.role}</p>
+                      <p className="text-[10px] opacity-50 mt-0.5">Paramètres du compte</p>
                     </div>
                   </TooltipContent>
                 </Tooltip>
@@ -562,11 +565,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <>
               {user && (
                 <div className="px-3 py-2 flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-md bg-primary/20 flex items-center justify-center shrink-0">
-                    <User className="w-3.5 h-3.5 text-primary" />
-                  </div>
+                  <Link href="/account">
+                    <div className="w-7 h-7 rounded-md bg-primary/20 flex items-center justify-center shrink-0 cursor-pointer hover:bg-primary/30 transition-colors">
+                      <User className="w-3.5 h-3.5 text-primary" />
+                    </div>
+                  </Link>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-foreground truncate">{user.full_name}</p>
+                    <Link href="/account">
+                      <p className="text-xs font-medium text-foreground truncate hover:text-primary transition-colors cursor-pointer">{user.full_name}</p>
+                    </Link>
                     <div className="flex items-center gap-1">
                       <p className="text-[10px] text-muted-foreground font-mono">{user.role}</p>
                       {isAdmin && <ShieldCheck className="w-2.5 h-2.5 text-red-400" />}

@@ -436,3 +436,11 @@
 - [x] Feature Forgot Password: Frontend — lien "Mot de passe oublié ?" sur la page login email
 - [x] Feature Forgot Password: Tests — 18 Vitest backend (request, verify, reset, expired, used, invalid, anti-enum, SMTP error)
 - [x] Feature Forgot Password: Tests — TS=0, 702 tests verts
+- [x] Feature Change Password: Backend — endpoint auth.changePassword (oldPassword + newPassword → bcrypt verify + hash + update)
+- [x] Feature Change Password: Backend — vérification ancien mot de passe avant mise à jour
+- [x] Feature Change Password: Backend — audit log PASSWORD_CHANGED
+- [x] Feature Change Password: Frontend — section "Changer le mot de passe" dans les paramètres compte
+- [x] Feature Change Password: Frontend — formulaire (ancien mot de passe, nouveau, confirmation) + indicateur de force
+- [x] Feature Change Password: Frontend — accessible uniquement pour les comptes avec passwordHash (invités)
+- [x] Feature Change Password: Tests — 11 Vitest backend (success, wrong old password, no passwordHash, validation, same password, auth required)
+- [x] Feature Change Password: Tests — TS=0, 713 tests verts
