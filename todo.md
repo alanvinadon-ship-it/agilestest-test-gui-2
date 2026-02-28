@@ -559,3 +559,12 @@
 - [x] E2E API Tests: Production scenarios (concurrent, multi-use-case, state changes)
 - [x] E2E API Tests: Load balancing and distribution
 - [x] E2E API Tests: Coverage report and validation (docs/API_E2E_TESTING_GUIDE.md)
+
+- [x] K6 Performance Tests: Setup Artillery environment and baseline test
+- [x] K6 Performance Tests: Baseline scenario (1 RPS for 30s, measure latency)
+- [x] K6 Performance Tests: Ramp-up scenario (10 to 100 RPS over 60s)
+- [x] K6 Performance Tests: Stress scenario (100 RPS sustained for 5 minutes)
+- [x] K6 Performance Tests: Spike scenario (sudden jump to 150 RPS)
+- [x] K6 Performance Tests: SLA validation (p50 < 30ms, p95 < 50ms, p99 < 100ms)
+- [x] K6 Performance Tests: Error rate monitoring (< 0.1%)
+- [x] K6 Performance Tests: Performance report generation (docs/PERFORMANCE_TESTING_GUIDE.md)
