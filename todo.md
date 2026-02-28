@@ -484,3 +484,12 @@
 - [x] Feature GPS Map: Auto-fit bounds sur le tracé avec padding
 - [x] Feature GPS Map: 6 stats cards (points, distance, durée, vitesse moy/max, altitude) au-dessus de la carte
 - [x] Feature GPS Map: TS=0, 769 tests verts, table brute collapsible sous la carte
+- [x] Feature GPS Parser: Parseur GPX — extraire trkpt (lat, lon, ele, time, speed) depuis fichiers .gpx
+- [x] Feature GPS Parser: Parseur KML — extraire coordonnées depuis fichiers .kml (LineString, Point, gx:Track)
+- [x] Feature GPS Parser: Parseur CSV — extraire colonnes lat/lon/time/speed/alt depuis fichiers .csv (auto-detect headers)
+- [x] Feature GPS Parser: Job queue — handler parseGpsFile qui télécharge depuis S3, parse, bulk insert dans drive_location_samples
+- [x] Feature GPS Parser: Intégration upload — déclencher automatiquement le parsing après upload d'un fichier GPX/KML/CSV
+- [x] Feature GPS Parser: Endpoint tRPC — driveUploads.triggerParse (trigger manuel) + driveUploads.parseStatus
+- [x] Feature GPS Parser: Frontend — composant FileParseStatus avec badges statut + bouton "Parser GPS" + auto-refresh
+- [x] Feature GPS Parser: Tests — 55 Vitest pour parseurs (GPX 14, KML 10, CSV 15, dispatcher 10, edge cases 6)
+- [x] Feature GPS Parser: Tests — TS=0, 824 tests verts

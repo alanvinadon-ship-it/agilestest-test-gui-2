@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { DriveGpsMap } from '@/components/DriveGpsMap';
 import { toast } from 'sonner';
+import { RefreshCw, FileCheck } from 'lucide-react';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -365,6 +366,7 @@ export default function DriveRunDetailPage() {
                       <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Type</th>
                       <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Taille</th>
                       <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Date</th>
+                      <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">GPS Parse</th>
                       <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground">Actions</th>
                     </tr>
                   </thead>
@@ -377,6 +379,9 @@ export default function DriveRunDetailPage() {
                           {f.fileSizeBytes ? `${(f.fileSizeBytes / 1024).toFixed(1)} Ko` : '—'}
                         </td>
                         <td className="px-3 py-2 text-muted-foreground">{formatDate(f.createdAt)}</td>
+                        <td className="px-3 py-2">
+                          <FileParseStatus artifactUid={f.uid} filename={f.filename ?? f.fileName ?? ''} runUid={runUid ?? ''} orgId={run.orgId} />
+                        </td>
                         <td className="px-3 py-2 text-right">
                           {f.s3Url && (
                             <a href={f.s3Url} target="_blank" rel="noopener noreferrer">
@@ -447,6 +452,94 @@ export default function DriveRunDetailPage() {
       </div>
     </div>
   );
+}
+
+// ─── GPS Tab Content (map + collapsible table) ──────────────────────────────
+
+// ─── File Parse Status Component ──────────────────────────────────────────
+
+const GPS_EXTENSIONS = ['gpx', 'kml', 'csv', 'tsv'];
+
+function FileParseStatus({ artifactUid, filename, runUid, orgId }: {
+  artifactUid: string;
+  filename: string;
+  runUid: string;
+  orgId: string;
+}) {
+  const ext = filename.toLowerCase().split('.').pop() ?? '';
+  const isGpsFile = GPS_EXTENSIONS.includes(ext);
+
+  const { data: parseStatus, refetch } = trpc.driveUploads.parseStatus.useQuery(
+    { artifactUid },
+    { enabled: isGpsFile && !!artifactUid, refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return (status === 'PENDING' || status === 'RUNNING') ? 3000 : false;
+    }}
+  );
+
+  const triggerParseMutation = trpc.driveUploads.triggerParse.useMutation({
+    onSuccess: () => { toast.success('Parsing GPS lancé'); refetch(); },
+    onError: (err) => toast.error(`Erreur: ${err.message}`),
+  });
+
+  if (!isGpsFile) return <span className="text-xs text-muted-foreground">—</span>;
+
+  const status = parseStatus?.status ?? 'NONE';
+  const latestJob = parseStatus?.jobs?.[parseStatus.jobs.length - 1];
+  const result = latestJob?.result as any;
+
+  const handleTrigger = () => {
+    triggerParseMutation.mutate({ artifactUid, runUid, orgId, filename });
+  };
+
+  if (status === 'NONE') {
+    return (
+      <Button size="sm" variant="outline" onClick={handleTrigger} disabled={triggerParseMutation.isPending} className="text-xs h-7">
+        {triggerParseMutation.isPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <FileCheck className="w-3 h-3 mr-1" />}
+        Parser GPS
+      </Button>
+    );
+  }
+
+  if (status === 'PENDING' || status === 'RUNNING') {
+    return (
+      <Badge className="bg-blue-500/20 text-blue-300 text-xs">
+        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+        {status === 'PENDING' ? 'En attente' : 'Parsing...'}
+      </Badge>
+    );
+  }
+
+  if (status === 'DONE') {
+    const count = result?.samplesInserted ?? 0;
+    return (
+      <div className="flex items-center gap-2">
+        <Badge className="bg-emerald-500/20 text-emerald-300 text-xs">
+          <CheckCircle2 className="w-3 h-3 mr-1" />
+          {count} pts
+        </Badge>
+        <Button size="sm" variant="ghost" onClick={handleTrigger} disabled={triggerParseMutation.isPending} className="h-6 w-6 p-0" title="Re-parser">
+          <RefreshCw className="w-3 h-3" />
+        </Button>
+      </div>
+    );
+  }
+
+  if (status === 'FAILED') {
+    return (
+      <div className="flex items-center gap-2">
+        <Badge className="bg-red-500/20 text-red-300 text-xs">
+          <XCircle className="w-3 h-3 mr-1" />
+          Erreur
+        </Badge>
+        <Button size="sm" variant="ghost" onClick={handleTrigger} disabled={triggerParseMutation.isPending} className="h-6 w-6 p-0" title="Réessayer">
+          <RefreshCw className="w-3 h-3" />
+        </Button>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 // ─── GPS Tab Content (map + collapsible table) ──────────────────────────────

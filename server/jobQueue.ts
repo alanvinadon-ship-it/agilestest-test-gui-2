@@ -19,13 +19,15 @@ export type JobName =
   | "parseJmeterJtl"
   | "aiAnalyzeRun"
   | "retentionPurge"
-  | "generateExecutionPdf";
+  | "generateExecutionPdf"
+  | "parseGpsFile";
 
 export interface JobPayload {
   parseJmeterJtl: { runId: number; artifactId: number };
   aiAnalyzeRun: { runId: number };
   retentionPurge: { dryRun?: boolean };
   generateExecutionPdf: { executionId: number; reportId: number; projectId: number };
+  parseGpsFile: { artifactUid: string; runUid: string; orgId: string; filename: string };
 }
 
 type JobHandler<T extends JobName> = (
@@ -556,6 +558,79 @@ registerHandler("generateExecutionPdf", async (payload) => {
   }
 });
 
+// ── Parse GPS File Handler ────────────────────────────────────────────────
+
+registerHandler("parseGpsFile", async (payload) => {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+
+  const { artifactUid, runUid, orgId, filename } = payload;
+
+  // 1. Fetch artifact to get S3 URL
+  const [artifact] = await db
+    .select()
+    .from(artifacts)
+    .where(eq(artifacts.uid, artifactUid))
+    .limit(1);
+
+  if (!artifact) throw new Error(`Artifact ${artifactUid} not found`);
+  if (!artifact.storageUrl) throw new Error(`Artifact ${artifactUid} has no storage URL`);
+
+  // 2. Download file content from S3
+  const response = await fetch(artifact.storageUrl);
+  if (!response.ok) throw new Error(`Failed to download file: HTTP ${response.status}`);
+  const content = await response.text();
+
+  // 3. Parse the file
+  const { parseGpsFile: parseFile } = await import("./gpsFileParsers");
+  const result = parseFile(content, filename);
+
+  if (result.samples.length === 0) {
+    return {
+      artifactUid,
+      format: result.format,
+      samplesInserted: 0,
+      errors: result.errors,
+      trackName: result.trackName,
+    };
+  }
+
+  // 4. Bulk insert GPS samples into drive_location_samples
+  const { driveLocationSamples } = await import("../drizzle/schema");
+  const { randomUUID } = await import("crypto");
+
+  const BATCH_SIZE = 500;
+  let inserted = 0;
+
+  for (let i = 0; i < result.samples.length; i += BATCH_SIZE) {
+    const batch = result.samples.slice(i, i + BATCH_SIZE);
+    const values = batch.map((s) => ({
+      uid: randomUUID(),
+      orgId,
+      runUid,
+      lat: s.lat,
+      lon: s.lon,
+      altitudeM: s.altitudeM,
+      speedMps: s.speedMps,
+      accuracyM: s.accuracyM,
+      ts: s.ts,
+    }));
+
+    await db.insert(driveLocationSamples).values(values);
+    inserted += batch.length;
+  }
+
+  console.log(`[ParseGpsFile] Inserted ${inserted} GPS samples from ${filename} (${result.format}) for run ${runUid}`);
+
+  return {
+    artifactUid,
+    format: result.format,
+    samplesInserted: inserted,
+    errors: result.errors,
+    trackName: result.trackName,
+  };
+});
+
 // ── Job status query ───────────────────────────────────────────────────────
 
 export async function getJobStatus(jobId: number) {
@@ -580,6 +655,22 @@ export async function getJobsByRun(runId: number) {
     .from(jobs)
     .where(
       sql`JSON_EXTRACT(${jobs.payload}, '$.runId') = ${runId}`
+    )
+    .orderBy(jobs.createdAt);
+}
+
+export async function getJobsByArtifactUid(artifactUid: string) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(jobs)
+    .where(
+      and(
+        eq(jobs.name, "parseGpsFile"),
+        sql`JSON_EXTRACT(${jobs.payload}, '$.artifactUid') = ${artifactUid}`
+      )
     )
     .orderBy(jobs.createdAt);
 }

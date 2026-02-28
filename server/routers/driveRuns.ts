@@ -342,7 +342,27 @@ export const driveUploadsRouter = router({
           details: { runUid: input.runUid, filename: input.filename, fileType: input.fileType, sizeBytes: buffer.length },
         });
 
-        return { success: true, artifactUid, url, sizeBytes: buffer.length };
+        // Auto-trigger GPS parsing for supported file types
+        const gpsExtensions = [".gpx", ".kml", ".csv", ".tsv"];
+        const ext = input.filename.toLowerCase().split(".").pop() ?? "";
+        let parseJobId: number | null = null;
+        if (gpsExtensions.some((e) => input.filename.toLowerCase().endsWith(e)) || input.fileType === "CSV") {
+          try {
+            const { enqueueJob } = await import("../jobQueue");
+            const job = await enqueueJob("parseGpsFile", {
+              artifactUid,
+              runUid: input.runUid,
+              orgId: input.orgId,
+              filename: input.filename,
+            });
+            parseJobId = job ?? null;
+            console.log(`[DriveUpload] Auto-enqueued parseGpsFile job for ${input.filename}`);
+          } catch (err) {
+            console.warn(`[DriveUpload] Failed to enqueue parseGpsFile:`, err);
+          }
+        }
+
+        return { success: true, artifactUid, url, sizeBytes: buffer.length, parseJobId };
       }
 
       return { success: true, artifactUid: null, url, sizeBytes: buffer.length };
@@ -356,11 +376,53 @@ export const driveUploadsRouter = router({
       const dbConn = await getDb();
       if (!dbConn) return [];
       const { artifacts } = await import("../../drizzle/schema");
-      const { eq, like } = await import("drizzle-orm");
+      const { eq } = await import("drizzle-orm");
       return dbConn
         .select()
         .from(artifacts)
         .where(eq(artifacts.executionId, input.runUid))
         .orderBy(artifacts.createdAt);
+    }),
+
+  /** Manually trigger GPS parsing for an uploaded file */
+  triggerParse: protectedProcedure
+    .input(
+      z.object({
+        artifactUid: z.string(),
+        runUid: z.string(),
+        orgId: z.string(),
+        filename: z.string(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { enqueueJob } = await import("../jobQueue");
+      const job = await enqueueJob("parseGpsFile", {
+        artifactUid: input.artifactUid,
+        runUid: input.runUid,
+        orgId: input.orgId,
+        filename: input.filename,
+      });
+      return { success: true, jobId: job ?? null };
+    }),
+
+  /** Get parse job status for an artifact */
+  parseStatus: protectedProcedure
+    .input(z.object({ artifactUid: z.string() }))
+    .query(async ({ input }) => {
+      const { getJobsByArtifactUid } = await import("../jobQueue");
+      const jobs = await getJobsByArtifactUid(input.artifactUid);
+      if (jobs.length === 0) return { status: "NONE" as const, jobs: [] };
+      const latest = jobs[jobs.length - 1];
+      return {
+        status: latest.status as "PENDING" | "RUNNING" | "DONE" | "FAILED",
+        jobs: jobs.map((j) => ({
+          id: j.id,
+          status: j.status,
+          result: j.result,
+          error: j.error,
+          createdAt: j.createdAt,
+          completedAt: j.completedAt,
+        })),
+      };
     }),
 });
