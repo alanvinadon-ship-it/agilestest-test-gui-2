@@ -181,6 +181,51 @@ describe("driveRunsRouter", () => {
     const caller = createCaller(driveRunsRouter);
     await expect(caller.delete({ runUid: "nonexistent" })).rejects.toThrow();
   });
+
+  it("create — accepts a name field", async () => {
+    const caller = createCaller(driveRunsRouter);
+    const result = await caller.create({ orgId: "org-1", projectUid: "proj-1", name: "Drive Abidjan Nord" });
+    expect(result.success).toBe(true);
+    expect(createDriveRun).toHaveBeenCalledWith(expect.objectContaining({ name: "Drive Abidjan Nord" }));
+  });
+
+  it("create — trims whitespace from name", async () => {
+    const caller = createCaller(driveRunsRouter);
+    await caller.create({ orgId: "org-1", projectUid: "proj-1", name: "  Test Run  " });
+    expect(createDriveRun).toHaveBeenCalledWith(expect.objectContaining({ name: "Test Run" }));
+  });
+
+  it("create — sets name to null when empty string", async () => {
+    const caller = createCaller(driveRunsRouter);
+    await caller.create({ orgId: "org-1", projectUid: "proj-1", name: "   " });
+    expect(createDriveRun).toHaveBeenCalledWith(expect.objectContaining({ name: null }));
+  });
+
+  it("create — works without name (optional)", async () => {
+    const caller = createCaller(driveRunsRouter);
+    const result = await caller.create({ orgId: "org-1", projectUid: "proj-1" });
+    expect(result.success).toBe(true);
+    expect(createDriveRun).toHaveBeenCalledWith(expect.objectContaining({ name: null }));
+  });
+
+  it("rename — renames a run", async () => {
+    const caller = createCaller(driveRunsRouter);
+    const result = await caller.rename({ runUid: "run-test-uid-001", name: "Nouveau Nom" });
+    expect(result.success).toBe(true);
+    expect(updateDriveRun).toHaveBeenCalledWith("run-test-uid-001", { name: "Nouveau Nom" });
+  });
+
+  it("rename — rejects if run not found", async () => {
+    getDriveRunByUid.mockResolvedValueOnce(undefined);
+    const caller = createCaller(driveRunsRouter);
+    await expect(caller.rename({ runUid: "nonexistent", name: "Test" })).rejects.toThrow();
+  });
+
+  it("rename — sets name to null when empty string", async () => {
+    const caller = createCaller(driveRunsRouter);
+    await caller.rename({ runUid: "run-test-uid-001", name: "   " });
+    expect(updateDriveRun).toHaveBeenCalledWith("run-test-uid-001", { name: null });
+  });
 });
 
 describe("driveTelemetryRouter", () => {
@@ -318,6 +363,7 @@ describe("driveRuns — structural checks", () => {
     expect(procedures).toContain("create");
     expect(procedures).toContain("start");
     expect(procedures).toContain("stop");
+    expect(procedures).toContain("rename");
     expect(procedures).toContain("delete");
   });
 

@@ -1091,6 +1091,7 @@ export type AppSetting = typeof appSettings.$inferSelect;
 export const driveRuns = mysqlTable("drive_runs", {
   id: int("id").autoincrement().primaryKey(),
   uid: varchar("uid", { length: 36 }).notNull().unique(),
+  name: varchar("name", { length: 255 }),
   orgId: varchar("org_id", { length: 36 }).notNull(),
   projectUid: varchar("project_uid", { length: 36 }).notNull(),
   campaignUid: varchar("campaign_uid", { length: 36 }),

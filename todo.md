@@ -493,3 +493,8 @@
 - [x] Feature GPS Parser: Frontend — composant FileParseStatus avec badges statut + bouton "Parser GPS" + auto-refresh
 - [x] Feature GPS Parser: Tests — 55 Vitest pour parseurs (GPX 14, KML 10, CSV 15, dispatcher 10, edge cases 6)
 - [x] Feature GPS Parser: Tests — TS=0, 824 tests verts
+- [x] Feature Run Name: DB — ajouté colonne `name` (varchar 255, nullable) à la table drive_runs
+- [x] Feature Run Name: Backend — accepté `name` dans driveRuns.create + endpoint driveRuns.rename
+- [x] Feature Run Name: Frontend — champ nom dans le dialog de création de run
+- [x] Feature Run Name: Frontend — afficher le nom du run dans la liste et la page détail
+- [x] Feature Run Name: Tests — TS=0, 831 tests verts (7 nouveaux pour name/rename)

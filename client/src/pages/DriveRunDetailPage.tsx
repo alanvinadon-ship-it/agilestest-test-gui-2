@@ -209,8 +209,11 @@ export default function DriveRunDetailPage() {
             <Navigation className="w-5 h-5 sm:w-6 sm:h-6 text-primary shrink-0" />
             <div>
               <h1 className="text-lg sm:text-xl font-heading font-bold text-foreground">
-                Run {run.uid.slice(0, 12)}…
+                {run.name || `Run ${run.uid.slice(0, 12)}…`}
               </h1>
+              {run.name && (
+                <span className="text-xs font-mono text-muted-foreground">{run.uid.slice(0, 8)}</span>
+              )}
               <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
                 Créé le {formatDate(run.createdAt)}
                 {run.startedAt && <> · Démarré {formatDate(run.startedAt)}</>}

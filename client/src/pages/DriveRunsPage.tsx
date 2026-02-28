@@ -110,14 +110,17 @@ export default function DriveRunsPage() {
   const campaigns = campaignsData?.data ?? [];
 
   // ─── Create form state ──────────────────────────────────────────────────
+  const [createName, setCreateName] = useState('');
   const [createCampaignUid, setCreateCampaignUid] = useState('');
 
   function handleCreate() {
     createMutation.mutate({
       orgId: projectId,
       projectUid: projectId,
+      name: createName.trim() || undefined,
       campaignUid: createCampaignUid || undefined,
     });
+    setCreateName('');
   }
 
   function formatDate(d: Date | string | null | undefined) {
@@ -204,7 +207,7 @@ export default function DriveRunsPage() {
                     </Badge>
                     <Link href={`/drive/runs/${run.uid}`}>
                       <span className="text-sm font-medium text-foreground hover:text-primary cursor-pointer truncate">
-                        Run {run.uid.slice(0, 8)}…
+                        {run.name || `Run ${run.uid.slice(0, 8)}…`}
                       </span>
                     </Link>
                     {run.campaignUid && (
@@ -282,6 +285,18 @@ export default function DriveRunsPage() {
             <DialogTitle>Nouveau Drive Run</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            <div>
+              <label className="text-sm font-medium text-foreground">Nom du run</label>
+              <Input
+                className="mt-1"
+                placeholder="Ex : Drive Abidjan Nord, Test couverture 4G…"
+                value={createName}
+                onChange={(e) => setCreateName(e.target.value)}
+                maxLength={255}
+                autoFocus
+              />
+              <p className="text-xs text-muted-foreground mt-1">Donnez un nom descriptif pour identifier facilement ce run.</p>
+            </div>
             <div>
               <label className="text-sm font-medium text-foreground">Campagne (optionnel)</label>
               <Select value={createCampaignUid} onValueChange={setCreateCampaignUid}>

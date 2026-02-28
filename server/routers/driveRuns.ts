@@ -53,6 +53,7 @@ export const driveRunsRouter = router({
       z.object({
         orgId: z.string(),
         projectUid: z.string(),
+        name: z.string().max(255).optional(),
         campaignUid: z.string().optional(),
         routeUid: z.string().optional(),
         deviceUid: z.string().optional(),
@@ -64,6 +65,7 @@ export const driveRunsRouter = router({
       const uid = randomUUID();
       await db.createDriveRun({
         uid,
+        name: input.name?.trim() || null,
         orgId: input.orgId,
         projectUid: input.projectUid,
         campaignUid: input.campaignUid ?? null,
@@ -141,6 +143,23 @@ export const driveRunsRouter = router({
         entity: "drive_run",
         entityId: input.runUid,
         details: { from: run.status, to: input.status },
+      });
+      return { success: true };
+    }),
+
+  /** Rename a run */
+  rename: protectedProcedure
+    .input(z.object({ runUid: z.string(), name: z.string().max(255) }))
+    .mutation(async ({ input, ctx }) => {
+      const run = await db.getDriveRunByUid(input.runUid);
+      if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "Run introuvable" });
+      await db.updateDriveRun(input.runUid, { name: input.name.trim() || null });
+      await writeAuditLog({
+        userId: ctx.user.openId,
+        action: "DRIVE_RUN_RENAMED",
+        entity: "drive_run",
+        entityId: input.runUid,
+        details: { name: input.name.trim() },
       });
       return { success: true };
     }),
