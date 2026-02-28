@@ -2,7 +2,7 @@
  * LoginPage — Dual login: Manus OAuth + Email/Password (for invited users).
  */
 import { useState, useCallback, useMemo } from "react";
-import { useLocation, useSearch } from "wouter";
+import { useLocation, useSearch, Link } from "wouter";
 import { toast } from "sonner";
 import {
   Shield, LogIn, Mail, Lock, Eye, EyeOff, Loader2, ArrowRight,
@@ -226,6 +226,16 @@ export default function LoginPage() {
                       {errors.password}
                     </p>
                   )}
+                </div>
+
+                {/* Forgot password link */}
+                <div className="flex justify-end">
+                  <Link
+                    href="/forgot-password"
+                    className="text-xs text-primary hover:text-primary/80 transition-colors"
+                  >
+                    Mot de passe oublié ?
+                  </Link>
                 </div>
 
                 {/* Submit button */}

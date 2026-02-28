@@ -31,6 +31,8 @@ import AdminAuditPage from "./pages/AdminAuditPage";
 import AdminRolesPage from "./pages/AdminRolesPage";
 import AdminNotificationsPage from "./pages/AdminNotificationsPage";
 import AcceptInvitePage from "./pages/AcceptInvitePage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import DriveCampaignsPage from "./pages/DriveCampaignsPage";
 import DriveReportingPage from "./pages/DriveReportingPage";
 import DriveIncidentReportPage from "./pages/DriveIncidentReportPage";
@@ -95,6 +97,14 @@ function AppRouter() {
       {/* Invitation acceptance (public, no auth required) */}
       <Route path="/invite/accept">
         <AcceptInvitePage />
+      </Route>
+
+      {/* Password reset flow (public, no auth required) */}
+      <Route path="/forgot-password">
+        <ForgotPasswordPage />
+      </Route>
+      <Route path="/reset-password">
+        <ResetPasswordPage />
       </Route>
 
       {/* Authenticated routes */}

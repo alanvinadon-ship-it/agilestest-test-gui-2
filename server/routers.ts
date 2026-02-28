@@ -1,13 +1,82 @@
 import { z } from "zod";
+import crypto from "crypto";
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
-import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { COOKIE_NAME, ONE_YEAR_MS, PASSWORD_RESET_TOKEN_EXPIRY_MS, PASSWORD_RESET_TOKEN_LENGTH } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import * as db from "./db";
 import { writeAuditLog } from "./lib/auditLog";
+import { sendEmail } from "./emailService";
+import type { SmtpConfig } from "./emailService";
+
+const SmtpConfigSchema = z.object({
+  host: z.string().min(1),
+  port: z.number().int().min(1).max(65535),
+  secure: z.enum(['NONE', 'STARTTLS', 'TLS']),
+  username: z.string().min(1),
+  password: z.string().min(1),
+  from_email: z.string().email(),
+  from_name: z.string().default('AgilesTest'),
+  reply_to: z.string().optional(),
+  timeout_ms: z.number().int().min(1000).max(60000).default(15000),
+});
+
+function buildSmtpConfig(input: z.infer<typeof SmtpConfigSchema>): SmtpConfig {
+  return {
+    host: input.host,
+    port: input.port,
+    secure: input.secure,
+    username: input.username,
+    password: input.password,
+    from_email: input.from_email,
+    from_name: input.from_name,
+    reply_to: input.reply_to,
+    timeout_ms: input.timeout_ms,
+  };
+}
+
+function buildPasswordResetEmailHtml(params: { resetLink: string; userName: string; expiresMinutes: number }): string {
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <div style="background: #1a1a2e; color: #e0e0e0; padding: 30px; border-radius: 8px;">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <div style="display: inline-block; background: #f97316; color: white; padding: 8px 16px; border-radius: 6px; font-weight: bold; font-size: 18px;">
+            AgilesTest
+          </div>
+        </div>
+
+        <h2 style="color: #f97316; margin-top: 0; text-align: center;">R\u00e9initialisation de mot de passe</h2>
+
+        <p style="font-size: 15px; line-height: 1.6;">Bonjour <strong>${params.userName}</strong>,</p>
+        <p style="font-size: 15px; line-height: 1.6;">
+          Vous avez demand\u00e9 la r\u00e9initialisation de votre mot de passe sur AgilesTest.
+          Cliquez sur le bouton ci-dessous pour d\u00e9finir un nouveau mot de passe :
+        </p>
+
+        <div style="text-align: center; margin: 28px 0;">
+          <a href="${params.resetLink}"
+             style="display: inline-block; background: #f97316; color: white; padding: 14px 32px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 16px;">
+            R\u00e9initialiser mon mot de passe
+          </a>
+        </div>
+
+        <p style="font-size: 13px; color: #999; text-align: center;">
+          Ce lien expire dans <strong>${params.expiresMinutes} minutes</strong>.<br>
+          Si vous n'avez pas demand\u00e9 cette r\u00e9initialisation, ignorez cet email.
+        </p>
+
+        <hr style="border: none; border-top: 1px solid #333; margin: 20px 0;" />
+
+        <p style="font-size: 11px; color: #555; text-align: center; margin-bottom: 0;">
+          Cet email a \u00e9t\u00e9 envoy\u00e9 automatiquement par AgilesTest.
+        </p>
+      </div>
+    </div>
+  `;
+}
 import { notificationsRouter } from "./routers/notifications";
 import { adminRouter, invitePublicRouter } from "./routers/admin";
 import { projectsRouter } from "./routers/projects";
@@ -140,6 +209,131 @@ export const appRouter = router({
           },
         };
       }),
+
+    /** Request a password reset link by email */
+    requestPasswordReset: publicProcedure
+    .input(
+      z.object({
+        email: z.string().email("Adresse email invalide"),
+        origin: z.string().url("Origine invalide"),
+        smtp: SmtpConfigSchema,
+      })
+    )
+    .mutation(async ({ input }) => {
+      // Always return success to prevent email enumeration
+      const user = await db.getUserByEmail(input.email);
+      if (!user || !user.passwordHash) {
+        // Silently succeed — don't reveal whether the email exists
+        return { success: true, message: "Si cette adresse est enregistrée, un email de réinitialisation a été envoyé." };
+      }
+
+      if (user.status === "DISABLED") {
+        return { success: true, message: "Si cette adresse est enregistrée, un email de réinitialisation a été envoyé." };
+      }
+
+      // Generate secure token
+      const token = crypto.randomBytes(PASSWORD_RESET_TOKEN_LENGTH).toString("hex");
+      const expiresAt = new Date(Date.now() + PASSWORD_RESET_TOKEN_EXPIRY_MS);
+
+      await db.createPasswordResetToken({
+        userId: user.id,
+        email: user.email!,
+        token,
+        expiresAt,
+      });
+
+      // Build reset link
+      const resetLink = `${input.origin}/reset-password?token=${token}`;
+      const expiresMinutes = Math.round(PASSWORD_RESET_TOKEN_EXPIRY_MS / 60000);
+
+      // Send email
+      const smtpConfig = buildSmtpConfig(input.smtp);
+      const html = buildPasswordResetEmailHtml({
+        resetLink,
+        userName: user.fullName ?? user.name ?? user.email ?? "Utilisateur",
+        expiresMinutes,
+      });
+
+      try {
+        await sendEmail(smtpConfig, {
+          to: user.email!,
+          subject: "[AgilesTest] Réinitialisation de votre mot de passe",
+          html,
+        });
+      } catch (err) {
+        console.error("[PasswordReset] Failed to send email:", err);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Erreur lors de l'envoi de l'email. Vérifiez la configuration SMTP.",
+        });
+      }
+
+      // Audit log
+      await writeAuditLog({
+        userId: user.id,
+        action: "PASSWORD_RESET_REQUESTED",
+        entity: "user",
+        entityId: String(user.id),
+        details: { email: user.email },
+      });
+
+      return { success: true, message: "Si cette adresse est enregistrée, un email de réinitialisation a été envoyé." };
+    }),
+
+  /** Verify a password reset token is valid */
+  verifyResetToken: publicProcedure
+    .input(z.object({ token: z.string().min(1, "Token requis") }))
+    .query(async ({ input }) => {
+      const resetToken = await db.getValidResetToken(input.token);
+      if (!resetToken) {
+        return { valid: false, email: null };
+      }
+      return { valid: true, email: resetToken.email };
+    }),
+
+  /** Reset password using a valid token */
+  resetPassword: publicProcedure
+    .input(
+      z.object({
+        token: z.string().min(1, "Token requis"),
+        newPassword: z
+          .string()
+          .min(8, "Le mot de passe doit contenir au moins 8 caractères")
+          .regex(
+            /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
+            "Le mot de passe doit contenir au moins une majuscule, une minuscule et un chiffre"
+          ),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const resetToken = await db.getValidResetToken(input.token);
+      if (!resetToken) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Ce lien de réinitialisation est invalide ou a expiré.",
+        });
+      }
+
+      // Hash new password
+      const passwordHash = await bcrypt.hash(input.newPassword, 12);
+
+      // Update user password
+      await db.updateUserPassword(resetToken.userId, passwordHash);
+
+      // Mark token as used
+      await db.markResetTokenUsed(input.token);
+
+      // Audit log
+      await writeAuditLog({
+        userId: resetToken.userId,
+        action: "PASSWORD_RESET_COMPLETED",
+        entity: "user",
+        entityId: String(resetToken.userId),
+        details: { email: resetToken.email },
+      });
+
+      return { success: true, message: "Votre mot de passe a été réinitialisé avec succès." };
+    }),
   }),
 
   notifications: notificationsRouter,

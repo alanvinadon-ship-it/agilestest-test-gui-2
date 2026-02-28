@@ -426,3 +426,13 @@
 - [x] Feature Login Email: Tests — 11 Vitest backend (login success, wrong password, no passwordHash, user not found, disabled, validation, no leak)
 - [x] Feature Login Email: Tests — vérification TS=0, 683 tests verts
 - [x] Feature Login Email: Docs — mise à jour si nécessaire
+- [x] Feature Forgot Password: DB — table password_reset_tokens (id, userId, email, token, expiresAt, usedAt, createdAt)
+- [x] Feature Forgot Password: Backend — endpoint auth.requestPasswordReset (email → generate token → send email)
+- [x] Feature Forgot Password: Backend — endpoint auth.verifyResetToken (token → valid/expired/used)
+- [x] Feature Forgot Password: Backend — endpoint auth.resetPassword (token + newPassword → bcrypt hash → update user)
+- [x] Feature Forgot Password: Backend — email template HTML pour le lien de réinitialisation
+- [x] Feature Forgot Password: Frontend — page /forgot-password (formulaire email)
+- [x] Feature Forgot Password: Frontend — page /reset-password?token=... (formulaire nouveau mot de passe)
+- [x] Feature Forgot Password: Frontend — lien "Mot de passe oublié ?" sur la page login email
+- [x] Feature Forgot Password: Tests — 18 Vitest backend (request, verify, reset, expired, used, invalid, anti-enum, SMTP error)
+- [x] Feature Forgot Password: Tests — TS=0, 702 tests verts

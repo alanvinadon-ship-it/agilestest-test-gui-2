@@ -1042,6 +1042,19 @@ export const userRoles = mysqlTable("user_roles", {
 });
 export type UserRole = typeof userRoles.$inferSelect;
 
+// ─── PasswordResetTokens ──────────────────────────────────────────────────
+export const passwordResetTokens = mysqlTable("password_reset_tokens", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("user_id").notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  token: varchar("token", { length: 128 }).unique().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type InsertPasswordResetToken = typeof passwordResetTokens.$inferInsert;
+
 // ─── WebhookDeliveries ─────────────────────────────────────────────────────
 export const webhookDeliveries = mysqlTable("webhook_deliveries", {
   id: int("id").autoincrement().primaryKey(),
