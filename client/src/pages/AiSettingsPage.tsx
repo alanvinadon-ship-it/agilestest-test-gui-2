@@ -28,8 +28,11 @@ import {
   Info,
 } from "lucide-react";
 import { toast } from "sonner";
+import AiEnginesTab from "../components/AiEnginesTab";
+import AiRoutingTab from "../components/AiRoutingTab";
 
 type Provider = "OPENAI" | "AZURE_OPENAI" | "ANTHROPIC" | "CUSTOM_HTTP";
+type Tab = "config" | "engines" | "routing";
 
 const PROVIDER_LABELS: Record<Provider, string> = {
   OPENAI: "OpenAI",
@@ -49,6 +52,7 @@ export default function AiSettingsPage() {
   const { user, isAdmin } = useAuth();
   const { currentProject } = useProject();
   const orgId = currentProject?.id || "global";
+  const [activeTab, setActiveTab] = useState<Tab>("config");
 
   // Form state
   const [enabled, setEnabled] = useState(false);
@@ -182,14 +186,14 @@ export default function AiSettingsPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Brain className="w-6 h-6 text-primary" />
         <div>
           <h1 className="text-xl font-heading font-bold text-foreground">Configuration IA</h1>
           <p className="text-sm text-muted-foreground">
-            Configurer le fournisseur IA, le modèle et la clé API pour les fonctionnalités intelligentes.
+            Gérer les moteurs IA, les règles de routage et les configurations par défaut.
           </p>
         </div>
       </div>
@@ -249,339 +253,303 @@ export default function AiSettingsPage() {
         )}
       </div>
 
-      {/* ── Main Form ──────────────────────────────────────────────────── */}
-      <div className="bg-card border border-border rounded-lg p-6 space-y-6">
-        {/* Enable toggle */}
-        <div className="flex items-center justify-between">
-          <div>
-            <Label className="text-sm font-medium">IA activée</Label>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Active les fonctionnalités IA (diagnostics drive, génération de scripts, etc.)
-            </p>
+      {/* Tabs */}
+      <div className="border-b border-border">
+        <div className="flex gap-4">
+          {(["config", "engines", "routing"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === tab
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {tab === "config" && "Configuration par défaut"}
+              {tab === "engines" && "Moteurs"}
+              {tab === "routing" && "Routage"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === "config" && (
+        <div className="bg-card border border-border rounded-lg p-6 space-y-6">
+          {/* Enable toggle */}
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-sm font-medium">IA activée</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Active les fonctionnalités IA (diagnostics drive, génération de scripts, etc.)
+              </p>
+            </div>
+            <Switch
+              checked={enabled}
+              onCheckedChange={setEnabled}
+              disabled={isLocked}
+            />
           </div>
-          <Switch
-            checked={enabled}
-            onCheckedChange={setEnabled}
-            disabled={isLocked}
-          />
-        </div>
 
-        <hr className="border-border" />
+          <hr className="border-border" />
 
-        {/* Provider */}
-        <div className="space-y-2">
-          <Label>Fournisseur</Label>
-          <Select
-            value={provider}
-            onValueChange={(v) => {
-              setProvider(v as Provider);
-              const models = PROVIDER_MODELS[v as Provider];
-              if (models.length > 0) setModel(models[0]);
-            }}
-            disabled={isLocked}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.keys(PROVIDER_LABELS) as Provider[]).map((p) => (
-                <SelectItem key={p} value={p}>{PROVIDER_LABELS[p]}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Model */}
-        <div className="space-y-2">
-          <Label>Modèle</Label>
-          {modelOptions.length > 0 ? (
-            <Select value={model} onValueChange={setModel} disabled={isLocked}>
+          {/* Provider */}
+          <div className="space-y-2">
+            <Label>Fournisseur</Label>
+            <Select
+              value={provider}
+              onValueChange={(v) => {
+                setProvider(v as Provider);
+                const models = PROVIDER_MODELS[v as Provider];
+                if (models.length > 0) setModel(models[0]);
+              }}
+              disabled={isLocked}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {modelOptions.map((m) => (
-                  <SelectItem key={m} value={m}>{m}</SelectItem>
+                {(Object.keys(PROVIDER_LABELS) as Provider[]).map((p) => (
+                  <SelectItem key={p} value={p}>{PROVIDER_LABELS[p]}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          ) : (
-            <Input
-              value={customModel || model}
-              onChange={(e) => setCustomModel(e.target.value)}
-              placeholder="Nom du modèle"
-              disabled={isLocked}
-            />
-          )}
-        </div>
+          </div>
 
-        {/* Provider-specific fields */}
-        {provider === "OPENAI" && (
+          {/* Model */}
           <div className="space-y-2">
-            <Label>Base URL <span className="text-muted-foreground">(optionnel)</span></Label>
-            <Input
-              value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder="https://api.openai.com"
-              disabled={isLocked}
-            />
-          </div>
-        )}
-
-        {provider === "AZURE_OPENAI" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Azure Endpoint</Label>
+            <Label>Modèle</Label>
+            {modelOptions.length > 0 ? (
+              <Select value={model} onValueChange={setModel} disabled={isLocked}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {modelOptions.map((m) => (
+                    <SelectItem key={m} value={m}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
               <Input
-                value={azureEndpoint}
-                onChange={(e) => setAzureEndpoint(e.target.value)}
-                placeholder="https://your-resource.openai.azure.com"
+                value={customModel || model}
+                onChange={(e) => setCustomModel(e.target.value)}
+                placeholder="model-name"
                 disabled={isLocked}
               />
-            </div>
-            <div className="space-y-2">
-              <Label>API Version</Label>
-              <Input
-                value={azureApiVersion}
-                onChange={(e) => setAzureApiVersion(e.target.value)}
-                placeholder="2024-02-01"
-                disabled={isLocked}
-              />
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label>Deployment Name</Label>
-              <Input
-                value={azureDeployment}
-                onChange={(e) => setAzureDeployment(e.target.value)}
-                placeholder="gpt-4o"
-                disabled={isLocked}
-              />
-            </div>
-          </div>
-        )}
-
-        {provider === "ANTHROPIC" && (
-          <div className="space-y-2">
-            <Label>Base URL <span className="text-muted-foreground">(optionnel)</span></Label>
-            <Input
-              value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder="https://api.anthropic.com"
-              disabled={isLocked}
-            />
-          </div>
-        )}
-
-        {provider === "CUSTOM_HTTP" && (
-          <div className="space-y-2">
-            <Label>URL du endpoint</Label>
-            <Input
-              value={customHttpUrl}
-              onChange={(e) => setCustomHttpUrl(e.target.value)}
-              placeholder="https://your-server.com/v1/chat/completions"
-              disabled={isLocked}
-            />
-          </div>
-        )}
-
-        <hr className="border-border" />
-
-        {/* Advanced Settings */}
-        <details className="group">
-          <summary className="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-            Paramètres avancés
-          </summary>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-            <div className="space-y-2">
-              <Label>Timeout (ms)</Label>
-              <Input
-                type="number"
-                value={timeoutMs}
-                onChange={(e) => setTimeoutMs(Number(e.target.value))}
-                min={1000}
-                max={120000}
-                disabled={isLocked}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Max Retries</Label>
-              <Input
-                type="number"
-                value={maxRetries}
-                onChange={(e) => setMaxRetries(Number(e.target.value))}
-                min={0}
-                max={10}
-                disabled={isLocked}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Température</Label>
-              <Input
-                type="number"
-                value={temperature}
-                onChange={(e) => setTemperature(e.target.value)}
-                step={0.1}
-                min={0}
-                max={2}
-                placeholder="Auto"
-                disabled={isLocked}
-              />
-            </div>
-          </div>
-        </details>
-
-        <hr className="border-border" />
-
-        {/* API Key Section */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <Label>Clé API</Label>
-            {hasSecret && !rotateMode && (
-              <span className="flex items-center gap-1.5 text-xs text-green-400">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                Clé configurée
-              </span>
             )}
           </div>
 
-          {!isLocked && (
-            <>
-              {hasSecret && !rotateMode ? (
-                <div className="flex items-center gap-3">
+          {/* Advanced */}
+          <details className="border border-border rounded-lg" open>
+            <summary className="px-4 py-2 text-xs font-medium text-muted-foreground cursor-pointer hover:text-foreground">
+              Paramètres avancés
+            </summary>
+            <div className="px-4 pb-4 space-y-3">
+              {/* Base URL */}
+              <div className="space-y-2">
+                <Label className="text-xs">Base URL <span className="text-muted-foreground">(optionnel)</span></Label>
+                <Input
+                  value={baseUrl}
+                  onChange={(e) => setBaseUrl(e.target.value)}
+                  placeholder="https://api.openai.com"
+                  disabled={isLocked}
+                />
+              </div>
+
+              {/* Timeout & Retries */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Timeout (ms)</Label>
                   <Input
-                    value="••••••••••••••••••••••••"
-                    disabled
-                    className="font-mono"
+                    type="number"
+                    value={timeoutMs}
+                    onChange={(e) => setTimeoutMs(Number(e.target.value))}
+                    disabled={isLocked}
                   />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setRotateMode(true)}
-                    className="shrink-0"
-                  >
-                    <RotateCw className="w-3.5 h-3.5 mr-1.5" />
-                    Rotation
-                  </Button>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="relative">
+                <div className="space-y-1">
+                  <Label className="text-xs">Max retries</Label>
+                  <Input
+                    type="number"
+                    value={maxRetries}
+                    onChange={(e) => setMaxRetries(Number(e.target.value))}
+                    disabled={isLocked}
+                  />
+                </div>
+              </div>
+
+              {/* Temperature */}
+              <div className="space-y-2">
+                <Label className="text-xs">Température <span className="text-muted-foreground">(optionnel)</span></Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  value={temperature}
+                  onChange={(e) => setTemperature(e.target.value)}
+                  placeholder="0.7"
+                  disabled={isLocked}
+                />
+              </div>
+
+              {/* Azure fields */}
+              {provider === "AZURE_OPENAI" && (
+                <>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Azure Endpoint</Label>
                     <Input
-                      type={showKey ? "text" : "password"}
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                      placeholder={rotateMode ? "Nouvelle clé API..." : "sk-..."}
-                      className="font-mono pr-10"
+                      value={azureEndpoint}
+                      onChange={(e) => setAzureEndpoint(e.target.value)}
+                      placeholder="https://xxx.openai.azure.com"
+                      disabled={isLocked}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowKey(!showKey)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
                   </div>
-                  {rotateMode && (
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        onClick={handleRotateKey}
-                        disabled={!apiKey || rotateKeyMut.isPending}
-                      >
-                        {rotateKeyMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <RotateCw className="w-3.5 h-3.5 mr-1.5" />}
-                        Confirmer rotation
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => { setRotateMode(false); setApiKey(""); }}
-                      >
-                        Annuler
-                      </Button>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Deployment</Label>
+                      <Input
+                        value={azureDeployment}
+                        onChange={(e) => setAzureDeployment(e.target.value)}
+                        placeholder="gpt-4o"
+                        disabled={isLocked}
+                      />
                     </div>
-                  )}
+                    <div className="space-y-1">
+                      <Label className="text-xs">API Version</Label>
+                      <Input
+                        value={azureApiVersion}
+                        onChange={(e) => setAzureApiVersion(e.target.value)}
+                        placeholder="2024-02-01"
+                        disabled={isLocked}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Custom HTTP */}
+              {provider === "CUSTOM_HTTP" && (
+                <div className="space-y-2">
+                  <Label className="text-xs">Custom HTTP URL</Label>
+                  <Input
+                    value={customHttpUrl}
+                    onChange={(e) => setCustomHttpUrl(e.target.value)}
+                    placeholder="https://api.example.com/v1/chat/completions"
+                    disabled={isLocked}
+                  />
                 </div>
               )}
-              <p className="text-xs text-muted-foreground">
-                La clé est chiffrée (AES-256-GCM) avant stockage. Elle ne sera jamais réaffichée.
+            </div>
+          </details>
+
+          {/* API Key */}
+          {enabled && (
+            <div className="space-y-2">
+              <Label>Clé API {rotateMode ? "(nouvelle clé)" : "(laisser vide pour conserver)"}</Label>
+              <div className="relative">
+                <Input
+                  type={showKey ? "text" : "password"}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder={rotateMode ? "sk-..." : "••••••••"}
+                  className="pr-10"
+                  disabled={isLocked}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey(!showKey)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Chiffrée AES-256-GCM avant stockage. Jamais réaffichée.
               </p>
-            </>
+            </div>
           )}
 
-          {isLocked && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Lock className="w-3.5 h-3.5" />
-              Clé gérée via variable d'environnement
+          {/* Actions */}
+          <div className="flex items-center gap-3 pt-4">
+            {!isLocked && (
+              <>
+                <Button
+                  onClick={handleSave}
+                  disabled={upsertMut.isPending || (!hasMasterKeyAvail && !!apiKey)}
+                  title={!hasMasterKeyAvail && !!apiKey ? "Master key manquante — impossible de chiffrer la clé API" : undefined}
+                >
+                  {upsertMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  Enregistrer
+                </Button>
+
+                {enabled && (
+                  <Button
+                    variant="outline"
+                    onClick={() => disableMut.mutate({ orgId })}
+                    disabled={disableMut.isPending}
+                  >
+                    Désactiver IA
+                  </Button>
+                )}
+
+                {hasSecret && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setRotateMode(!rotateMode)}
+                  >
+                    <RotateCw className="w-4 h-4 mr-2" />
+                    {rotateMode ? "Annuler rotation" : "Rotation de clé"}
+                  </Button>
+                )}
+              </>
+            )}
+
+            <Button
+              variant="outline"
+              onClick={() => testMut.mutate({ orgId })}
+              disabled={testMut.isPending}
+            >
+              {testMut.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Zap className="w-4 h-4 mr-2" />
+              )}
+              Tester la connexion
+            </Button>
+          </div>
+
+          {/* Test result */}
+          {testMut.data && (
+            <div className={`flex items-start gap-3 rounded-lg p-4 border ${
+              testMut.data.ok
+                ? "bg-green-500/10 border-green-500/30"
+                : "bg-red-500/10 border-red-500/30"
+            }`}>
+              {testMut.data.ok ? (
+                <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />
+              ) : (
+                <XCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+              )}
+              <div>
+                <p className="text-sm font-medium">
+                  {testMut.data.ok ? "Connexion réussie" : "Échec de connexion"}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {testMut.data.providerInfo?.provider} / {testMut.data.providerInfo?.model}
+                  {" · "}{testMut.data.latencyMs}ms
+                </p>
+                {testMut.data.error && (
+                  <p className="text-xs text-red-400 mt-1 font-mono">{testMut.data.error}</p>
+                )}
+              </div>
             </div>
           )}
         </div>
-      </div>
-
-      {/* ── Actions ────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3">
-        {!isLocked && (
-          <>
-            <Button
-              onClick={handleSave}
-              disabled={upsertMut.isPending || (!hasMasterKeyAvail && !!apiKey)}
-              title={!hasMasterKeyAvail && !!apiKey ? "Master key manquante — impossible de chiffrer la clé API" : undefined}
-            >
-              {upsertMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Enregistrer
-            </Button>
-
-            {enabled && (
-              <Button
-                variant="outline"
-                onClick={() => disableMut.mutate({ orgId })}
-                disabled={disableMut.isPending}
-              >
-                Désactiver IA
-              </Button>
-            )}
-          </>
-        )}
-
-        <Button
-          variant="outline"
-          onClick={() => testMut.mutate({ orgId })}
-          disabled={testMut.isPending}
-        >
-          {testMut.isPending ? (
-            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-          ) : (
-            <Zap className="w-4 h-4 mr-2" />
-          )}
-          Tester la connexion
-        </Button>
-      </div>
-
-      {/* Test result */}
-      {testMut.data && (
-        <div className={`flex items-start gap-3 rounded-lg p-4 border ${
-          testMut.data.ok
-            ? "bg-green-500/10 border-green-500/30"
-            : "bg-red-500/10 border-red-500/30"
-        }`}>
-          {testMut.data.ok ? (
-            <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />
-          ) : (
-            <XCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-          )}
-          <div>
-            <p className="text-sm font-medium">
-              {testMut.data.ok ? "Connexion réussie" : "Échec de connexion"}
-            </p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {testMut.data.providerInfo?.provider} / {testMut.data.providerInfo?.model}
-              {" · "}{testMut.data.latencyMs}ms
-            </p>
-            {testMut.data.error && (
-              <p className="text-xs text-red-400 mt-1 font-mono">{testMut.data.error}</p>
-            )}
-          </div>
-        </div>
       )}
+
+      {activeTab === "engines" && <AiEnginesTab orgId={orgId} isLocked={isLocked} />}
+      {activeTab === "routing" && <AiRoutingTab orgId={orgId} isLocked={isLocked} />}
     </div>
   );
 }
