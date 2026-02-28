@@ -541,3 +541,12 @@
 - [x] Feature Multi-Engine IA: Tests — admin-only, secret non-renvoyé, setPrimary unique, resolveEngine match/primary/disabled
 - [x] Feature Multi-Engine IA: Docs — AI_ENGINES.md (engines, providers, routing, examples)
 - [x] Feature Multi-Engine IA: TS=0, tous tests verts
+
+- [x] E2E Tests: Design test architecture (fixtures, mocks, scenarios)
+- [x] E2E Tests: Engine resolver integration tests (resolveEngine with DB engines)
+- [x] E2E Tests: Routing rule matching tests (conditions, priority, fallback)
+- [x] E2E Tests: Drive AI analysis E2E (input → resolver → LLM → segments)
+- [x] E2E Tests: Resilience tests (engine unavailable, timeout, error handling)
+- [x] E2E Tests: Multi-engine selection scenarios (FAST/DEEP modes, token estimation)
+- [x] E2E Tests: Feedback system with selected engine tracking
+- [x] E2E Tests: Coverage report and documentation (docs/DRIVE_AI_E2E_TESTING.md)
