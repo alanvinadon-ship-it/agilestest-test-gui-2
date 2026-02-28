@@ -62,7 +62,7 @@ export default function AcceptInvitePage() {
     onSuccess: (data) => {
       setAccepted(true);
       toast.success(`Bienvenue ${data.fullName} ! Votre compte est activé.`);
-      setTimeout(() => navigate('/login'), 3000);
+      setTimeout(() => navigate('/login?mode=email'), 3000);
     },
     onError: (err) => {
       toast.error(err.message || "Erreur lors de l'activation du compte");
