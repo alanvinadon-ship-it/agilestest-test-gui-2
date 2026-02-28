@@ -478,3 +478,9 @@
 - [x] Sprint Drive Mobile: Phase 5 — responsive mobile (stacked layouts, touch-friendly, breakpoints)
 - [x] Sprint Drive Mobile: Tests — 25 Vitest (CRUD, lifecycle, telemetry, events, uploads, structural)
 - [x] Sprint Drive Mobile: Tests — TS=0, 769 tests verts
+- [x] Feature GPS Map: Intégrer Google Maps dans l'onglet GPS de DriveRunDetailPage
+- [x] Feature GPS Map: Afficher le tracé GPS (Polyline) avec couleur par vitesse (vert/jaune/orange/rouge)
+- [x] Feature GPS Map: Marqueurs début (D vert) / fin (F rouge) + info window sur clic
+- [x] Feature GPS Map: Auto-fit bounds sur le tracé avec padding
+- [x] Feature GPS Map: 6 stats cards (points, distance, durée, vitesse moy/max, altitude) au-dessus de la carte
+- [x] Feature GPS Map: TS=0, 769 tests verts, table brute collapsible sous la carte

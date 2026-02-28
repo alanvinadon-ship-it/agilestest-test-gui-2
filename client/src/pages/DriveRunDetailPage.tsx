@@ -28,7 +28,10 @@ import {
   Plus,
   Trash2,
   Download,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
+import { DriveGpsMap } from '@/components/DriveGpsMap';
 import { toast } from 'sonner';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -261,70 +264,7 @@ export default function DriveRunDetailPage() {
       <div className="min-h-[300px]">
         {/* ─── GPS Tab ─────────────────────────────────────────────────── */}
         {activeTab === 'gps' && (
-          <div className="space-y-4">
-            {gpsSamples.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <MapPin className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Aucun point GPS enregistré.</p>
-                <p className="text-xs mt-1">Les points GPS sont collectés automatiquement pendant le run.</p>
-              </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-                  <div className="bg-card border border-border rounded-lg p-4 text-center">
-                    <p className="text-2xl font-bold text-primary">{gpsSamples.length}</p>
-                    <p className="text-xs text-muted-foreground">Points GPS</p>
-                  </div>
-                  <div className="bg-card border border-border rounded-lg p-4 text-center">
-                    <p className="text-2xl font-bold text-primary">
-                      {gpsSamples.length > 1
-                        ? `${(gpsSamples[gpsSamples.length - 1] as any).lat?.toFixed(4)}, ${(gpsSamples[gpsSamples.length - 1] as any).lng?.toFixed(4)}`
-                        : '—'}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Dernier point</p>
-                  </div>
-                  <div className="bg-card border border-border rounded-lg p-4 text-center">
-                    <p className="text-2xl font-bold text-primary">
-                      {gpsSamples.length > 0 ? `${((gpsSamples[gpsSamples.length - 1] as any).speedKmh ?? 0).toFixed(1)} km/h` : '—'}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Dernière vitesse</p>
-                  </div>
-                </div>
-
-                {/* GPS table */}
-                <div className="bg-card border border-border rounded-lg overflow-hidden">
-                  <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-muted/50 sticky top-0">
-                        <tr>
-                          <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">#</th>
-                          <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Latitude</th>
-                          <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Longitude</th>
-                          <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Altitude</th>
-                          <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Vitesse</th>
-                          <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Précision</th>
-                          <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Horodatage</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {gpsSamples.map((s: any, i: number) => (
-                          <tr key={s.id ?? i} className="border-t border-border hover:bg-muted/30">
-                            <td className="px-3 py-1.5 text-muted-foreground">{i + 1}</td>
-                            <td className="px-3 py-1.5 font-mono">{s.lat?.toFixed(6)}</td>
-                            <td className="px-3 py-1.5 font-mono">{s.lng?.toFixed(6)}</td>
-                            <td className="px-3 py-1.5">{s.altitudeM != null ? `${s.altitudeM.toFixed(0)}m` : '—'}</td>
-                            <td className="px-3 py-1.5">{s.speedKmh != null ? `${s.speedKmh.toFixed(1)} km/h` : '—'}</td>
-                            <td className="px-3 py-1.5">{s.accuracyM != null ? `±${s.accuracyM.toFixed(0)}m` : '—'}</td>
-                            <td className="px-3 py-1.5 text-muted-foreground">{formatDate(s.sampledAt)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
+          <GpsTabContent samples={gpsSamples} formatDate={formatDate} />
         )}
 
         {/* ─── Events Tab ──────────────────────────────────────────────── */}
@@ -505,6 +445,62 @@ export default function DriveRunDetailPage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── GPS Tab Content (map + collapsible table) ──────────────────────────────
+
+function GpsTabContent({ samples, formatDate }: { samples: any[]; formatDate: (d: any) => string }) {
+  const [showTable, setShowTable] = useState(false);
+
+  return (
+    <div className="space-y-4">
+      {/* Map + stats */}
+      <DriveGpsMap samples={samples} />
+
+      {/* Collapsible raw data table */}
+      {samples.length > 0 && (
+        <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <button
+            onClick={() => setShowTable(!showTable)}
+            className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <span>Données brutes ({samples.length} points)</span>
+            {showTable ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+          {showTable && (
+            <div className="overflow-x-auto max-h-[400px] overflow-y-auto border-t border-border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 sticky top-0">
+                  <tr>
+                    <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">#</th>
+                    <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Latitude</th>
+                    <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Longitude</th>
+                    <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Altitude</th>
+                    <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Vitesse</th>
+                    <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Précision</th>
+                    <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Horodatage</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {samples.map((s: any, i: number) => (
+                    <tr key={s.id ?? i} className="border-t border-border hover:bg-muted/30">
+                      <td className="px-3 py-1.5 text-muted-foreground">{i + 1}</td>
+                      <td className="px-3 py-1.5 font-mono">{s.lat?.toFixed(6)}</td>
+                      <td className="px-3 py-1.5 font-mono">{s.lon?.toFixed(6)}</td>
+                      <td className="px-3 py-1.5">{s.altitudeM != null ? `${s.altitudeM.toFixed(0)}m` : '—'}</td>
+                      <td className="px-3 py-1.5">{s.speedMps != null ? `${(s.speedMps * 3.6).toFixed(1)} km/h` : '—'}</td>
+                      <td className="px-3 py-1.5">{s.accuracyM != null ? `±${s.accuracyM.toFixed(0)}m` : '—'}</td>
+                      <td className="px-3 py-1.5 text-muted-foreground">{formatDate(s.ts)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
