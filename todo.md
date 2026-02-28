@@ -465,3 +465,16 @@
 - [x] Feature Branding Admin: Frontend — mise à jour dynamique du favicon dans <head> via useEffect
 - [x] Feature Branding Admin: Tests — 18 Vitest backend (get defaults, get stored, upload logo/favicon, remove, size validation, mime, admin-only, structural)
 - [x] Feature Branding Admin: Tests — TS=0, 744 tests verts
+- [x] Sprint Drive Mobile: Phase 1 — tables drive_runs, drive_location_samples, drive_run_events (Drizzle + MySQL)
+- [x] Sprint Drive Mobile: Phase 1 — DB helpers (CRUD drive_runs, bulk insert locations, events, cursor pagination)
+- [x] Sprint Drive Mobile: Phase 2 — router driveRuns (create, start, stop, get, listCursor, delete)
+- [x] Sprint Drive Mobile: Phase 2 — router driveTelemetry (pushSamples bulk GPS, getTrack)
+- [x] Sprint Drive Mobile: Phase 2 — router driveRunEvents (list, create field notes/markers)
+- [x] Sprint Drive Mobile: Phase 2 — router driveUploads (uploadFile S3, listFiles)
+- [x] Sprint Drive Mobile: Phase 3 — job computeDriveRunSummary (Haversine GPS, KPIs distance/durée/vitesse → drive_run_summaries)
+- [x] Sprint Drive Mobile: Phase 4 — page DriveRunsPage (liste, create dialog, filtres, status badges)
+- [x] Sprint Drive Mobile: Phase 4 — page DriveRunDetailPage (tabs GPS/Events/Uploads/Summary)
+- [x] Sprint Drive Mobile: Phase 4 — navigation sidebar Drive Test > Terrain
+- [x] Sprint Drive Mobile: Phase 5 — responsive mobile (stacked layouts, touch-friendly, breakpoints)
+- [x] Sprint Drive Mobile: Tests — 25 Vitest (CRUD, lifecycle, telemetry, events, uploads, structural)
+- [x] Sprint Drive Mobile: Tests — TS=0, 769 tests verts

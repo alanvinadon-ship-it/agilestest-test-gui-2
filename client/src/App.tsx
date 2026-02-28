@@ -46,6 +46,8 @@ import GlobalAnalyticsPage from "./pages/GlobalAnalyticsPage";
 import ImportExportPage from "./pages/ImportExportPage";
 import AccountSettingsPage from "./pages/AccountSettingsPage";
 import AdminBrandingPage from "./pages/AdminBrandingPage";
+import DriveRunsPage from "./pages/DriveRunsPage";
+import DriveRunDetailPage from "./pages/DriveRunDetailPage";
 
 // ─── Auth Guards ────────────────────────────────────────────────────────────
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -183,6 +185,12 @@ function AppRouter() {
               </Route>
               <Route path="/drive/incidents/:id">
                 <ProjectScoped><DriveIncidentReportPage /></ProjectScoped>
+              </Route>
+              <Route path="/drive/runs">
+                <ProjectScoped><DriveRunsPage /></ProjectScoped>
+              </Route>
+              <Route path="/drive/runs/:uid">
+                <ProjectScoped><DriveRunDetailPage /></ProjectScoped>
               </Route>
 
               {/* Admin pages */}

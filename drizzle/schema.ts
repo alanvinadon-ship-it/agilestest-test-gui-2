@@ -1085,3 +1085,58 @@ export const appSettings = mysqlTable("app_settings", {
   updatedBy: varchar("updated_by", { length: 64 }),
 });
 export type AppSetting = typeof appSettings.$inferSelect;
+
+// ─── Drive Runs (mobile field test runs) ──────────────────────────────────
+// A "run" is a single field session started from mobile: GPS collection, notes, file uploads.
+export const driveRuns = mysqlTable("drive_runs", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  orgId: varchar("org_id", { length: 36 }).notNull(),
+  projectUid: varchar("project_uid", { length: 36 }).notNull(),
+  campaignUid: varchar("campaign_uid", { length: 36 }),
+  routeUid: varchar("route_uid", { length: 36 }),
+  deviceUid: varchar("device_uid", { length: 36 }),
+  probeUid: varchar("probe_uid", { length: 36 }),
+  status: mysqlEnum("status", ["DRAFT", "RUNNING", "UPLOADING", "COMPLETED", "FAILED", "CANCELED"]).default("DRAFT").notNull(),
+  startedAt: timestamp("started_at"),
+  endedAt: timestamp("ended_at"),
+  createdBy: varchar("created_by", { length: 64 }).notNull(),
+  metaJson: json("meta_json"), // { mobileOs, appVersion, operator, networkMode, ... }
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+export type DriveRun = typeof driveRuns.$inferSelect;
+export type InsertDriveRun = typeof driveRuns.$inferInsert;
+
+// ─── Drive Location Samples (GPS track) ───────────────────────────────────
+export const driveLocationSamples = mysqlTable("drive_location_samples", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  orgId: varchar("org_id", { length: 36 }).notNull(),
+  runUid: varchar("run_uid", { length: 36 }).notNull(),
+  ts: timestamp("ts").notNull(),
+  lat: double("lat").notNull(),
+  lon: double("lon").notNull(),
+  speedMps: double("speed_mps"),
+  headingDeg: double("heading_deg"),
+  accuracyM: double("accuracy_m"),
+  altitudeM: double("altitude_m"),
+  source: mysqlEnum("source", ["GPS", "MANUAL"]).default("GPS").notNull(),
+});
+export type DriveLocationSample = typeof driveLocationSamples.$inferSelect;
+export type InsertDriveLocationSample = typeof driveLocationSamples.$inferInsert;
+
+// ─── Drive Run Events (field notes, markers, errors) ──────────────────────
+export const driveRunEvents = mysqlTable("drive_run_events", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  orgId: varchar("org_id", { length: 36 }).notNull(),
+  runUid: varchar("run_uid", { length: 36 }).notNull(),
+  ts: timestamp("ts").notNull(),
+  type: mysqlEnum("type", ["NOTE", "PHOTO", "MARKER", "ERROR", "CUSTOM"]).notNull(),
+  severity: mysqlEnum("severity", ["INFO", "WARN", "ERROR"]).default("INFO"),
+  message: text("message"),
+  dataJson: json("data_json"),
+});
+export type DriveRunEvent = typeof driveRunEvents.$inferSelect;
+export type InsertDriveRunEvent = typeof driveRunEvents.$inferInsert;

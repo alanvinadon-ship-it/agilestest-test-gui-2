@@ -115,6 +115,7 @@ const baseNavSections: NavSection[] = [
     icon: Navigation,
     items: [
       { href: "/drive/campaigns", icon: Navigation, label: "Campagnes" },
+      { href: "/drive/runs", icon: Signal, label: "Runs Terrain" },
       { href: "/drive/reporting", icon: BarChart3, label: "Reporting" },
     ],
   },

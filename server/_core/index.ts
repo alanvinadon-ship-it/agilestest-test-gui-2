@@ -21,6 +21,9 @@ import {
   corsMiddleware,
 } from "../security";
 
+// ── Drive Ingestion (registers job handler) ──────────────────────────────
+import "../driveIngestion";
+
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
     const server = net.createServer();

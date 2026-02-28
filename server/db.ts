@@ -1,6 +1,6 @@
-import { eq, and, gt, isNull } from "drizzle-orm";
+import { eq, and, gt, isNull, desc, lt, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, passwordResetTokens, appSettings } from "../drizzle/schema";
+import { InsertUser, users, passwordResetTokens, appSettings, driveRuns, driveLocationSamples, driveRunEvents, type InsertDriveRun, type InsertDriveLocationSample, type InsertDriveRunEvent } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -201,4 +201,132 @@ export async function setAppSetting(key: string, value: string | null, updatedBy
   }
 }
 
-// TODO: add feature queries here as your schema grows.
+// ─── Drive Runs ─────────────────────────────────────────────────────────
+
+export async function createDriveRun(data: InsertDriveRun) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const [result] = await db.insert(driveRuns).values(data);
+  return result.insertId;
+}
+
+export async function getDriveRunByUid(uid: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db.select().from(driveRuns).where(eq(driveRuns.uid, uid)).limit(1);
+  return row ?? null;
+}
+
+export async function updateDriveRun(uid: string, data: Partial<InsertDriveRun>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(driveRuns).set(data).where(eq(driveRuns.uid, uid));
+}
+
+export async function listDriveRunsCursor(opts: {
+  orgId: string;
+  projectUid?: string;
+  campaignUid?: string;
+  status?: string;
+  limit: number;
+  cursor?: number;
+}) {
+  const db = await getDb();
+  if (!db) return { items: [], total: 0, nextCursor: null };
+
+  const conditions: any[] = [eq(driveRuns.orgId, opts.orgId)];
+  if (opts.projectUid) conditions.push(eq(driveRuns.projectUid, opts.projectUid));
+  if (opts.campaignUid) conditions.push(eq(driveRuns.campaignUid, opts.campaignUid));
+  if (opts.status) conditions.push(eq(driveRuns.status, opts.status as any));
+  if (opts.cursor) conditions.push(lt(driveRuns.id, opts.cursor));
+
+  const items = await db
+    .select()
+    .from(driveRuns)
+    .where(and(...conditions))
+    .orderBy(desc(driveRuns.id))
+    .limit(opts.limit + 1);
+
+  let nextCursor: number | null = null;
+  if (items.length > opts.limit) {
+    const extra = items.pop()!;
+    nextCursor = extra.id;
+  }
+
+  // Total count (without cursor)
+  const countConditions: any[] = [eq(driveRuns.orgId, opts.orgId)];
+  if (opts.projectUid) countConditions.push(eq(driveRuns.projectUid, opts.projectUid));
+  if (opts.campaignUid) countConditions.push(eq(driveRuns.campaignUid, opts.campaignUid));
+  if (opts.status) countConditions.push(eq(driveRuns.status, opts.status as any));
+
+  const [{ cnt }] = await db
+    .select({ cnt: sql<number>`COUNT(*)` })
+    .from(driveRuns)
+    .where(and(...countConditions));
+
+  return { items, total: Number(cnt), nextCursor };
+}
+
+// ─── Drive Location Samples ─────────────────────────────────────────────
+
+export async function bulkInsertLocationSamples(samples: InsertDriveLocationSample[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  if (samples.length === 0) return;
+  await db.insert(driveLocationSamples).values(samples);
+}
+
+export async function getLocationSamplesByRun(runUid: string, orgId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(driveLocationSamples)
+    .where(and(eq(driveLocationSamples.runUid, runUid), eq(driveLocationSamples.orgId, orgId)))
+    .orderBy(driveLocationSamples.ts);
+}
+
+// ─── Drive Run Events ───────────────────────────────────────────────────
+
+export async function createDriveRunEvent(data: InsertDriveRunEvent) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const [result] = await db.insert(driveRunEvents).values(data);
+  return result.insertId;
+}
+
+export async function listDriveRunEventsCursor(opts: {
+  orgId: string;
+  runUid: string;
+  limit: number;
+  cursor?: number;
+}) {
+  const db = await getDb();
+  if (!db) return { items: [], total: 0, nextCursor: null };
+
+  const conditions: any[] = [
+    eq(driveRunEvents.orgId, opts.orgId),
+    eq(driveRunEvents.runUid, opts.runUid),
+  ];
+  if (opts.cursor) conditions.push(lt(driveRunEvents.id, opts.cursor));
+
+  const items = await db
+    .select()
+    .from(driveRunEvents)
+    .where(and(...conditions))
+    .orderBy(desc(driveRunEvents.id))
+    .limit(opts.limit + 1);
+
+  let nextCursor: number | null = null;
+  if (items.length > opts.limit) {
+    const extra = items.pop()!;
+    nextCursor = extra.id;
+  }
+
+  const [{ cnt }] = await db
+    .select({ cnt: sql<number>`COUNT(*)` })
+    .from(driveRunEvents)
+    .where(and(eq(driveRunEvents.orgId, opts.orgId), eq(driveRunEvents.runUid, opts.runUid)));
+
+  return { items, total: Number(cnt), nextCursor };
+}
