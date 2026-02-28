@@ -32,4 +32,9 @@ export const ENV = {
   rateLimitLoginWindowMs: parseInt(process.env.RATE_LIMIT_LOGIN_WINDOW_MS ?? "900000", 10),
   metricsBasicAuthUser: process.env.METRICS_BASIC_AUTH_USER ?? "",
   metricsBasicAuthPassword: process.env.METRICS_BASIC_AUTH_PASSWORD ?? "",
+
+  // ── AI Config ───────────────────────────────────────────────────────────
+  aiConfigLocked: process.env.AI_CONFIG_LOCKED === "true",
+  aiConfigMasterKey: process.env.AI_CONFIG_MASTER_KEY ?? "",
+  aiConfigMasterKeyFile: process.env.AI_CONFIG_MASTER_KEY_FILE ?? "",
 };

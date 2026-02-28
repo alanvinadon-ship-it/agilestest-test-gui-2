@@ -511,3 +511,13 @@
 - [x] Feature IA Drive: UI onglet IA Diagnostic — bouton analyser (FAST/DEEP), polling statut, score qualité, résumé Markdown, segments accordion, feedback étoiles
 - [x] Feature IA Drive: UI badges IA dans DriveRunsPage — score/100 coloré, spinner en cours, badge erreur
 - [x] Feature IA Drive: Tests — 32 Vitest (heuristiques 22, inputHash 5, router structure 2, combined 3), TS=0, 866 tests verts
+- [x] Feature AI Admin: DB — table ai_provider_configs (22 colonnes, UNIQUE org_id, index org+updated_at)
+- [x] Feature AI Admin: Crypto — module AES-256-GCM (encryptSecret, decryptSecret, hasMasterKey, generateMasterKey)
+- [x] Feature AI Admin: Router — tRPC aiSettings (get, upsert, rotateKey, disable, testConnection) admin-only + RBAC
+- [x] Feature AI Admin: ENV Lock — AI_CONFIG_LOCKED=true → mutations bloquées, get/test read-only
+- [x] Feature AI Admin: Résolveur — getResolvedAIConfig(orgId) DB vs ENV + cache 30s + resolveCompletionsUrl
+- [x] Feature AI Admin: Intégration — aiConfigResolver abstrait la source (DB/ENV/DISABLED)
+- [x] Feature AI Admin: UI — page /admin/ai-settings (toggle, 4 providers, champs conditionnels, advanced, API key password)
+- [x] Feature AI Admin: UI — bannière LOCKED, warning master key, source indicator, masqué si non-admin
+- [x] Feature AI Admin: Tests — 28 Vitest (crypto 11, resolver 4, router 1, RBAC 5, non-disclosure 2, lock 2, keygen 2, empty 1)
+- [x] Feature AI Admin: Docs — docs/AI_ADMIN_SETTINGS.md complet (modes, rotation, sécurité, audit, troubleshooting)

@@ -1215,3 +1215,30 @@ export const driveAiHandoffs = mysqlTable("drive_ai_handoffs", {
 });
 export type DriveAiHandoff = typeof driveAiHandoffs.$inferSelect;
 export type InsertDriveAiHandoff = typeof driveAiHandoffs.$inferInsert;
+
+
+// ─── AI Provider Configs ───────────────────────────────────────────────────
+// Org-scoped AI provider configuration with encrypted API key storage
+export const aiProviderConfigs = mysqlTable("ai_provider_configs", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull(),
+  orgId: varchar("org_id", { length: 64 }).notNull(),
+  enabled: boolean("enabled").notNull().default(false),
+  provider: mysqlEnum("provider", ["OPENAI", "AZURE_OPENAI", "ANTHROPIC", "CUSTOM_HTTP"]).notNull().default("OPENAI"),
+  model: varchar("model", { length: 128 }).notNull().default("gpt-4o"),
+  baseUrl: varchar("base_url", { length: 512 }),
+  timeoutMs: int("timeout_ms").notNull().default(30000),
+  maxRetries: int("max_retries").notNull().default(2),
+  temperature: decimal("temperature", { precision: 3, scale: 2 }),
+  azureEndpoint: varchar("azure_endpoint", { length: 512 }),
+  azureApiVersion: varchar("azure_api_version", { length: 32 }),
+  azureDeployment: varchar("azure_deployment", { length: 128 }),
+  customHttpUrl: varchar("custom_http_url", { length: 512 }),
+  secretCiphertext: text("secret_ciphertext"),
+  secretKeyId: varchar("secret_key_id", { length: 64 }),
+  createdBy: varchar("created_by", { length: 64 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+export type AiProviderConfig = typeof aiProviderConfigs.$inferSelect;
+export type InsertAiProviderConfig = typeof aiProviderConfigs.$inferInsert;

@@ -33,6 +33,7 @@ import {
   GitCompareArrows,
   TrendingUp,
   Palette,
+  Brain,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -131,6 +132,7 @@ const baseNavSections: NavSection[] = [
       { href: "/admin/audit", icon: ScrollText, label: "Journal d'audit" },
       { href: "/admin/notifications", icon: Bell, label: "Notifications" },
       { href: "/admin/branding", icon: Palette, label: "Personnalisation" },
+      { href: "/admin/ai-settings", icon: Brain, label: "Clés IA" },
     ],
   },
   {
