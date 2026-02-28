@@ -550,3 +550,12 @@
 - [x] E2E Tests: Multi-engine selection scenarios (FAST/DEEP modes, token estimation)
 - [x] E2E Tests: Feedback system with selected engine tracking
 - [x] E2E Tests: Coverage report and documentation (docs/DRIVE_AI_E2E_TESTING.md)
+
+- [x] E2E API Tests: Setup Supertest infrastructure and test utilities (server/test-utils.ts)
+- [x] E2E API Tests: Engine resolution scenarios (primary, rules, priority, conditions)
+- [x] E2E API Tests: Routing rule matching (token ranges, artifacts, long-context)
+- [x] E2E API Tests: Fallback and resilience (disabled engines, cascading failures)
+- [x] E2E API Tests: Result storage (analysis, segments, feedback tracking)
+- [x] E2E API Tests: Production scenarios (concurrent, multi-use-case, state changes)
+- [x] E2E API Tests: Load balancing and distribution
+- [x] E2E API Tests: Coverage report and validation (docs/API_E2E_TESTING_GUIDE.md)
