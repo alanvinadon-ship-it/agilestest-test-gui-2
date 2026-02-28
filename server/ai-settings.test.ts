@@ -114,6 +114,133 @@ describe("aiCrypto", () => {
   });
 });
 
+// ── 1b. readSecret Tests ───────────────────────────────────────────────
+
+import { readSecret } from "./lib/readSecret";
+import { writeFileSync, unlinkSync, mkdirSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
+
+describe("readSecret", () => {
+  const testDir = join(tmpdir(), "readSecret-test-" + Date.now());
+
+  beforeEach(() => {
+    mkdirSync(testDir, { recursive: true });
+    delete process.env.TEST_SECRET;
+    delete process.env.TEST_SECRET_FILE;
+  });
+
+  afterEach(() => {
+    delete process.env.TEST_SECRET;
+    delete process.env.TEST_SECRET_FILE;
+    try { unlinkSync(join(testDir, "secret.txt")); } catch {}
+  });
+
+  it("returns undefined when neither _FILE nor ENV is set", () => {
+    expect(readSecret("TEST_SECRET")).toBeUndefined();
+  });
+
+  it("reads from direct ENV variable", () => {
+    process.env.TEST_SECRET = "my-secret-value";
+    expect(readSecret("TEST_SECRET")).toBe("my-secret-value");
+  });
+
+  it("reads from _FILE when file exists", () => {
+    const filePath = join(testDir, "secret.txt");
+    writeFileSync(filePath, "file-secret-value\n");
+    process.env.TEST_SECRET_FILE = filePath;
+    expect(readSecret("TEST_SECRET")).toBe("file-secret-value");
+  });
+
+  it("_FILE takes priority over direct ENV", () => {
+    const filePath = join(testDir, "secret.txt");
+    writeFileSync(filePath, "from-file");
+    process.env.TEST_SECRET_FILE = filePath;
+    process.env.TEST_SECRET = "from-env";
+    expect(readSecret("TEST_SECRET")).toBe("from-file");
+  });
+
+  it("falls back to ENV when _FILE points to non-existent file", () => {
+    process.env.TEST_SECRET_FILE = "/nonexistent/path/secret.txt";
+    process.env.TEST_SECRET = "fallback-value";
+    expect(readSecret("TEST_SECRET")).toBe("fallback-value");
+  });
+
+  it("returns undefined when _FILE is empty and ENV is not set", () => {
+    process.env.TEST_SECRET_FILE = "";
+    expect(readSecret("TEST_SECRET")).toBeUndefined();
+  });
+
+  it("trims whitespace from file content", () => {
+    const filePath = join(testDir, "secret.txt");
+    writeFileSync(filePath, "  trimmed-value  \n\n");
+    process.env.TEST_SECRET_FILE = filePath;
+    expect(readSecret("TEST_SECRET")).toBe("trimmed-value");
+  });
+
+  it("skips empty file and falls back to ENV", () => {
+    const filePath = join(testDir, "secret.txt");
+    writeFileSync(filePath, "  \n");
+    process.env.TEST_SECRET_FILE = filePath;
+    process.env.TEST_SECRET = "env-value";
+    expect(readSecret("TEST_SECRET")).toBe("env-value");
+  });
+});
+
+// ── 1c. aiCrypto with readSecret integration ──────────────────────────
+
+describe("aiCrypto via _FILE", () => {
+  const testDir2 = join(tmpdir(), "aiCrypto-file-test-" + Date.now());
+  const TEST_KEY_HEX = "b".repeat(64);
+
+  beforeEach(() => {
+    vi.resetModules();
+    mkdirSync(testDir2, { recursive: true });
+    delete process.env.AI_CONFIG_MASTER_KEY;
+    delete process.env.AI_CONFIG_MASTER_KEY_FILE;
+  });
+
+  afterEach(() => {
+    delete process.env.AI_CONFIG_MASTER_KEY;
+    delete process.env.AI_CONFIG_MASTER_KEY_FILE;
+    try { unlinkSync(join(testDir2, "master.txt")); } catch {}
+  });
+
+  it("loads master key from _FILE", async () => {
+    const filePath = join(testDir2, "master.txt");
+    writeFileSync(filePath, TEST_KEY_HEX);
+    process.env.AI_CONFIG_MASTER_KEY_FILE = filePath;
+
+    const { encryptSecret, decryptSecret, resetMasterKeyCache } = await import("./lib/aiCrypto");
+    resetMasterKeyCache();
+    const { ciphertext } = encryptSecret("test-via-file");
+    expect(decryptSecret(ciphertext)).toBe("test-via-file");
+  });
+
+  it("_FILE takes priority over direct ENV", async () => {
+    const filePath = join(testDir2, "master.txt");
+    writeFileSync(filePath, TEST_KEY_HEX);
+    process.env.AI_CONFIG_MASTER_KEY_FILE = filePath;
+    process.env.AI_CONFIG_MASTER_KEY = "c".repeat(64); // Different key
+
+    const { encryptSecret, decryptSecret, resetMasterKeyCache } = await import("./lib/aiCrypto");
+    resetMasterKeyCache();
+    const { ciphertext } = encryptSecret("priority-test");
+    // Should decrypt with file key, not ENV key
+    expect(decryptSecret(ciphertext)).toBe("priority-test");
+  });
+
+  it("rejects non-hex content in _FILE", async () => {
+    const filePath = join(testDir2, "master.txt");
+    writeFileSync(filePath, "not-a-hex-string-at-all-needs-64ch!");
+    process.env.AI_CONFIG_MASTER_KEY_FILE = filePath;
+
+    const { encryptSecret, resetMasterKeyCache } = await import("./lib/aiCrypto");
+    resetMasterKeyCache();
+    expect(() => encryptSecret("test")).toThrow(/hex/);
+  });
+});
+
 // ── 2. AI Config Resolver Tests ───────────────────────────────────────────
 
 describe("aiConfigResolver", () => {
@@ -215,6 +342,7 @@ describe("aiSettings router structure", () => {
   it("has all required endpoints", async () => {
     const { appRouter } = await import("./routers");
     const shape = appRouter._def.procedures;
+    expect(shape).toHaveProperty("aiSettings.configStatus");
     expect(shape).toHaveProperty("aiSettings.get");
     expect(shape).toHaveProperty("aiSettings.upsert");
     expect(shape).toHaveProperty("aiSettings.rotateKey");

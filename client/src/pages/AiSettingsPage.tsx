@@ -209,13 +209,24 @@ export default function AiSettingsPage() {
 
       {/* No Master Key Warning */}
       {!isLocked && !hasMasterKeyAvail && (
-        <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/30 rounded-lg p-4">
-          <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
+        <div className="flex items-start gap-3 bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+          <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-semibold text-red-400">Clé de chiffrement manquante</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              AI_CONFIG_MASTER_KEY non configurée. Vous ne pourrez pas enregistrer de clé API. Contactez votre administrateur système.
+            <p className="text-xs text-muted-foreground mt-1">
+              <code className="bg-muted px-1 py-0.5 rounded text-[11px]">AI_CONFIG_MASTER_KEY</code> non configurée.
+              L'enregistrement de clés API est désactivé.
             </p>
+            <details className="mt-2">
+              <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+                Comment résoudre (Docker)
+              </summary>
+              <ol className="text-xs text-muted-foreground mt-1.5 space-y-1 list-decimal list-inside">
+                <li>Générer la clé : <code className="bg-muted px-1 py-0.5 rounded text-[11px]">openssl rand -hex 32</code></li>
+                <li>Créer <code className="bg-muted px-1 py-0.5 rounded text-[11px]">deploy/docker/secrets/ai_config_master_key.txt</code></li>
+                <li>Redémarrer : <code className="bg-muted px-1 py-0.5 rounded text-[11px]">docker compose -f docker-compose.prod.yml up -d --force-recreate</code></li>
+              </ol>
+            </details>
           </div>
         </div>
       )}
@@ -512,7 +523,8 @@ export default function AiSettingsPage() {
           <>
             <Button
               onClick={handleSave}
-              disabled={upsertMut.isPending}
+              disabled={upsertMut.isPending || (!hasMasterKeyAvail && !!apiKey)}
+              title={!hasMasterKeyAvail && !!apiKey ? "Master key manquante — impossible de chiffrer la clé API" : undefined}
             >
               {upsertMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               Enregistrer

@@ -10,6 +10,8 @@ AgilesTest permet de configurer le fournisseur IA (OpenAI, Azure OpenAI, Anthrop
 
 La configuration IA est stockée en base de données, chiffrée, et gérée via la page **Administration > Clés IA**. Chaque organisation peut définir son propre fournisseur et sa propre clé API.
 
+**Prérequis** : la clé maître `AI_CONFIG_MASTER_KEY` doit être provisionnée (voir section ci-dessous).
+
 ### Mode ENV (verrouillé)
 
 Si `AI_CONFIG_LOCKED=true`, la configuration provient exclusivement des variables d'environnement. L'interface est en lecture seule (affiche le statut, permet de tester la connexion, mais interdit toute modification).
@@ -27,23 +29,106 @@ Si `AI_CONFIG_LOCKED=true`, la configuration provient exclusivement des variable
 | Variable | Obligatoire | Description |
 |---|---|---|
 | `AI_CONFIG_MASTER_KEY` | Oui (si mode DB) | Clé de chiffrement AES-256 en hexadécimal (64 caractères) |
-| `AI_CONFIG_MASTER_KEY_FILE` | Alternative | Chemin vers un fichier contenant la clé hex |
+| `AI_CONFIG_MASTER_KEY_FILE` | Alternative | Chemin vers un fichier contenant la clé hex (Docker secrets) |
 | `AI_CONFIG_LOCKED` | Non | `true` pour verrouiller en mode ENV-only |
 | `BUILT_IN_FORGE_API_KEY` | Non | Clé API fallback (mode ENV) |
 | `BUILT_IN_FORGE_API_URL` | Non | URL API fallback (mode ENV) |
 
-## Génération de la clé maître
+## Provisionnement de la clé maître (Docker)
+
+### Étape 1 — Générer la clé
 
 ```bash
 # Générer une clé AES-256 (32 bytes = 64 hex chars)
-openssl rand -hex 32
+openssl rand -hex 32 > deploy/docker/secrets/ai_config_master_key.txt
 ```
 
-Stocker le résultat dans `AI_CONFIG_MASTER_KEY` ou dans un fichier référencé par `AI_CONFIG_MASTER_KEY_FILE`.
+Le fichier doit contenir exactement 64 caractères hexadécimaux, sans retour à la ligne superflu.
+
+### Étape 2 — Vérifier le .gitignore
+
+Le fichier `deploy/docker/secrets/*.txt` est automatiquement ignoré par git. Seul le fichier `.example` est versionné :
+
+```
+deploy/docker/secrets/*.txt        # ignoré
+deploy/docker/secrets/*.txt.example # versionné (placeholder)
+```
+
+### Étape 3 — Docker Compose
+
+Le `docker-compose.prod.yml` est déjà configuré pour injecter le secret :
+
+```yaml
+secrets:
+  ai_config_master_key:
+    file: ./deploy/docker/secrets/ai_config_master_key.txt
+
+services:
+  backend:
+    environment:
+      AI_CONFIG_MASTER_KEY_FILE: /run/secrets/ai_config_master_key
+    secrets:
+      - ai_config_master_key
+```
+
+### Étape 4 — Redémarrer la stack
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --force-recreate
+```
+
+### Étape 5 — Vérifier
+
+Ouvrir **Administration > Clés IA** :
+- La bannière rouge "Clé de chiffrement manquante" doit avoir disparu.
+- Le champ "Source active" doit indiquer `ENV` ou `DB`.
+- L'enregistrement d'une clé API doit fonctionner.
+
+### Provisionnement sans Docker (développement / VM)
+
+Pour les environnements sans Docker, définir directement la variable d'environnement :
+
+```bash
+export AI_CONFIG_MASTER_KEY=$(openssl rand -hex 32)
+```
+
+Ou via un fichier `.env.prod` :
+
+```
+AI_CONFIG_MASTER_KEY=<64_hex_chars>
+```
+
+## Lecture du secret (readSecret)
+
+Le backend utilise un utilitaire `readSecret(key)` qui résout les secrets selon cette priorité :
+
+1. `<KEY>_FILE` → lit le contenu du fichier (Docker secrets pattern)
+2. `<KEY>` → lit la variable d'environnement directe
+3. Retourne `undefined` si aucun n'est défini
+
+Ce mécanisme permet de supporter à la fois Docker secrets et les variables d'environnement classiques sans modification de code.
+
+## Endpoint configStatus
+
+L'endpoint `aiSettings.configStatus` fournit un diagnostic rapide sans exposer de données sensibles :
+
+```typescript
+// Réponse
+{
+  missingMasterKey: boolean,  // true si master key absente (mode DB)
+  locked: boolean,            // true si AI_CONFIG_LOCKED=true
+  source: "DB" | "ENV" | "DISABLED",
+  hasSecret: boolean,         // true si une clé API est configurée
+}
+```
+
+L'UI utilise ce endpoint pour afficher/masquer les bannières d'avertissement.
 
 ## Rotation de la clé maître
 
-La rotation de la clé maître (master key) nécessite une procédure manuelle :
+**Avertissement** : ne jamais changer la clé maître en production sans re-chiffrer les clés existantes. Toutes les clés API chiffrées avec l'ancienne clé deviendront illisibles.
+
+Procédure de rotation :
 
 1. Générer une nouvelle clé : `openssl rand -hex 32`
 2. Déchiffrer toutes les clés API existantes avec l'ancienne clé maître
@@ -51,7 +136,7 @@ La rotation de la clé maître (master key) nécessite une procédure manuelle :
 4. Re-chiffrer toutes les clés API avec la nouvelle clé maître
 5. Redémarrer l'application
 
-**Script de migration (à exécuter en maintenance) :**
+**Script de vérification :**
 
 ```sql
 -- Lister les configs avec clé chiffrée
@@ -107,7 +192,7 @@ await trpc.aiSettings.rotateKey.mutate({
 
 - Les clés API sont chiffrées avec AES-256-GCM avant stockage en DB
 - Le chiffrement utilise un IV aléatoire de 96 bits + tag d'authentification de 128 bits
-- La clé maître n'est jamais stockée en DB, uniquement en variable d'environnement
+- La clé maître n'est jamais stockée en DB, uniquement en variable d'environnement ou Docker secret
 - L'endpoint `get()` ne renvoie jamais la clé — uniquement `hasSecret: boolean`
 - Les clés ne sont jamais loguées (ni côté serveur, ni côté client)
 - Accès restreint aux rôles `admin` et propriétaire de l'application
@@ -132,9 +217,17 @@ La configuration résolue est mise en cache pendant 30 secondes pour éviter des
 
 ## Troubleshooting
 
+### "Clé de chiffrement manquante" (bannière rouge)
+
+→ La master key n'est pas provisionnée. Suivre la section "Provisionnement de la clé maître (Docker)" ci-dessus.
+
 ### "AI encryption master key not configured"
 
-→ Définir `AI_CONFIG_MASTER_KEY` (64 caractères hex) dans les variables d'environnement.
+→ Même cause. Vérifier que `AI_CONFIG_MASTER_KEY_FILE` pointe vers un fichier existant contenant 64 caractères hex, ou que `AI_CONFIG_MASTER_KEY` est définie.
+
+### "MASTER_KEY_MISSING" lors de l'upsert
+
+→ L'endpoint `upsert` refuse de stocker une clé API sans master key. Provisionner la master key et redémarrer.
 
 ### "AI configuration is locked"
 
@@ -158,3 +251,13 @@ Si la clé maître a changé sans re-chiffrement :
 2. Exporter les clés API via l'ancienne clé
 3. Mettre à jour la clé maître
 4. Re-chiffrer avec `rotateKey`
+
+### Vérifier le démarrage (check)
+
+Au démarrage, le backend log un avertissement si la master key est absente :
+
+```
+[readSecret] File not found for AI_CONFIG_MASTER_KEY_FILE: /run/secrets/ai_config_master_key
+```
+
+Ce message est normal si vous utilisez le mode ENV-only (`AI_CONFIG_LOCKED=true`) ou si vous n'avez pas encore provisionné la clé.

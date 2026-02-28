@@ -4,24 +4,29 @@
 // ============================================================================
 
 import { randomBytes, createCipheriv, createDecipheriv } from "crypto";
-import { readFileSync } from "fs";
+import { readSecret } from "./readSecret";
 
 const ALGO = "aes-256-gcm";
 const IV_LEN = 12; // 96 bits recommended for GCM
 const TAG_LEN = 16; // 128-bit auth tag
 const KEY_LEN = 32; // 256 bits
 
-// ── Master Key Resolution ─────────────────────────────────────────────────
+// ── Master Key Resolution ─────────────────────────────────────────────────────────
 
 let _masterKey: Buffer | null = null;
 
 function resolveMasterKey(): Buffer {
   if (_masterKey) return _masterKey;
 
-  // Try direct ENV first
-  const envKey = process.env.AI_CONFIG_MASTER_KEY;
-  if (envKey && envKey.length > 0) {
-    const buf = Buffer.from(envKey, "hex");
+  // Use readSecret: checks AI_CONFIG_MASTER_KEY_FILE first, then AI_CONFIG_MASTER_KEY
+  const keyHex = readSecret("AI_CONFIG_MASTER_KEY");
+  if (keyHex && keyHex.length > 0) {
+    if (!/^[0-9a-fA-F]+$/.test(keyHex)) {
+      throw new Error(
+        "AI_CONFIG_MASTER_KEY must be a hex string. Got non-hex characters."
+      );
+    }
+    const buf = Buffer.from(keyHex, "hex");
     if (buf.length !== KEY_LEN) {
       throw new Error(
         `AI_CONFIG_MASTER_KEY must be ${KEY_LEN * 2} hex chars (${KEY_LEN} bytes). Got ${buf.length} bytes.`
@@ -29,27 +34,6 @@ function resolveMasterKey(): Buffer {
     }
     _masterKey = buf;
     return _masterKey;
-  }
-
-  // Try file-based key
-  const keyFile = process.env.AI_CONFIG_MASTER_KEY_FILE;
-  if (keyFile && keyFile.length > 0) {
-    try {
-      const content = readFileSync(keyFile, "utf-8").trim();
-      const buf = Buffer.from(content, "hex");
-      if (buf.length !== KEY_LEN) {
-        throw new Error(
-          `AI_CONFIG_MASTER_KEY_FILE content must be ${KEY_LEN * 2} hex chars. Got ${buf.length} bytes.`
-        );
-      }
-      _masterKey = buf;
-      return _masterKey;
-    } catch (err: any) {
-      if (err.code === "ENOENT") {
-        throw new Error(`AI_CONFIG_MASTER_KEY_FILE not found: ${keyFile}`);
-      }
-      throw err;
-    }
   }
 
   throw new Error(

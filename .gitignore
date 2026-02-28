@@ -106,5 +106,9 @@ temp/
 *.sqlite
 *.sqlite3
 
+# Docker secrets (never commit actual keys)
+deploy/docker/secrets/*.txt
+!deploy/docker/secrets/*.txt.example
+
 # Webdev artifacts (checkpoint zips, migrations, etc.)
 .webdev/

@@ -67,6 +67,46 @@ function assertMasterKey() {
 
 export const aiSettingsRouter = router({
   /**
+   * Quick status check for AI config (lightweight, no DB query).
+   * Used by UI to show/hide warnings.
+   */
+  configStatus: adminProcedure.input(orgInput).query(async ({ input }) => {
+    const db = await getDb();
+    const locked = ENV.aiConfigLocked;
+    const masterKeyAvailable = hasMasterKey();
+
+    let hasSecret = false;
+    let source: "DB" | "ENV" | "DISABLED" = "DISABLED";
+
+    if (locked) {
+      source = ENV.forgeApiKey ? "ENV" : "DISABLED";
+      hasSecret = !!ENV.forgeApiKey;
+    } else if (db) {
+      const [config] = await db.select({
+        enabled: aiProviderConfigs.enabled,
+        hasCipher: aiProviderConfigs.secretCiphertext,
+      }).from(aiProviderConfigs)
+        .where(eq(aiProviderConfigs.orgId, input.orgId))
+        .limit(1);
+
+      if (config && config.enabled) {
+        source = "DB";
+        hasSecret = !!config.hasCipher;
+      } else {
+        source = ENV.forgeApiKey ? "ENV" : "DISABLED";
+        hasSecret = !!ENV.forgeApiKey;
+      }
+    }
+
+    return {
+      missingMasterKey: !locked && !masterKeyAvailable,
+      locked,
+      source,
+      hasSecret,
+    };
+  }),
+
+  /**
    * Get current AI config for an org.
    * NEVER returns the API key.
    */

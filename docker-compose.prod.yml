@@ -115,6 +115,10 @@ services:
       # Observability
       LOG_LEVEL: ${LOG_LEVEL:-info}
       METRICS_ENABLED: "true"
+      # AI Config — master key via Docker secret
+      AI_CONFIG_MASTER_KEY_FILE: /run/secrets/ai_config_master_key
+    secrets:
+      - ai_config_master_key
     depends_on:
       mysql:
         condition: service_healthy
@@ -137,6 +141,10 @@ services:
       - backend
     networks:
       - agilestest
+
+secrets:
+  ai_config_master_key:
+    file: ./deploy/docker/secrets/ai_config_master_key.txt
 
 volumes:
   mysql_data:

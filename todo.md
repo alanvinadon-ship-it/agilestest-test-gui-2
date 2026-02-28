@@ -521,3 +521,11 @@
 - [x] Feature AI Admin: UI — bannière LOCKED, warning master key, source indicator, masqué si non-admin
 - [x] Feature AI Admin: Tests — 28 Vitest (crypto 11, resolver 4, router 1, RBAC 5, non-disclosure 2, lock 2, keygen 2, empty 1)
 - [x] Feature AI Admin: Docs — docs/AI_ADMIN_SETTINGS.md complet (modes, rotation, sécurité, audit, troubleshooting)
+- [x] Fix AI Master Key: A) Créé deploy/docker/secrets/ + .example + .gitignore
+- [x] Fix AI Master Key: B) docker-compose.prod.yml mis à jour (secrets + AI_CONFIG_MASTER_KEY_FILE)
+- [x] Fix AI Master Key: C) readSecret loader (lit _FILE puis ENV, trim, fallback) + validation
+- [x] Fix AI Master Key: C) Endpoint aiSettings.configStatus() → { missingMasterKey, locked, source, hasSecret }
+- [x] Fix AI Master Key: D) UI — bannière avec instructions Docker dépliables, bouton Save désactivé si master key absente
+- [x] Fix AI Master Key: E) Docs — AI_ADMIN_SETTINGS.md reécrit avec section Docker secrets complète
+- [x] Fix AI Master Key: F) Tests — 11 nouveaux (readSecret 8, aiCrypto via _FILE 3) + configStatus dans router
+- [x] Fix AI Master Key: TS=0, 905 tests verts
