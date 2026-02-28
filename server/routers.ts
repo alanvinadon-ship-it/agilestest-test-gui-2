@@ -115,6 +115,7 @@ import { collectorRouter } from "./routers/collector";
 import { aiGenerationRouter } from "./routers/aiGeneration";
 import { scenarioTemplatesRouter } from "./routers/scenarioTemplates";
 import { driveRunsRouter, driveTelemetryRouter, driveRunEventsRouter, driveUploadsRouter } from "./routers/driveRuns";
+import { driveAiRouter } from "./routers/driveAi";
 
 export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -549,6 +550,7 @@ export const appRouter = router({
   driveTelemetry: driveTelemetryRouter,
   driveRunEvents: driveRunEventsRouter,
   driveUploads: driveUploadsRouter,
+  driveAi: driveAiRouter,
 
   // Branding (logo + favicon)
   branding: router({

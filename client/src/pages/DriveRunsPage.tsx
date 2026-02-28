@@ -35,9 +35,11 @@ import {
   Smartphone,
   Search,
   X,
+  Brain,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'wouter';
+import { trpc as trpcClient } from '@/lib/trpc';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -259,6 +261,7 @@ export default function DriveRunsPage() {
                         {run.deviceUid.slice(0, 8)}
                       </span>
                     )}
+                    <AiBadge runUid={run.uid} orgId={projectId} />
                   </div>
                   <div className="flex flex-wrap items-center gap-2 shrink-0">
                     <span className="text-xs text-muted-foreground">
@@ -362,4 +365,46 @@ export default function DriveRunsPage() {
       </Dialog>
     </div>
   );
+}
+
+// ─── AI Badge (shows latest analysis status for a run) ─────────────────────
+
+function AiBadge({ runUid, orgId }: { runUid: string; orgId: string }) {
+  const { data: analysis } = trpcClient.driveAi.latest.useQuery(
+    { runUid, orgId },
+    { enabled: !!runUid && !!orgId, staleTime: 60_000 }
+  );
+
+  if (!analysis) return null;
+
+  if (analysis.status === 'QUEUED' || analysis.status === 'RUNNING') {
+    return (
+      <Badge className="bg-blue-500/20 text-blue-300 text-xs hidden sm:flex items-center gap-1">
+        <Loader2 className="w-3 h-3 animate-spin" />
+        IA
+      </Badge>
+    );
+  }
+
+  if (analysis.status === 'COMPLETED') {
+    const score = analysis.qualityScore ?? 0;
+    const color = score >= 80 ? 'bg-emerald-500/20 text-emerald-300' : score >= 50 ? 'bg-amber-500/20 text-amber-300' : 'bg-red-500/20 text-red-300';
+    return (
+      <Badge className={`${color} text-xs hidden sm:flex items-center gap-1`}>
+        <Brain className="w-3 h-3" />
+        {score}/100
+      </Badge>
+    );
+  }
+
+  if (analysis.status === 'FAILED') {
+    return (
+      <Badge className="bg-red-500/20 text-red-300 text-xs hidden sm:flex items-center gap-1">
+        <Brain className="w-3 h-3" />
+        Erreur
+      </Badge>
+    );
+  }
+
+  return null;
 }

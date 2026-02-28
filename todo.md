@@ -501,3 +501,13 @@
 - [x] Feature Search Runs: Backend — ajouté paramètre `search` au endpoint driveRuns.list (filtre LIKE sur name+uid)
 - [x] Feature Search Runs: Frontend — champ de recherche avec icône, bouton clear, debounce 300ms, compteur résultats
 - [x] Feature Search Runs: Tests — TS=0, 834 tests verts (3 nouveaux pour search)
+- [x] Feature IA Drive: DB — 4 tables (analyses, segments, feedback, handoffs) + indexes créés via SQL
+- [x] Feature IA Drive: Input builder — buildDriveAIInput (run, GPS, events, KPIs, artifacts, heuristiques)
+- [x] Feature IA Drive: Heuristiques — 6 détecteurs (GPS_GAP, SPEED_DROP, ERROR_CLUSTER, COVERAGE_HOLE, HIGH_LATENCY, LOW_THROUGHPUT, PACKET_LOSS)
+- [x] Feature IA Drive: Output schema Zod — DriveAIDiagnosticOutput validé (qualityScore, summaryMd, segments)
+- [x] Feature IA Drive: Job handler — driveAiAnalyze (input → LLM → output → segments → DB)
+- [x] Feature IA Drive: Provider IA — invokeLLM + structured output + redaction PII + retry
+- [x] Feature IA Drive: tRPC router driveAi — 10 endpoints (trigger, status, latest, list, segments, submitFeedback, getFeedback, createHandoff, updateHandoff, listHandoffs)
+- [x] Feature IA Drive: UI onglet IA Diagnostic — bouton analyser (FAST/DEEP), polling statut, score qualité, résumé Markdown, segments accordion, feedback étoiles
+- [x] Feature IA Drive: UI badges IA dans DriveRunsPage — score/100 coloré, spinner en cours, badge erreur
+- [x] Feature IA Drive: Tests — 32 Vitest (heuristiques 22, inputHash 5, router structure 2, combined 3), TS=0, 866 tests verts

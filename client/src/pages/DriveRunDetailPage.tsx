@@ -33,12 +33,13 @@ import {
 } from 'lucide-react';
 import { DriveGpsMap } from '@/components/DriveGpsMap';
 import { toast } from 'sonner';
-import { RefreshCw, FileCheck } from 'lucide-react';
+import { RefreshCw, FileCheck, Brain } from 'lucide-react';
+import { DriveAiTab } from '@/components/DriveAiTab';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type RunStatus = 'DRAFT' | 'RUNNING' | 'UPLOADING' | 'COMPLETED' | 'FAILED' | 'CANCELED';
-type Tab = 'gps' | 'events' | 'uploads' | 'summary';
+type Tab = 'gps' | 'events' | 'uploads' | 'summary' | 'ai';
 
 const STATUS_BADGE: Record<RunStatus, { color: string; icon: typeof Clock; label: string }> = {
   DRAFT: { color: 'bg-gray-500/20 text-gray-300', icon: Clock, label: 'Brouillon' },
@@ -190,6 +191,7 @@ export default function DriveRunDetailPage() {
     { key: 'events', label: 'Événements', icon: Activity, count: events.length },
     { key: 'uploads', label: 'Fichiers', icon: Upload, count: uploads.length },
     { key: 'summary', label: 'Résumé', icon: FileText },
+    { key: 'ai', label: 'IA Diagnostic', icon: Brain },
   ];
 
   return (
@@ -451,6 +453,11 @@ export default function DriveRunDetailPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* ─── AI Diagnostic Tab ─────────────────────────────────────────── */}
+        {activeTab === 'ai' && (
+          <DriveAiTab runUid={runUid} orgId={run.orgId ?? ''} />
         )}
       </div>
     </div>

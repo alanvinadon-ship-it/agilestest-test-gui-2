@@ -1141,3 +1141,77 @@ export const driveRunEvents = mysqlTable("drive_run_events", {
 });
 export type DriveRunEvent = typeof driveRunEvents.$inferSelect;
 export type InsertDriveRunEvent = typeof driveRunEvents.$inferInsert;
+
+// ─── Drive AI Analyses ───────────────────────────────────────────────────
+export const driveAiAnalyses = mysqlTable("drive_ai_analyses", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  orgId: varchar("org_id", { length: 36 }).notNull(),
+  runUid: varchar("run_uid", { length: 36 }).notNull(),
+  status: mysqlEnum("status", ["QUEUED", "RUNNING", "COMPLETED", "FAILED"]).default("QUEUED").notNull(),
+  mode: mysqlEnum("mode", ["FAST", "DEEP"]).default("FAST").notNull(),
+  model: varchar("model", { length: 128 }),
+  inputHash: varchar("input_hash", { length: 64 }),
+  summaryMd: text("summary_md"),
+  outputJson: json("output_json"),
+  qualityScore: int("quality_score"),
+  jobId: int("job_id"),
+  error: text("error"),
+  createdBy: varchar("created_by", { length: 64 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+export type DriveAiAnalysis = typeof driveAiAnalyses.$inferSelect;
+export type InsertDriveAiAnalysis = typeof driveAiAnalyses.$inferInsert;
+
+// ─── Drive AI Segments ───────────────────────────────────────────────────
+export const driveAiSegments = mysqlTable("drive_ai_segments", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  orgId: varchar("org_id", { length: 36 }).notNull(),
+  analysisUid: varchar("analysis_uid", { length: 36 }).notNull(),
+  segmentType: mysqlEnum("segment_type", [
+    "DROP_CALL", "LOW_THROUGHPUT", "HO_FAIL", "HIGH_LATENCY",
+    "COVERAGE_HOLE", "INTERFERENCE", "BACKHAUL", "DNS", "GPS_GAP", "OTHER"
+  ]).notNull(),
+  startTs: timestamp("start_ts"),
+  endTs: timestamp("end_ts"),
+  geoBboxJson: json("geo_bbox_json"),
+  evidenceJson: json("evidence_json"),
+  diagnosisMd: text("diagnosis_md"),
+  actionsJson: json("actions_json"),
+  confidence: double("confidence"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type DriveAiSegment = typeof driveAiSegments.$inferSelect;
+export type InsertDriveAiSegment = typeof driveAiSegments.$inferInsert;
+
+// ─── Drive AI Feedback ───────────────────────────────────────────────────
+export const driveAiFeedback = mysqlTable("drive_ai_feedback", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  orgId: varchar("org_id", { length: 36 }).notNull(),
+  analysisUid: varchar("analysis_uid", { length: 36 }).notNull(),
+  score: int("score").notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by", { length: 64 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type DriveAiFeedbackRow = typeof driveAiFeedback.$inferSelect;
+export type InsertDriveAiFeedback = typeof driveAiFeedback.$inferInsert;
+
+// ─── Drive AI Handoffs ───────────────────────────────────────────────────
+export const driveAiHandoffs = mysqlTable("drive_ai_handoffs", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  orgId: varchar("org_id", { length: 36 }).notNull(),
+  analysisUid: varchar("analysis_uid", { length: 36 }).notNull(),
+  status: mysqlEnum("status", ["OPEN", "ASSIGNED", "RESOLVED"]).default("OPEN").notNull(),
+  assignedToUserUid: varchar("assigned_to_user_uid", { length: 64 }),
+  notes: text("notes"),
+  createdBy: varchar("created_by", { length: 64 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+export type DriveAiHandoff = typeof driveAiHandoffs.$inferSelect;
+export type InsertDriveAiHandoff = typeof driveAiHandoffs.$inferInsert;

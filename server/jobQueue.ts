@@ -20,7 +20,8 @@ export type JobName =
   | "aiAnalyzeRun"
   | "retentionPurge"
   | "generateExecutionPdf"
-  | "parseGpsFile";
+  | "parseGpsFile"
+  | "driveAiAnalyze";
 
 export interface JobPayload {
   parseJmeterJtl: { runId: number; artifactId: number };
@@ -28,6 +29,7 @@ export interface JobPayload {
   retentionPurge: { dryRun?: boolean };
   generateExecutionPdf: { executionId: number; reportId: number; projectId: number };
   parseGpsFile: { artifactUid: string; runUid: string; orgId: string; filename: string };
+  driveAiAnalyze: { analysisUid: string; runUid: string; orgId: string; mode: string };
 }
 
 type JobHandler<T extends JobName> = (
@@ -658,6 +660,11 @@ export async function getJobsByRun(runId: number) {
     )
     .orderBy(jobs.createdAt);
 }
+
+// ── DriveAI handler (registered via side-effect import) ──────────────────
+import("./driveAi/aiProvider").catch((err) =>
+  console.warn("[JobQueue] Failed to load driveAi/aiProvider:", err)
+);
 
 export async function getJobsByArtifactUid(artifactUid: string) {
   const db = await getDb();
