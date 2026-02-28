@@ -158,4 +158,14 @@ export async function updateUserPassword(userId: number, passwordHash: string) {
     .where(eq(users.id, userId));
 }
 
+export async function updateUserAvatar(userId: number, avatarUrl: string | null) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(users)
+    .set({ avatarUrl })
+    .where(eq(users.id, userId));
+}
+
 // TODO: add feature queries here as your schema grows.

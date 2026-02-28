@@ -1,14 +1,20 @@
 /**
- * AccountSettingsPage — User account settings with change password section.
+ * AccountSettingsPage — User account settings with avatar upload and change password sections.
  * Only users with a password (invite-based accounts) see the password section.
  */
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import {
   User, Mail, Shield, Lock, Eye, EyeOff, Loader2, Check, AlertCircle,
+  Camera, Trash2, Upload,
 } from "lucide-react";
 import { useAuth } from "@/auth/AuthContext";
 import { trpc } from "@/lib/trpc";
+
+// ─── Constants ─────────────────────────────────────────────────────────────
+const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
+const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
+type AcceptedMimeType = (typeof ACCEPTED_TYPES)[number];
 
 // ─── Password strength indicator ────────────────────────────────────────────
 function getPasswordStrength(pw: string): { score: number; label: string; color: string } {
@@ -81,6 +87,207 @@ function PasswordField({
   );
 }
 
+// ─── Avatar Upload Component ────────────────────────────────────────────────
+function AvatarUploadSection({ currentAvatarUrl, userName }: { currentAvatarUrl: string | null | undefined; userName: string }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const utils = trpc.useUtils();
+
+  const uploadMutation = trpc.auth.uploadAvatar.useMutation({
+    onSuccess: (data) => {
+      toast.success("Photo de profil mise à jour !");
+      setPreview(null);
+      utils.auth.me.invalidate();
+    },
+    onError: (err) => {
+      toast.error(err.message || "Erreur lors du téléchargement de l'avatar");
+      setPreview(null);
+    },
+  });
+
+  const removeMutation = trpc.auth.removeAvatar.useMutation({
+    onSuccess: () => {
+      toast.success("Photo de profil supprimée.");
+      utils.auth.me.invalidate();
+    },
+    onError: (err) => {
+      toast.error(err.message || "Erreur lors de la suppression de l'avatar");
+    },
+  });
+
+  const processFile = useCallback((file: File) => {
+    // Validate type
+    if (!ACCEPTED_TYPES.includes(file.type as AcceptedMimeType)) {
+      toast.error("Format non supporté. Utilisez JPEG, PNG, WebP ou GIF.");
+      return;
+    }
+
+    // Validate size
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error("L'image ne doit pas dépasser 2 Mo.");
+      return;
+    }
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      setPreview(dataUrl);
+
+      // Extract base64 data (remove the data:image/...;base64, prefix)
+      const base64 = dataUrl.split(",")[1];
+      if (!base64) {
+        toast.error("Impossible de lire le fichier image.");
+        setPreview(null);
+        return;
+      }
+
+      uploadMutation.mutate({
+        imageBase64: base64,
+        mimeType: file.type as AcceptedMimeType,
+      });
+    };
+    reader.onerror = () => {
+      toast.error("Erreur de lecture du fichier.");
+    };
+    reader.readAsDataURL(file);
+  }, [uploadMutation]);
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) processFile(file);
+    // Reset input so the same file can be selected again
+    e.target.value = "";
+  }, [processFile]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) processFile(file);
+  }, [processFile]);
+
+  const handleRemove = useCallback(() => {
+    removeMutation.mutate();
+  }, [removeMutation]);
+
+  const isUploading = uploadMutation.isPending;
+  const isRemoving = removeMutation.isPending;
+  const displayUrl = preview || currentAvatarUrl;
+  const initials = userName
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+
+  return (
+    <div className="flex items-start gap-6">
+      {/* Avatar display */}
+      <div className="relative group shrink-0">
+        <div
+          className={`w-24 h-24 rounded-full overflow-hidden border-2 transition-colors ${
+            isDragging ? "border-primary border-dashed" : "border-border"
+          } ${isUploading ? "opacity-60" : ""}`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          {displayUrl ? (
+            <img
+              src={displayUrl}
+              alt={userName}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full bg-primary/20 flex items-center justify-center">
+              <span className="text-2xl font-bold text-primary">{initials}</span>
+            </div>
+          )}
+
+          {/* Upload overlay */}
+          {isUploading && (
+            <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+              <Loader2 className="w-6 h-6 text-white animate-spin" />
+            </div>
+          )}
+        </div>
+
+        {/* Camera button overlay */}
+        {!isUploading && (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-md hover:bg-primary/90 transition-colors"
+            title="Changer la photo"
+          >
+            <Camera className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
+      {/* Upload instructions + actions */}
+      <div className="flex-1 pt-1">
+        <p className="text-sm font-medium text-foreground mb-1">{userName}</p>
+        <p className="text-xs text-muted-foreground mb-3">
+          JPEG, PNG, WebP ou GIF. Max 2 Mo.
+        </p>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            {currentAvatarUrl ? "Changer" : "Télécharger"}
+          </button>
+
+          {currentAvatarUrl && (
+            <button
+              type="button"
+              onClick={handleRemove}
+              disabled={isRemoving || isUploading}
+              className="inline-flex items-center gap-1.5 rounded-md bg-destructive/10 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/20 transition-colors disabled:opacity-50"
+            >
+              {isRemoving ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="w-3.5 h-3.5" />
+              )}
+              Supprimer
+            </button>
+          )}
+        </div>
+
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={ACCEPTED_TYPES.join(",")}
+          onChange={handleFileChange}
+          className="hidden"
+        />
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ──────────────────────────────────────────────────────────────
 export default function AccountSettingsPage() {
   const { user } = useAuth();
@@ -93,6 +300,10 @@ export default function AccountSettingsPage() {
   const hasPassword = useMemo(() => {
     const dbUser = meQuery.data;
     return Boolean(dbUser?.passwordHash);
+  }, [meQuery.data]);
+
+  const avatarUrl = useMemo(() => {
+    return meQuery.data?.avatarUrl ?? null;
   }, [meQuery.data]);
 
   // Change password form state
@@ -161,6 +372,18 @@ export default function AccountSettingsPage() {
         <p className="text-sm text-muted-foreground mt-1">
           Gérez les informations de votre compte.
         </p>
+      </div>
+
+      {/* Avatar section */}
+      <div className="bg-card border border-border rounded-lg p-6">
+        <h2 className="text-lg font-heading font-semibold text-foreground mb-4 flex items-center gap-2">
+          <Camera className="w-5 h-5 text-primary" />
+          Photo de profil
+        </h2>
+        <AvatarUploadSection
+          currentAvatarUrl={avatarUrl}
+          userName={user.full_name || "Utilisateur"}
+        />
       </div>
 
       {/* User info section */}

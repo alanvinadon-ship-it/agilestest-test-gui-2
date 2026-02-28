@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { trpc } from "@/lib/trpc";
 import { useAuth } from "../auth/AuthContext";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { useProject } from "../state/projectStore";
@@ -417,6 +418,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [location, navigate] = useLocation();
   const { user, logout, isAdmin } = useAuth();
 
+  // Fetch avatar URL from auth.me
+  const meQuery = trpc.auth.me.useQuery(undefined, { staleTime: 60_000 });
+  const avatarUrl = meQuery.data?.avatarUrl ?? null;
+
   // Persisted mini-sidebar state via uiStorage
   const [mini, setMini] = useState(() => uiGet("sidebarMini"));
 
@@ -531,9 +536,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Link href="/account">
-                      <div className="w-8 h-8 rounded-md bg-primary/20 flex items-center justify-center cursor-pointer hover:bg-primary/30 transition-colors">
-                        <User className="w-3.5 h-3.5 text-primary" />
-                      </div>
+                      {avatarUrl ? (
+                        <img src={avatarUrl} alt={user.full_name} className="w-8 h-8 rounded-md object-cover cursor-pointer hover:opacity-80 transition-opacity" />
+                      ) : (
+                        <div className="w-8 h-8 rounded-md bg-primary/20 flex items-center justify-center cursor-pointer hover:bg-primary/30 transition-colors">
+                          <User className="w-3.5 h-3.5 text-primary" />
+                        </div>
+                      )}
                     </Link>
                   </TooltipTrigger>
                   <TooltipContent side="right" sideOffset={8}>
@@ -566,9 +575,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               {user && (
                 <div className="px-3 py-2 flex items-center gap-2">
                   <Link href="/account">
-                    <div className="w-7 h-7 rounded-md bg-primary/20 flex items-center justify-center shrink-0 cursor-pointer hover:bg-primary/30 transition-colors">
-                      <User className="w-3.5 h-3.5 text-primary" />
-                    </div>
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt={user.full_name} className="w-7 h-7 rounded-md object-cover shrink-0 cursor-pointer hover:opacity-80 transition-opacity" />
+                    ) : (
+                      <div className="w-7 h-7 rounded-md bg-primary/20 flex items-center justify-center shrink-0 cursor-pointer hover:bg-primary/30 transition-colors">
+                        <User className="w-3.5 h-3.5 text-primary" />
+                      </div>
+                    )}
                   </Link>
                   <div className="flex-1 min-w-0">
                     <Link href="/account">

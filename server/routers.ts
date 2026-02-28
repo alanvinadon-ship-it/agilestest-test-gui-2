@@ -393,6 +393,91 @@ export const appRouter = router({
 
         return { success: true, message: "Votre mot de passe a été modifié avec succès." };
       }),
+
+    /** Upload a profile avatar (base64 image → S3 → update DB) */
+    uploadAvatar: protectedProcedure
+      .input(
+        z.object({
+          /** Base64-encoded image data (without the data:... prefix) */
+          imageBase64: z.string().min(1, "Image requise"),
+          /** MIME type of the image */
+          mimeType: z.enum(["image/jpeg", "image/png", "image/webp", "image/gif"], {
+            error: "Format d'image non supporté. Utilisez JPEG, PNG, WebP ou GIF.",
+          }),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const user = ctx.user;
+
+        // 1. Decode base64 to buffer
+        const buffer = Buffer.from(input.imageBase64, "base64");
+
+        // 2. Validate file size (max 2 MB)
+        const MAX_SIZE = 2 * 1024 * 1024;
+        if (buffer.length > MAX_SIZE) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "L'image ne doit pas dépasser 2 Mo.",
+          });
+        }
+
+        // 3. Validate minimum size (at least 100 bytes to avoid empty/corrupt files)
+        if (buffer.length < 100) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Le fichier image semble invalide ou vide.",
+          });
+        }
+
+        // 4. Upload to S3 with unique key
+        const { storagePut } = await import("./storage");
+        const ext = input.mimeType.split("/")[1] === "jpeg" ? "jpg" : input.mimeType.split("/")[1];
+        const randomSuffix = crypto.randomBytes(8).toString("hex");
+        const fileKey = `avatars/${user.id}-${randomSuffix}.${ext}`;
+
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+
+        // 5. Update DB
+        await db.updateUserAvatar(user.id, url);
+
+        // 6. Audit log
+        await writeAuditLog({
+          userId: user.id,
+          action: "AVATAR_UPLOADED",
+          entity: "user",
+          entityId: String(user.id),
+          details: { fileKey, mimeType: input.mimeType, sizeBytes: buffer.length },
+        });
+
+        return { success: true, avatarUrl: url };
+      }),
+
+    /** Remove the current profile avatar */
+    removeAvatar: protectedProcedure
+      .mutation(async ({ ctx }) => {
+        const user = ctx.user;
+
+        if (!user.avatarUrl) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Aucun avatar à supprimer.",
+          });
+        }
+
+        // Update DB (set to null)
+        await db.updateUserAvatar(user.id, null);
+
+        // Audit log
+        await writeAuditLog({
+          userId: user.id,
+          action: "AVATAR_REMOVED",
+          entity: "user",
+          entityId: String(user.id),
+          details: { previousUrl: user.avatarUrl },
+        });
+
+        return { success: true };
+      }),
   }),
 
   notifications: notificationsRouter,

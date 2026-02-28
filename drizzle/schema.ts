@@ -18,6 +18,7 @@ export const users = mysqlTable("users", {
   fullName: varchar("full_name", { length: 255 }),
   status: mysqlEnum("status", ["ACTIVE", "DISABLED", "INVITED"]).default("ACTIVE").notNull(),
   passwordHash: varchar("password_hash", { length: 255 }),
+  avatarUrl: varchar("avatar_url", { length: 512 }),
 });
 
 export type User = typeof users.$inferSelect;

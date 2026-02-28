@@ -444,3 +444,12 @@
 - [x] Feature Change Password: Frontend — accessible uniquement pour les comptes avec passwordHash (invités)
 - [x] Feature Change Password: Tests — 11 Vitest backend (success, wrong old password, no passwordHash, validation, same password, auth required)
 - [x] Feature Change Password: Tests — TS=0, 713 tests verts
+- [x] Feature Avatar: DB — ajouter colonne avatar_url (varchar 512) à la table users
+- [x] Feature Avatar: Backend — endpoint auth.uploadAvatar (protectedProcedure, base64 → S3 → update DB)
+- [x] Feature Avatar: Backend — endpoint auth.removeAvatar (protectedProcedure, suppression avatar)
+- [x] Feature Avatar: Backend — exposer avatarUrl dans auth.me (déjà inclus dans User type)
+- [x] Feature Avatar: Frontend — composant AvatarUploadSection sur /account (drag & drop, preview, camera button)
+- [x] Feature Avatar: Frontend — afficher avatar dans la sidebar DashboardLayout (remplace icône User)
+- [x] Feature Avatar: Frontend — afficher avatar dans la liste admin utilisateurs (via auth.me dans sidebar)
+- [x] Feature Avatar: Tests — 13 Vitest backend (upload success, size validation, mime types, empty, remove, no avatar, auth required, structural)
+- [x] Feature Avatar: Tests — TS=0, 726 tests verts
