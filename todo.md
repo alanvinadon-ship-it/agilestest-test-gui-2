@@ -577,3 +577,10 @@
 - [x] CI/CD: Implement Slack/email notifications (GitHub Actions workflow)
 - [x] CI/CD: Test workflow with sample commits (ready for testing)
 - [x] CI/CD: Documentation and deployment guide (docs/CI_CD_*.md)
+
+- [ ] Keycloak Admin Config: DB table keycloak_config (org_id, url, realm, client_id, client_secret, session_timeout, created_by, timestamps)
+- [ ] Keycloak Admin Config: API endpoints (get, update, test, testSocialProviders)
+- [ ] Keycloak Admin Config: UI page with form (URL, realm, credentials, session settings)
+- [ ] Keycloak Admin Config: Connection validation and error handling
+- [ ] Keycloak Admin Config: Social provider testing (Google, GitHub)
+- [ ] Keycloak Admin Config: Configuration history and audit log
