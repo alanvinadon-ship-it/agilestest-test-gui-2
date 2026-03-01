@@ -47,6 +47,7 @@ import ImportExportPage from "./pages/ImportExportPage";
 import AccountSettingsPage from "./pages/AccountSettingsPage";
 import AdminBrandingPage from "./pages/AdminBrandingPage";
 import AiSettingsPage from "./pages/AiSettingsPage";
+import KeycloakConfigPage from "./pages/admin/KeycloakConfigPage";
 import DriveRunsPage from "./pages/DriveRunsPage";
 import DriveRunDetailPage from "./pages/DriveRunDetailPage";
 
@@ -218,6 +219,9 @@ function AppRouter() {
               </Route>
               <Route path="/admin/ai-settings">
                 <RequireAdmin><AiSettingsPage /></RequireAdmin>
+              </Route>
+              <Route path="/admin/keycloak">
+                <RequireAdmin><KeycloakConfigPage /></RequireAdmin>
               </Route>
               <Route path="/docs/:slug" component={DocsPage} />
               <Route path="/docs">
