@@ -2,6 +2,7 @@ import { z } from "zod";
 import { adminProcedure, router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import axios from "axios";
+import { encrypt, decrypt } from "../lib/encryption";
 
 const KeycloakConfigSchema = z.object({
   url: z.string().url("Invalid Keycloak URL"),
@@ -17,8 +18,47 @@ const KeycloakConfigSchema = z.object({
 
 type KeycloakConfig = z.infer<typeof KeycloakConfigSchema>;
 
-// In-memory storage for Keycloak config
+// In-memory storage for Keycloak config (encrypted)
 let keycloakConfig: KeycloakConfig | null = null;
+
+// Get encryption master key from environment
+function getEncryptionKey(): string {
+  const key = process.env.ENCRYPTION_MASTER_KEY;
+  if (!key) {
+    throw new Error("ENCRYPTION_MASTER_KEY environment variable is not set");
+  }
+  return key;
+}
+
+// Encrypt sensitive fields before storage
+function encryptConfig(config: KeycloakConfig): KeycloakConfig {
+  const key = getEncryptionKey();
+  return {
+    ...config,
+    clientSecret: encrypt(config.clientSecret, key),
+    googleClientSecret: config.googleClientSecret
+      ? encrypt(config.googleClientSecret, key)
+      : undefined,
+    githubClientSecret: config.githubClientSecret
+      ? encrypt(config.githubClientSecret, key)
+      : undefined,
+  };
+}
+
+// Decrypt sensitive fields after retrieval
+function decryptConfig(config: KeycloakConfig): KeycloakConfig {
+  const key = getEncryptionKey();
+  return {
+    ...config,
+    clientSecret: decrypt(config.clientSecret, key),
+    googleClientSecret: config.googleClientSecret
+      ? decrypt(config.googleClientSecret, key)
+      : undefined,
+    githubClientSecret: config.githubClientSecret
+      ? decrypt(config.githubClientSecret, key)
+      : undefined,
+  };
+}
 
 async function testKeycloakConnection(config: KeycloakConfig) {
   try {
@@ -73,7 +113,9 @@ export const keycloakRouter = router({
       }
     }
 
-    return keycloakConfig || null;
+    if (!keycloakConfig) return null;
+    // Return decrypted config (secrets are shown in plaintext for editing)
+    return decryptConfig(keycloakConfig);
   }),
 
   update: adminProcedure
@@ -96,7 +138,8 @@ export const keycloakRouter = router({
         });
       }
 
-      keycloakConfig = input;
+      // Encrypt secrets before storing
+      keycloakConfig = encryptConfig(input);
 
       console.log(`[Keycloak] Configuration updated by ${ctx.user.name}`);
 
@@ -158,4 +201,14 @@ export const keycloakRouter = router({
 
       return results;
     }),
+
+  // Get encryption status
+  getEncryptionStatus: adminProcedure.query(() => {
+    try {
+      getEncryptionKey();
+      return { encrypted: true, keyConfigured: true };
+    } catch {
+      return { encrypted: false, keyConfigured: false };
+    }
+  }),
 });
