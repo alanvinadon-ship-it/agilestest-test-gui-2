@@ -133,6 +133,7 @@ const baseNavSections: NavSection[] = [
       { href: "/admin/notifications", icon: Bell, label: "Notifications" },
       { href: "/admin/branding", icon: Palette, label: "Personnalisation" },
       { href: "/admin/ai-settings", icon: Brain, label: "Clés IA" },
+      { href: "/admin/keycloak", icon: KeyRound, label: "Keycloak" },
     ],
   },
   {
