@@ -1289,3 +1289,44 @@ export const aiRoutingRules = mysqlTable("ai_routing_rules", {
 });
 export type AiRoutingRule = typeof aiRoutingRules.$inferSelect;
 export type InsertAiRoutingRule = typeof aiRoutingRules.$inferInsert;
+
+
+// ─── Keycloak Configuration ─────────────────────────────────────────────────
+// DB columns: id, uid, org_id, url, realm, client_id, client_secret_ciphertext, session_timeout_minutes, google_client_id, google_client_secret_ciphertext, github_client_id, github_client_secret_ciphertext, enabled, created_by, created_at, updated_at
+export const keycloakConfigs = mysqlTable("keycloak_configs", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  orgId: varchar("org_id", { length: 36 }).notNull(),
+  url: varchar("url", { length: 512 }).notNull(),
+  realm: varchar("realm", { length: 255 }).notNull(),
+  clientId: varchar("client_id", { length: 255 }).notNull(),
+  clientSecretCiphertext: text("client_secret_ciphertext").notNull(),
+  sessionTimeoutMinutes: int("session_timeout_minutes").notNull().default(1440),
+  googleClientId: varchar("google_client_id", { length: 512 }),
+  googleClientSecretCiphertext: text("google_client_secret_ciphertext"),
+  githubClientId: varchar("github_client_id", { length: 255 }),
+  githubClientSecretCiphertext: text("github_client_secret_ciphertext"),
+  enabled: boolean("enabled").notNull().default(true),
+  createdBy: varchar("created_by", { length: 64 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+
+export type KeycloakConfig = typeof keycloakConfigs.$inferSelect;
+export type InsertKeycloakConfig = typeof keycloakConfigs.$inferInsert;
+
+// ─── Keycloak Configuration History (Audit Trail) ──────────────────────────
+// DB columns: id, uid, config_uid, org_id, action, changes_json, changed_by, created_at
+export const keycloakConfigHistory = mysqlTable("keycloak_config_history", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  configUid: varchar("config_uid", { length: 36 }).notNull(),
+  orgId: varchar("org_id", { length: 36 }).notNull(),
+  action: mysqlEnum("action", ["CREATE", "UPDATE", "DELETE", "TEST_CONNECTION", "TEST_PROVIDERS"]).notNull(),
+  changesJson: json("changes_json"),
+  changedBy: varchar("changed_by", { length: 64 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type KeycloakConfigHistory = typeof keycloakConfigHistory.$inferSelect;
+export type InsertKeycloakConfigHistory = typeof keycloakConfigHistory.$inferInsert;
