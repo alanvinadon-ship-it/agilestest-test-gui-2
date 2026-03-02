@@ -110,6 +110,14 @@ services:
       METRICS_ENABLED: "true"
       # AI Config — master key via Docker secret
       AI_CONFIG_MASTER_KEY_FILE: /run/secrets/ai_config_master_key
+      # Keycloak
+      KEYCLOAK_URL: http://127.0.0.1:8180
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-agilestest}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-agilestest-app}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-agilestest-secret}
+      KEYCLOAK_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      KEYCLOAK_GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY}
     secrets:
       - ai_config_master_key
     depends_on:
@@ -119,6 +127,53 @@ services:
         condition: service_completed_successfully
       minio-init:
         condition: service_completed_successfully
+
+  # ── Keycloak (Identity Provider) ──────────────────────────────────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    restart: unless-stopped
+    network_mode: host
+    command: start-dev --http-port=8180
+    environment:
+      KC_DB: mysql
+      KC_DB_URL: jdbc:mysql://127.0.0.1:${MYSQL_PORT:-3307}/${KEYCLOAK_DB:-keycloak}
+      KC_DB_USERNAME: root
+      KC_DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8180 && echo done"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  # ── Keycloak realm init (one-shot) ──────────────────────────────────────────
+  keycloak-init:
+    image: curlimages/curl:latest
+    network_mode: host
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/scripts/keycloak-init.sh"]
+    volumes:
+      - ./deploy/keycloak/keycloak-init.sh:/scripts/keycloak-init.sh:ro
+    environment:
+      KEYCLOAK_URL: http://127.0.0.1:8180
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-agilestest}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-agilestest-app}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-agilestest-secret}
+      APP_URL: ${APP_URL:-http://localhost:8080}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
 
   # ── Nginx reverse proxy ──────────────────────────────────────────────────
   nginx:
@@ -138,4 +193,6 @@ volumes:
   mysql_data:
     driver: local
   minio_data:
+    driver: local
+  keycloak_data:
     driver: local
