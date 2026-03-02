@@ -1,0 +1,8 @@
+{
+  "query": "SELECT \n  (SELECT COUNT(*) FROM executions WHERE status IN ('PENDING', 'RUNNING')) AS running_executions,\n  (SELECT COUNT(*) FROM invites WHERE status = 'PENDING') AS pending_invites;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute SELECT \n  (SELECT COUNT(*) FROM executions WHERE status IN ('PENDING', 'RUNNING')) AS running_executions,\n  (SELECT COUNT(*) FROM invites WHERE status = 'PENDING') AS pending_invites;",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 1: Unknown column 'status' in 'where clause'"
+  ]
+}

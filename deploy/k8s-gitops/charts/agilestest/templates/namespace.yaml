@@ -1,0 +1,9 @@
+{{- if .Values.createNamespace | default false }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: agilestest
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end }}

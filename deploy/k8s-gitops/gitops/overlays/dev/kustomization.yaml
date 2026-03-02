@@ -1,0 +1,23 @@
+# ─── AgilesTest — Overlay DEV ────────────────────────────────────────────
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: agilestest-dev
+
+commonLabels:
+  environment: dev
+
+resources: []
+
+# Helm values override via patch
+patches: []
+
+# ConfigMap pour les feature flags
+configMapGenerator:
+  - name: agilestest-feature-flags
+    literals:
+      - ENABLE_DRIVE_TEST=true
+      - ENABLE_PROBE_CAPTURE=true
+      - ENABLE_AI_REPAIR=true
+      - ENABLE_NOTIFICATIONS=false
+      - LOG_LEVEL=debug

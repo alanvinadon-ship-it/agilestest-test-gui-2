@@ -1,0 +1,6 @@
+apiVersion: v2
+name: minio
+description: MinIO Object Storage for AgilesTest artifacts
+type: application
+version: 1.0.0
+appVersion: "RELEASE.2024-06-13"

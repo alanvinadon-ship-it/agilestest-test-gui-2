@@ -1,0 +1,70 @@
+{
+  "query": "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'executions' ORDER BY ORDINAL_POSITION;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'executions' ORDER BY ORDINAL_POSITION;",
+  "rows": [
+    {
+      "COLUMN_NAME": "id"
+    },
+    {
+      "COLUMN_NAME": "uid"
+    },
+    {
+      "COLUMN_NAME": "project_id"
+    },
+    {
+      "COLUMN_NAME": "profile_id"
+    },
+    {
+      "COLUMN_NAME": "scenario_id"
+    },
+    {
+      "COLUMN_NAME": "status"
+    },
+    {
+      "COLUMN_NAME": "runner_type"
+    },
+    {
+      "COLUMN_NAME": "script_id"
+    },
+    {
+      "COLUMN_NAME": "script_version"
+    },
+    {
+      "COLUMN_NAME": "dataset_bundle_id"
+    },
+    {
+      "COLUMN_NAME": "target_env"
+    },
+    {
+      "COLUMN_NAME": "runner_id"
+    },
+    {
+      "COLUMN_NAME": "ai_repair_from_execution_id"
+    },
+    {
+      "COLUMN_NAME": "started_at"
+    },
+    {
+      "COLUMN_NAME": "finished_at"
+    },
+    {
+      "COLUMN_NAME": "duration_ms"
+    },
+    {
+      "COLUMN_NAME": "artifacts_count"
+    },
+    {
+      "COLUMN_NAME": "incidents_count"
+    },
+    {
+      "COLUMN_NAME": "created_at"
+    },
+    {
+      "COLUMN_NAME": "updated_at"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\nid\nuid\nproject_id\nprofile_id\nscenario_id\nstatus\nrunner_type\nscript_id\nscript_version\ndataset_bundle_id\ntarget_env\nrunner_id\nai_repair_from_execution_id\nstarted_at\nfinished_at\nduration_ms\nartifacts_count\nincidents_count\ncreated_at\nupdated_at\n",
+  "stderr": "",
+  "execution_time_ms": 62
+}

@@ -1,0 +1,8 @@
+{
+  "query": "\nALTER TABLE scenario_templates\n  ADD COLUMN org_id VARCHAR(36) DEFAULT NULL AFTER uid,\n  ADD COLUMN scenario_uid VARCHAR(36) DEFAULT NULL AFTER org_id,\n  ADD COLUMN tags_json JSON DEFAULT NULL AFTER description,\n  ADD COLUMN template_json JSON DEFAULT NULL AFTER tags_json,\n  ADD COLUMN visibility ENUM('PUBLIC','UNLISTED') NOT NULL DEFAULT 'PUBLIC' AFTER template_json,\n  ADD COLUMN status ENUM('PUBLISHED','UNPUBLISHED') NOT NULL DEFAULT 'PUBLISHED' AFTER visibility,\n  ADD COLUMN created_by VARCHAR(128) DEFAULT NULL AFTER status,\n  ADD COLUMN version INT NOT NULL DEFAULT 1 AFTER created_by;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute \nALTER TABLE scenario_templates\n  ADD COLUMN org_id VARCHAR(36) DEFAULT NULL AFTER uid,\n  ADD COLUMN scenario_uid VARCHAR(36) DEFAULT NULL AFTER org_id,\n  ADD COLUMN tags_json JSON DEFAULT NULL AFTER description,\n  ADD COLUMN template_json JSON DEFAULT NULL AFTER tags_json,\n  ADD COLUMN visibility ENUM('PUBLIC','UNLISTED') NOT NULL DEFAULT 'PUBLIC' AFTER template_json,\n  ADD COLUMN status ENUM('PUBLISHED','UNPUBLISHED') NOT NULL DEFAULT 'PUBLISHED' AFTER visibility,\n  ADD COLUMN created_by VARCHAR(128) DEFAULT NULL AFTER status,\n  ADD COLUMN version INT NOT NULL DEFAULT 1 AFTER created_by;\n",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 2: Unknown column 'org_id' in 'scenario_templates'"
+  ]
+}

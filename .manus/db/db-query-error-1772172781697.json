@@ -1,0 +1,8 @@
+{
+  "query": "UPDATE test_profiles tp \nJOIN projects p ON tp.project_id = CAST(p.id AS CHAR)\nSET tp.project_id = p.uid\nWHERE tp.project_id REGEXP '^[0-9]+$';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute UPDATE test_profiles tp \nJOIN projects p ON tp.project_id = CAST(p.id AS CHAR)\nSET tp.project_id = p.uid\nWHERE tp.project_id REGEXP '^[0-9]+$';",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1267 (HY000) at line 1: Illegal mix of collations (utf8mb4_unicode_ci,IMPLICIT) and (utf8mb4_0900_ai_ci,IMPLICIT) for operation '='"
+  ]
+}

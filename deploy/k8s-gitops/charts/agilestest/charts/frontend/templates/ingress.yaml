@@ -1,0 +1,48 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "frontend.fullname" . }}
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- if .Values.global.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.global.domain }}
+      secretName: {{ .Values.global.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.global.domain }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "frontend.fullname" . }}
+                port:
+                  number: {{ .Values.service.port | default 3000 }}
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-orchestration
+                port:
+                  number: 4000
+          - path: /artifacts
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-minio
+                port:
+                  number: 9000
+{{- end }}

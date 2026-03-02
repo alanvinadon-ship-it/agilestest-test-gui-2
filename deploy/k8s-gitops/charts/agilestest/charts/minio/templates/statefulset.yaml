@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "minio.fullname" . }}
+  labels:
+    app.kubernetes.io/name: minio
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: storage
+spec:
+  serviceName: {{ include "minio.fullname" . }}
+  replicas: {{ .Values.replicaCount | default 1 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: minio
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: minio
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: storage
+    spec:
+      containers:
+        - name: minio
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command:
+            - minio
+            - server
+            - /data
+            - --console-address
+            - ":9001"
+          ports:
+            - containerPort: 9000
+              name: api
+              protocol: TCP
+            - containerPort: 9001
+              name: console
+              protocol: TCP
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-secrets
+                  key: minio-access-key
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-secrets
+                  key: minio-secret-key
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: 9000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: 9000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  {{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.persistence.storageClass }}
+        storageClassName: {{ .Values.persistence.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size | default "50Gi" }}
+  {{- else }}
+      volumes:
+        - name: data
+          emptyDir: {}
+  {{- end }}

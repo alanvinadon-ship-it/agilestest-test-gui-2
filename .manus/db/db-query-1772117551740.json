@@ -1,0 +1,139 @@
+{
+  "query": "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY table_name;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY table_name;",
+  "rows": [
+    {
+      "table_name": "__drizzle_migrations"
+    },
+    {
+      "table_name": "analyses"
+    },
+    {
+      "table_name": "artifacts"
+    },
+    {
+      "table_name": "audit_logs"
+    },
+    {
+      "table_name": "bundle_items"
+    },
+    {
+      "table_name": "capture_artifacts"
+    },
+    {
+      "table_name": "capture_jobs"
+    },
+    {
+      "table_name": "capture_policies"
+    },
+    {
+      "table_name": "capture_sessions"
+    },
+    {
+      "table_name": "capture_sources"
+    },
+    {
+      "table_name": "dataset_bundles"
+    },
+    {
+      "table_name": "dataset_instances"
+    },
+    {
+      "table_name": "dataset_secrets"
+    },
+    {
+      "table_name": "dataset_types"
+    },
+    {
+      "table_name": "datasets"
+    },
+    {
+      "table_name": "drive_campaigns"
+    },
+    {
+      "table_name": "drive_imports"
+    },
+    {
+      "table_name": "drive_jobs"
+    },
+    {
+      "table_name": "drive_probe_configs"
+    },
+    {
+      "table_name": "drive_routes"
+    },
+    {
+      "table_name": "drive_run_summaries"
+    },
+    {
+      "table_name": "executions"
+    },
+    {
+      "table_name": "generated_scripts"
+    },
+    {
+      "table_name": "incidents"
+    },
+    {
+      "table_name": "invites"
+    },
+    {
+      "table_name": "kpi_samples"
+    },
+    {
+      "table_name": "notification_delivery_logs"
+    },
+    {
+      "table_name": "notification_rules"
+    },
+    {
+      "table_name": "notification_settings"
+    },
+    {
+      "table_name": "notification_templates"
+    },
+    {
+      "table_name": "permissions"
+    },
+    {
+      "table_name": "probe_policies"
+    },
+    {
+      "table_name": "probes"
+    },
+    {
+      "table_name": "project_memberships"
+    },
+    {
+      "table_name": "projects"
+    },
+    {
+      "table_name": "role_permissions"
+    },
+    {
+      "table_name": "roles"
+    },
+    {
+      "table_name": "runner_jobs"
+    },
+    {
+      "table_name": "test_devices"
+    },
+    {
+      "table_name": "test_profiles"
+    },
+    {
+      "table_name": "test_scenarios"
+    },
+    {
+      "table_name": "user_roles"
+    },
+    {
+      "table_name": "users"
+    }
+  ],
+  "messages": [],
+  "stdout": "table_name\n__drizzle_migrations\nanalyses\nartifacts\naudit_logs\nbundle_items\ncapture_artifacts\ncapture_jobs\ncapture_policies\ncapture_sessions\ncapture_sources\ndataset_bundles\ndataset_instances\ndataset_secrets\ndataset_types\ndatasets\ndrive_campaigns\ndrive_imports\ndrive_jobs\ndrive_probe_configs\ndrive_routes\ndrive_run_summaries\nexecutions\ngenerated_scripts\nincidents\ninvites\nkpi_samples\nnotification_delivery_logs\nnotification_rules\nnotification_settings\nnotification_templates\npermissions\nprobe_policies\nprobes\nproject_memberships\nprojects\nrole_permissions\nroles\nrunner_jobs\ntest_devices\ntest_profiles\ntest_scenarios\nuser_roles\nusers\n",
+  "stderr": "",
+  "execution_time_ms": 60
+}

@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE IF NOT EXISTS alerts_state (\n  id INT AUTO_INCREMENT PRIMARY KEY,\n  uid VARCHAR(36) NOT NULL UNIQUE,\n  org_id VARCHAR(100) NOT NULL,\n  alert_type ENUM('SUCCESS_RATE_LOW', 'PROBE_RED') NOT NULL,\n  alert_key VARCHAR(255) NOT NULL,\n  state_json JSON,\n  last_notified_at TIMESTAMP NULL,\n  resolved_at TIMESTAMP NULL,\n  alert_count INT NOT NULL DEFAULT 0,\n  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  INDEX idx_alerts_state_org_type (org_id, alert_type, created_at DESC),\n  INDEX idx_alerts_state_key (alert_key)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute CREATE TABLE IF NOT EXISTS alerts_state (\n  id INT AUTO_INCREMENT PRIMARY KEY,\n  uid VARCHAR(36) NOT NULL UNIQUE,\n  org_id VARCHAR(100) NOT NULL,\n  alert_type ENUM('SUCCESS_RATE_LOW', 'PROBE_RED') NOT NULL,\n  alert_key VARCHAR(255) NOT NULL,\n  state_json JSON,\n  last_notified_at TIMESTAMP NULL,\n  resolved_at TIMESTAMP NULL,\n  alert_count INT NOT NULL DEFAULT 0,\n  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  INDEX idx_alerts_state_org_type (org_id, alert_type, created_at DESC),\n  INDEX idx_alerts_state_key (alert_key)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 668
+}

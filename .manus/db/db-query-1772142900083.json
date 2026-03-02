@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE IF NOT EXISTS `probe_alert_state` (\n  `id` int AUTO_INCREMENT PRIMARY KEY,\n  `probeId` int NOT NULL,\n  `orgId` int NOT NULL,\n  `healthState` enum('GREEN','ORANGE','RED') NOT NULL DEFAULT 'GREEN',\n  `redSinceAt` timestamp NULL,\n  `lastNotifiedAt` timestamp NULL,\n  `alertCount` int NOT NULL DEFAULT 0,\n  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  UNIQUE KEY `uq_probe_org` (`probeId`, `orgId`)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute CREATE TABLE IF NOT EXISTS `probe_alert_state` (\n  `id` int AUTO_INCREMENT PRIMARY KEY,\n  `probeId` int NOT NULL,\n  `orgId` int NOT NULL,\n  `healthState` enum('GREEN','ORANGE','RED') NOT NULL DEFAULT 'GREEN',\n  `redSinceAt` timestamp NULL,\n  `lastNotifiedAt` timestamp NULL,\n  `alertCount` int NOT NULL DEFAULT 0,\n  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  UNIQUE KEY `uq_probe_org` (`probeId`, `orgId`)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 303
+}

@@ -1,0 +1,79 @@
+{{- if .Values.smokeTest | default false }}
+{{- if .Values.smokeTest.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-smoke-test
+  labels:
+    app.kubernetes.io/name: agilestest
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: smoke-test
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "10"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agilestest
+        app.kubernetes.io/component: smoke-test
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: smoke-test
+          image: curlimages/curl:8.5.0
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              PASS=0
+              FAIL=0
+              FRONTEND="http://{{ .Release.Name }}-frontend:3000"
+              ORCH="http://{{ .Release.Name }}-orchestration:4000"
+              MINIO="http://{{ .Release.Name }}-minio:9000"
+
+              check() {
+                local name="$1"; local url="$2"; local expect="$3"
+                code=$(curl -sf -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || echo "000")
+                if echo "$code" | grep -qE "$expect"; then
+                  echo "[PASS] $name (HTTP $code)"
+                  PASS=$((PASS + 1))
+                else
+                  echo "[FAIL] $name (HTTP $code, expected $expect)"
+                  FAIL=$((FAIL + 1))
+                fi
+              }
+
+              echo "═══════════════════════════════════════════"
+              echo "  AgilesTest Smoke Test (K8s)"
+              echo "═══════════════════════════════════════════"
+              echo ""
+
+              # Infrastructure
+              check "Frontend reachable" "$FRONTEND/" "200"
+              check "Frontend HTML content" "$FRONTEND/" "200"
+              check "Orchestration health" "$ORCH/health" "200|404"
+              check "MinIO health" "$MINIO/minio/health/live" "200"
+              check "MinIO ready" "$MINIO/minio/health/ready" "200"
+
+              echo ""
+              echo "═══════════════════════════════════════════"
+              echo "  Result: $PASS PASS / $FAIL FAIL"
+              echo "═══════════════════════════════════════════"
+
+              if [ "$FAIL" -gt 0 ]; then
+                exit 1
+              fi
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+{{- end }}
+{{- end }}

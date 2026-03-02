@@ -1,0 +1,22 @@
+{
+  "query": "SELECT 'executions' as tbl, COUNT(*) as cnt FROM executions UNION ALL SELECT 'incidents', COUNT(*) FROM incidents UNION ALL SELECT 'probes', COUNT(*) FROM probes;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute SELECT 'executions' as tbl, COUNT(*) as cnt FROM executions UNION ALL SELECT 'incidents', COUNT(*) FROM incidents UNION ALL SELECT 'probes', COUNT(*) FROM probes;",
+  "rows": [
+    {
+      "tbl": "probes",
+      "cnt": "21"
+    },
+    {
+      "tbl": "executions",
+      "cnt": "61"
+    },
+    {
+      "tbl": "incidents",
+      "cnt": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "tbl\tcnt\nprobes\t21\nexecutions\t61\nincidents\t0\n",
+  "stderr": "",
+  "execution_time_ms": 58
+}

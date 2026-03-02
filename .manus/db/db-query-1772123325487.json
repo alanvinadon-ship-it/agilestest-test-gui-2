@@ -1,0 +1,54 @@
+{
+  "query": "SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'project_memberships' ORDER BY ORDINAL_POSITION;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'project_memberships' ORDER BY ORDINAL_POSITION;",
+  "rows": [
+    {
+      "COLUMN_NAME": "id",
+      "DATA_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "uid",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "project_id",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "project_name",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "user_id",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "user_email",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "user_name",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "project_role",
+      "DATA_TYPE": "enum"
+    },
+    {
+      "COLUMN_NAME": "added_by",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "created_at",
+      "DATA_TYPE": "timestamp"
+    },
+    {
+      "COLUMN_NAME": "updated_at",
+      "DATA_TYPE": "timestamp"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\tDATA_TYPE\nid\tint\nuid\tvarchar\nproject_id\tvarchar\nproject_name\tvarchar\nuser_id\tvarchar\nuser_email\tvarchar\nuser_name\tvarchar\nproject_role\tenum\nadded_by\tvarchar\ncreated_at\ttimestamp\nupdated_at\ttimestamp\n",
+  "stderr": "",
+  "execution_time_ms": 57
+}

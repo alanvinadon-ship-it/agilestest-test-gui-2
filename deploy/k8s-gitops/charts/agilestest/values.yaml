@@ -1,0 +1,98 @@
+# ─── AgilesTest Umbrella — Default Values ────────────────────────────────
+global:
+  registry: ""
+  tag: "latest"
+  imagePullPolicy: IfNotPresent
+  domain: agilestest.orange.ci
+  tls:
+    enabled: false
+    secretName: agilestest-tls
+  minio:
+    endpoint: agilestest-minio
+    port: 9000
+    bucket: agilestest-artifacts
+    accessKey: minioadmin
+    secretKey: minioadmin
+    useSSL: false
+  jwt:
+    secret: change-me-in-production
+
+# ── Frontend ─────────────────────────────────────────────────────────────
+frontend:
+  replicaCount: 2
+  image:
+    repository: agilestest-frontend
+  service:
+    port: 3000
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  env:
+    VITE_APP_TITLE: AgilesTest
+    VITE_API_BASE_URL: /api
+
+# ── Orchestration ────────────────────────────────────────────────────────
+orchestration:
+  replicaCount: 2
+  image:
+    repository: agilestest-orchestration
+  service:
+    port: 4000
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+# ── Runner Agent ─────────────────────────────────────────────────────────
+runner-agent:
+  replicaCount: 1
+  image:
+    repository: agilestest-runner
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+  env:
+    RUNNER_ID: runner-k8s-01
+    POLL_INTERVAL_MS: "5000"
+  securityContext:
+    capabilities:
+      add:
+        - NET_RAW
+        - NET_ADMIN
+
+# ── MinIO ────────────────────────────────────────────────────────────────
+minio:
+  replicaCount: 1
+  image:
+    repository: minio/minio
+    tag: RELEASE.2024-06-13T22-53-53Z
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClass: ""
+  service:
+    apiPort: 9000
+    consolePort: 9001
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi

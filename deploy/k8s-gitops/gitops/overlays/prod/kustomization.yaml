@@ -1,0 +1,22 @@
+# ─── AgilesTest — Overlay PROD ───────────────────────────────────────────
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: agilestest-prod
+
+commonLabels:
+  environment: prod
+
+resources: []
+
+configMapGenerator:
+  - name: agilestest-feature-flags
+    literals:
+      - ENABLE_DRIVE_TEST=true
+      - ENABLE_PROBE_CAPTURE=true
+      - ENABLE_AI_REPAIR=true
+      - ENABLE_NOTIFICATIONS=true
+      - ENABLE_SMS_ORANGE=true
+      - ENABLE_AUTO_INCIDENTS=true
+      - LOG_LEVEL=warn
+      - RETENTION_DAYS=365

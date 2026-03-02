@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1771427842880,
+      "tag": "0000_windy_lyja",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1772118171695,
+      "tag": "0001_futuristic_madame_hydra",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1772127050668,
+      "tag": "0002_absent_human_fly",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1772138154035,
+      "tag": "0003_clean_bloodscream",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1772143480594,
+      "tag": "0004_lazy_marrow",
+      "breakpoints": true
+    }
+  ]
+}

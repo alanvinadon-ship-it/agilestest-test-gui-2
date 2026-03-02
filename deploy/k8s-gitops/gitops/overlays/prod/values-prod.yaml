@@ -1,0 +1,65 @@
+# ─── AgilesTest — Values PROD ────────────────────────────────────────────
+global:
+  tag: "1.0.0"
+  domain: agilestest.orange.ci
+  tls:
+    enabled: true
+    secretName: agilestest-prod-tls
+  minio:
+    bucket: agilestest-artifacts-prod
+
+frontend:
+  replicaCount: 3
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: "200m"
+      nginx.ingress.kubernetes.io/rate-limit: "30"
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+orchestration:
+  replicaCount: 3
+  resources:
+    requests:
+      cpu: "1"
+      memory: 1Gi
+    limits:
+      cpu: "4"
+      memory: 4Gi
+
+runner-agent:
+  replicaCount: 3
+  resources:
+    requests:
+      cpu: "1"
+      memory: 1Gi
+    limits:
+      cpu: "4"
+      memory: 4Gi
+
+minio:
+  persistence:
+    enabled: true
+    size: 500Gi
+    storageClass: ssd-premium
+  resources:
+    requests:
+      cpu: "1"
+      memory: 1Gi
+    limits:
+      cpu: "4"
+      memory: 4Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPU: 70

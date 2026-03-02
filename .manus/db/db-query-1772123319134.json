@@ -1,0 +1,13 @@
+{
+  "query": "SHOW TABLES LIKE 'project_memberships';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute SHOW TABLES LIKE 'project_memberships';",
+  "rows": [
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR (project_memberships)": "project_memberships"
+    }
+  ],
+  "messages": [],
+  "stdout": "Tables_in_FxhMG2t4EnV6hSi7hwzAaR (project_memberships)\nproject_memberships\n",
+  "stderr": "",
+  "execution_time_ms": 102
+}

@@ -1,0 +1,139 @@
+{
+  "query": "SHOW TABLES;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute SHOW TABLES;",
+  "rows": [
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "__drizzle_migrations"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "analyses"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "artifacts"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "audit_logs"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "bundle_items"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "capture_artifacts"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "capture_jobs"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "capture_policies"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "capture_sessions"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "capture_sources"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "dataset_bundles"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "dataset_instances"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "dataset_secrets"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "dataset_types"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "datasets"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "drive_campaigns"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "drive_imports"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "drive_jobs"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "drive_probe_configs"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "drive_routes"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "drive_run_summaries"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "executions"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "generated_scripts"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "incidents"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "invites"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "kpi_samples"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "notification_delivery_logs"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "notification_rules"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "notification_settings"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "notification_templates"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "permissions"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "probe_policies"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "probes"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "project_memberships"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "projects"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "role_permissions"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "roles"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "runner_jobs"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "test_devices"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "test_profiles"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "test_scenarios"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "user_roles"
+    },
+    {
+      "Tables_in_FxhMG2t4EnV6hSi7hwzAaR": "users"
+    }
+  ],
+  "messages": [],
+  "stdout": "Tables_in_FxhMG2t4EnV6hSi7hwzAaR\n__drizzle_migrations\nanalyses\nartifacts\naudit_logs\nbundle_items\ncapture_artifacts\ncapture_jobs\ncapture_policies\ncapture_sessions\ncapture_sources\ndataset_bundles\ndataset_instances\ndataset_secrets\ndataset_types\ndatasets\ndrive_campaigns\ndrive_imports\ndrive_jobs\ndrive_probe_configs\ndrive_routes\ndrive_run_summaries\nexecutions\ngenerated_scripts\nincidents\ninvites\nkpi_samples\nnotification_delivery_logs\nnotification_rules\nnotification_settings\nnotification_templates\npermissions\nprobe_policies\nprobes\nproject_memberships\nprojects\nrole_permissions\nroles\nrunner_jobs\ntest_devices\ntest_profiles\ntest_scenarios\nuser_roles\nusers\n",
+  "stderr": "",
+  "execution_time_ms": 154
+}

@@ -1,0 +1,82 @@
+{
+  "query": "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_NAME = 'probes' AND TABLE_SCHEMA = DATABASE() ORDER BY ORDINAL_POSITION;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_NAME = 'probes' AND TABLE_SCHEMA = DATABASE() ORDER BY ORDINAL_POSITION;",
+  "rows": [
+    {
+      "COLUMN_NAME": "id"
+    },
+    {
+      "COLUMN_NAME": "uid"
+    },
+    {
+      "COLUMN_NAME": "site"
+    },
+    {
+      "COLUMN_NAME": "zone"
+    },
+    {
+      "COLUMN_NAME": "type"
+    },
+    {
+      "COLUMN_NAME": "capabilities"
+    },
+    {
+      "COLUMN_NAME": "status"
+    },
+    {
+      "COLUMN_NAME": "auth_token_hash"
+    },
+    {
+      "COLUMN_NAME": "last_seen_at"
+    },
+    {
+      "COLUMN_NAME": "metadata"
+    },
+    {
+      "COLUMN_NAME": "version"
+    },
+    {
+      "COLUMN_NAME": "uptime_seconds"
+    },
+    {
+      "COLUMN_NAME": "cpu_percent"
+    },
+    {
+      "COLUMN_NAME": "disk_free_mb"
+    },
+    {
+      "COLUMN_NAME": "interfaces"
+    },
+    {
+      "COLUMN_NAME": "active_sessions"
+    },
+    {
+      "COLUMN_NAME": "total_captures"
+    },
+    {
+      "COLUMN_NAME": "last_error"
+    },
+    {
+      "COLUMN_NAME": "health_status"
+    },
+    {
+      "COLUMN_NAME": "heartbeat_interval_sec"
+    },
+    {
+      "COLUMN_NAME": "allowlist_cidrs"
+    },
+    {
+      "COLUMN_NAME": "tls_enabled"
+    },
+    {
+      "COLUMN_NAME": "created_at"
+    },
+    {
+      "COLUMN_NAME": "updated_at"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\nid\nuid\nsite\nzone\ntype\ncapabilities\nstatus\nauth_token_hash\nlast_seen_at\nmetadata\nversion\nuptime_seconds\ncpu_percent\ndisk_free_mb\ninterfaces\nactive_sessions\ntotal_captures\nlast_error\nhealth_status\nheartbeat_interval_sec\nallowlist_cidrs\ntls_enabled\ncreated_at\nupdated_at\n",
+  "stderr": "",
+  "execution_time_ms": 58
+}

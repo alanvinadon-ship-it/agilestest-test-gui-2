@@ -1,0 +1,15 @@
+{
+  "query": "SELECT (SELECT COUNT(*) FROM executions) as exec_count, (SELECT COUNT(*) FROM incidents) as inc_count, (SELECT COUNT(*) FROM probes) as probe_count;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute SELECT (SELECT COUNT(*) FROM executions) as exec_count, (SELECT COUNT(*) FROM incidents) as inc_count, (SELECT COUNT(*) FROM probes) as probe_count;",
+  "rows": [
+    {
+      "exec_count": "61",
+      "inc_count": "0",
+      "probe_count": "21"
+    }
+  ],
+  "messages": [],
+  "stdout": "exec_count\tinc_count\tprobe_count\n61\t0\t21\n",
+  "stderr": "",
+  "execution_time_ms": 60
+}

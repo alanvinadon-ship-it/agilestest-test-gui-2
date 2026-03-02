@@ -1,0 +1,98 @@
+{
+  "query": "DESCRIBE dataset_bundles;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2YbtCA1K2KM9KYv.5dd22857b677 --database FxhMG2t4EnV6hSi7hwzAaR --execute DESCRIBE dataset_bundles;",
+  "rows": [
+    {
+      "Field": "id",
+      "Type": "int(11)",
+      "Null": "NO",
+      "Key": "PRI",
+      "Default": "NULL",
+      "Extra": "auto_increment"
+    },
+    {
+      "Field": "uid",
+      "Type": "varchar(36)",
+      "Null": "NO",
+      "Key": "UNI",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "project_id",
+      "Type": "varchar(36)",
+      "Null": "NO",
+      "Key": "MUL",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "name",
+      "Type": "varchar(255)",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "env",
+      "Type": "enum('DEV','PREPROD','PILOT_ORANGE','PROD')",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "version",
+      "Type": "int(11)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "1",
+      "Extra": ""
+    },
+    {
+      "Field": "status",
+      "Type": "enum('DRAFT','ACTIVE','DEPRECATED')",
+      "Null": "NO",
+      "Key": "",
+      "Default": "DRAFT",
+      "Extra": ""
+    },
+    {
+      "Field": "tags",
+      "Type": "json",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "created_by",
+      "Type": "varchar(64)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "created_at",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": ""
+    },
+    {
+      "Field": "updated_at",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+    }
+  ],
+  "messages": [],
+  "stdout": "Field\tType\tNull\tKey\tDefault\tExtra\nid\tint(11)\tNO\tPRI\tNULL\tauto_increment\nuid\tvarchar(36)\tNO\tUNI\tNULL\t\nproject_id\tvarchar(36)\tNO\tMUL\tNULL\t\nname\tvarchar(255)\tNO\t\tNULL\t\nenv\tenum('DEV','PREPROD','PILOT_ORANGE','PROD')\tNO\t\tNULL\t\nversion\tint(11)\tYES\t\t1\t\nstatus\tenum('DRAFT','ACTIVE','DEPRECATED')\tNO\t\tDRAFT\t\ntags\tjson\tYES\t\tNULL\t\ncreated_by\tvarchar(64)\tYES\t\tNULL\t\ncreated_at\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\t\nupdated_at\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\tDEFAULT_GENERATED on update CURRENT_TIMESTAMP\n",
+  "stderr": "",
+  "execution_time_ms": 382
+}
