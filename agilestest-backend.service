@@ -1,0 +1,24 @@
+[Unit]
+Description=AgilesTest Backend (Node.js)
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/agilestest-test-gui-2
+EnvironmentFile=/home/ubuntu/agilestest-test-gui-2/.env.prod
+Environment=DATABASE_URL=mysql://root:rootpass123@127.0.0.1:3307/agilestest
+Environment=VITE_APP_ID=agilestest-local
+Environment=NODE_ENV=production
+Environment=PORT=3000
+ExecStartPre=/bin/bash -c 'until mysqladmin ping -h 127.0.0.1 -P 3307 -u root -prootpass123 --silent 2>/dev/null; do sleep 2; done'
+ExecStart=/usr/bin/node /home/ubuntu/agilestest-test-gui-2/dist/index.js
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=agilestest-backend
+
+[Install]
+WantedBy=multi-user.target
