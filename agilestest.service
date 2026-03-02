@@ -1,0 +1,15 @@
+[Unit]
+Description=AgilesTest Production Platform
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/ubuntu/agilestest-test-gui-2
+ExecStart=/usr/bin/docker compose -f docker-compose.sandbox.yml --env-file .env.prod up -d
+ExecStop=/usr/bin/docker compose -f docker-compose.sandbox.yml --env-file .env.prod down
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

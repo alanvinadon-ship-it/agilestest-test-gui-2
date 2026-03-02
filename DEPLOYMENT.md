@@ -1,78 +1,143 @@
-# AgilesTest — Guide de Déploiement Production
+# AgilesTest — Guide de Déploiement Permanent
 
-## Architecture de Déploiement
+Ce document décrit la procédure complète pour déployer et maintenir la plateforme AgilesTest en production de manière permanente.
 
-Le déploiement utilise Docker Compose pour orchestrer les services suivants :
+---
+
+## Architecture des Services
+
+La plateforme repose sur cinq services orchestrés via Docker Compose, chacun configuré avec `restart: unless-stopped` pour garantir la haute disponibilité.
 
 | Service | Image | Port | Rôle |
 |---------|-------|------|------|
 | **MySQL 8.0** | `mysql:8.0` | 3307 | Base de données relationnelle |
-| **MinIO** | `minio/minio:latest` | 9000 (API) / 9001 (Console) | Stockage objet S3-compatible |
-| **MinIO Init** | `minio/mc:latest` | - | Initialisation du bucket (one-shot) |
-| **DB Migrate** | Custom (Drizzle Kit) | - | Migrations de base de données (one-shot) |
-| **Backend** | Custom (Node.js 22) | 3000 | Serveur Express + tRPC + Frontend statique |
-| **Nginx** | `nginx:alpine` | 8080 | Reverse proxy avec headers de sécurité |
+| **MinIO** | `minio/minio:latest` | 9000 / 9001 | Stockage objet S3-compatible |
+| **Backend** | Build local (Node.js) | 3000 | API tRPC + Frontend statique |
+| **Nginx** | `nginx:alpine` | 8080 | Reverse proxy avec HTTPS forwarding |
+| **db-migrate** | Build local | — | Migrations de schéma (one-shot) |
 
-## Fichiers de Configuration
+---
 
-### Variables d'Environnement (`.env.prod`)
+## Déploiement Rapide (One-Click)
+
+Pour déployer la plateforme sur un nouveau serveur, exécutez simplement :
 
 ```bash
-# Base de données MySQL
-MYSQL_ROOT_PASSWORD=rootpass123
-MYSQL_DATABASE=agilestest
-MYSQL_USER=agilestest
-MYSQL_PASSWORD=agilestest123
-MYSQL_PORT=3307
-
-# MinIO (S3-compatible)
-MINIO_ROOT_USER=minioadmin
-MINIO_ROOT_PASSWORD=miniopass123
-MINIO_API_PORT=9000
-MINIO_CONSOLE_PORT=9001
-S3_BUCKET=agilestest-artifacts
-S3_REGION=us-east-1
-
-# Application
-APP_PORT=8080
-NODE_ENV=production
-JWT_SECRET=<généré automatiquement>
+git clone https://github.com/alanvinadon-ship-it/agilestest-test-gui-2.git
+cd agilestest-test-gui-2
+chmod +x deploy.sh
+./deploy.sh
 ```
 
-### Secrets
+Le script `deploy.sh` effectue automatiquement les opérations suivantes : vérification des prérequis Docker, génération des mots de passe sécurisés, création des secrets, construction des images et démarrage de tous les services.
 
-Le fichier `deploy/docker/secrets/ai_config_master_key.txt` contient la clé AES-256 pour le chiffrement de la configuration AI. Générée avec `openssl rand -hex 32`.
+---
 
-## Commandes de Déploiement
+## Déploiement Manuel Étape par Étape
 
-### Démarrer tous les services
+### 1. Prérequis
+
+Le serveur cible doit disposer de Docker Engine (version 24+) et Docker Compose (version 2+). L'installation peut être réalisée via le script officiel :
+
 ```bash
-docker compose -f docker-compose.sandbox.yml --env-file .env.prod up -d --build
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER
 ```
 
-### Vérifier l'état des services
+### 2. Configuration des Variables d'Environnement
+
+Copier le fichier d'exemple et personnaliser les valeurs sensibles :
+
 ```bash
-docker compose -f docker-compose.sandbox.yml --env-file .env.prod ps -a
+cp .env.example.prod .env.prod
 ```
 
-### Consulter les logs
+Les variables critiques à définir sont les suivantes :
+
+| Variable | Description | Génération |
+|----------|-------------|------------|
+| `JWT_SECRET` | Clé de signature des tokens de session | `openssl rand -hex 32` |
+| `MYSQL_ROOT_PASSWORD` | Mot de passe root MySQL | `openssl rand -hex 16` |
+| `MYSQL_PASSWORD` | Mot de passe utilisateur MySQL | `openssl rand -hex 16` |
+| `MINIO_ROOT_PASSWORD` | Mot de passe admin MinIO | `openssl rand -hex 16` |
+| `VITE_APP_ID` | Identifiant de l'application | `agilestest-local` |
+
+### 3. Création des Secrets Docker
+
 ```bash
-# Tous les services
-docker compose -f docker-compose.sandbox.yml --env-file .env.prod logs -f
-
-# Un service spécifique
-docker compose -f docker-compose.sandbox.yml --env-file .env.prod logs backend
+mkdir -p deploy/docker/secrets
+openssl rand -base64 32 > deploy/docker/secrets/ai_config_master_key.txt
 ```
 
-### Arrêter les services
+### 4. Lancement des Services
+
+Pour un environnement avec support iptables complet (serveur standard) :
+
 ```bash
-docker compose -f docker-compose.sandbox.yml --env-file .env.prod down
+sudo docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 ```
 
-### Arrêter et supprimer les volumes
+Pour un environnement sans iptables (sandbox, conteneur dans conteneur) :
+
 ```bash
-docker compose -f docker-compose.sandbox.yml --env-file .env.prod down -v
+sudo docker compose -f docker-compose.sandbox.yml --env-file .env.prod up -d --build
 ```
+
+### 5. Création du Compte Administrateur
+
+```bash
+node create-admin.cjs
+```
+
+Ce script crée un compte avec les identifiants par défaut `admin@agilestest.local` / `Admin@2026!`. Il est fortement recommandé de modifier le mot de passe après la première connexion.
+
+---
+
+## Redémarrage Automatique (systemd)
+
+Pour que la plateforme redémarre automatiquement après un reboot du serveur, installer le service systemd :
+
+```bash
+sudo cp agilestest.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable agilestest.service
+```
+
+Le fichier `agilestest.service` est inclus dans le repository. Les conteneurs Docker sont également configurés avec `restart: unless-stopped`, ce qui assure une double couche de résilience.
+
+---
+
+## Commandes d'Administration
+
+| Action | Commande |
+|--------|----------|
+| Vérifier l'état | `sudo docker compose -f docker-compose.sandbox.yml --env-file .env.prod ps` |
+| Voir les logs | `sudo docker compose -f docker-compose.sandbox.yml --env-file .env.prod logs -f` |
+| Redémarrer tout | `sudo docker compose -f docker-compose.sandbox.yml --env-file .env.prod restart` |
+| Arrêter | `sudo docker compose -f docker-compose.sandbox.yml --env-file .env.prod down` |
+| Reconstruire | `sudo docker compose -f docker-compose.sandbox.yml --env-file .env.prod up -d --build` |
+| Health check | `curl -s http://localhost:3000/healthz` |
+
+---
+
+## Déploiement sur un Serveur Cloud
+
+Pour rendre la plateforme accessible publiquement de manière permanente, les étapes recommandées sont les suivantes :
+
+1. **Provisionner un VPS** (AWS EC2, DigitalOcean, OVH, Hetzner) avec au minimum 2 vCPU, 4 Go RAM, 40 Go SSD.
+2. **Configurer un nom de domaine** pointant vers l'adresse IP publique du serveur.
+3. **Installer un certificat TLS** via Let's Encrypt / Certbot pour le HTTPS.
+4. **Cloner le repository** et exécuter `./deploy.sh`.
+5. **Configurer le pare-feu** pour n'exposer que les ports 80 et 443.
+
+### Exemple avec Certbot (HTTPS automatique)
+
+```bash
+sudo apt install certbot python3-certbot-nginx -y
+sudo certbot --nginx -d votre-domaine.com
+```
+
+---
 
 ## Endpoints de Vérification
 
@@ -80,9 +145,9 @@ docker compose -f docker-compose.sandbox.yml --env-file .env.prod down -v
 |----------|-----|-------------|
 | **Frontend** | `http://localhost:8080/` | Interface utilisateur |
 | **Health Check** | `http://localhost:8080/healthz` | État de santé du backend |
-| **Readiness** | `http://localhost:8080/readyz` | Prêt à recevoir du trafic |
-| **Metrics** | `http://localhost:8080/metrics` | Métriques Prometheus |
 | **MinIO Console** | `http://localhost:9001/` | Console d'administration MinIO |
+
+---
 
 ## Rétention des Données
 
@@ -92,10 +157,19 @@ docker compose -f docker-compose.sandbox.yml --env-file .env.prod down -v
 | Runs | 180 jours |
 | Sessions | 30 jours |
 
-## Notes de Sécurité
+---
 
-- Les headers de sécurité (X-Frame-Options, X-Content-Type-Options, etc.) sont configurés via Nginx
-- La compression Gzip est activée pour les fichiers statiques
-- La taille maximale d'upload est de 100 MB
-- Le backend tourne sous un utilisateur non-root dans le conteneur
-- Les secrets sont gérés via Docker Secrets
+## Sécurité
+
+La plateforme intègre plusieurs couches de sécurité. Les mots de passe sont hachés avec **bcrypt** (12 rounds) et les sessions utilisent des **JWT signés HS256** avec expiration d'un an. Les cookies de session sont configurés avec les flags **HttpOnly**, **Secure** et **SameSite=None**. Les secrets Docker sont montés en lecture seule via le mécanisme natif Docker Secrets, et le conteneur backend s'exécute avec un utilisateur **non-root** (UID 1001). Nginx agit comme reverse proxy et transmet les en-têtes `X-Forwarded-Proto` pour la détection HTTPS.
+
+---
+
+## Identifiants par Défaut
+
+| Élément | Valeur |
+|---------|--------|
+| **Email admin** | `admin@agilestest.local` |
+| **Mot de passe admin** | `Admin@2026!` |
+| **MinIO Console** | `http://localhost:9001` (minioadmin / voir .env.prod) |
+| **MySQL** | Port 3307 (voir .env.prod pour les identifiants) |
