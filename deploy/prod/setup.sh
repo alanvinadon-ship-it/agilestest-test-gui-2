@@ -5,8 +5,11 @@
 # ============================================================================
 set -e
 
-PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ENV_FILE="$PROJECT_DIR/.env.prod"
+# Dossier racine du projet (deux niveaux au-dessus de deploy/prod)
+ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+PROD_DIR="$ROOT_DIR/deploy/prod"
+ENV_FILE="$PROD_DIR/.env.prod"
+SECRETS_DIR="$ROOT_DIR/deploy/docker/secrets"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -31,77 +34,59 @@ if ! command -v docker &> /dev/null; then
     log_info "Docker installé."
 fi
 
-if ! command -v node &> /dev/null; then
-    log_warn "Node.js non détecté. Installation de Node.js 22..."
-    curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-    sudo apt-get install -y nodejs
-    log_info "Node.js installé."
-fi
-
-if ! command -v nginx &> /dev/null; then
-    log_warn "Nginx non détecté. Installation..."
-    sudo apt-get update && sudo apt-get install -y nginx
-    log_info "Nginx installé."
-fi
-
 # 2. Configuration de l'environnement
-# Créer le dossier des secrets si nécessaire
-mkdir -p "$PROJECT_DIR/deploy/docker/secrets"
-if [ ! -f "$PROJECT_DIR/deploy/docker/secrets/ai_config_master_key.txt" ]; then
-    openssl rand -hex 32 > "$PROJECT_DIR/deploy/docker/secrets/ai_config_master_key.txt"
+log_info "Configuration des dossiers de secrets..."
+mkdir -p "$SECRETS_DIR"
+if [ ! -f "$SECRETS_DIR/ai_config_master_key.txt" ]; then
+    log_info "Génération de la clé maître AI..."
+    openssl rand -hex 32 > "$SECRETS_DIR/ai_config_master_key.txt"
 fi
 
 if [ ! -f "$ENV_FILE" ]; then
     log_info "Configuration du fichier .env..."
-    cp "$PROJECT_DIR/.env.example" "$ENV_FILE" && chmod 600 "$ENV_FILE"
+    if [ -f "$ROOT_DIR/.env.example" ]; then
+        cp "$ROOT_DIR/.env.example" "$ENV_FILE"
+    else
+        touch "$ENV_FILE"
+    fi
+    chmod 600 "$ENV_FILE"
     
     # Génération de secrets uniques
     JWT_SECRET=$(openssl rand -hex 32)
     ENC_KEY=$(openssl rand -hex 32)
     
-    sed -i "s/JWT_SECRET=.*/JWT_SECRET=$JWT_SECRET/" "$ENV_FILE"
-    sed -i "s/ENCRYPTION_MASTER_KEY=.*/ENCRYPTION_MASTER_KEY=$ENC_KEY/" "$ENV_FILE"
+    # S'assurer que les clés existent dans le fichier
+    for key in JWT_SECRET ENCRYPTION_MASTER_KEY; do
+        if ! grep -q "^$key=" "$ENV_FILE"; then
+            echo "$key=" >> "$ENV_FILE"
+        fi
+    done
+
+    sed -i "s|^JWT_SECRET=.*|JWT_SECRET=$JWT_SECRET|" "$ENV_FILE"
+    sed -i "s|^ENCRYPTION_MASTER_KEY=.*|ENCRYPTION_MASTER_KEY=$ENC_KEY|" "$ENV_FILE"
     
     log_info "Secrets générés avec succès dans .env.prod"
 fi
 
-# 3. Lancement des services Docker (MySQL, MinIO, Keycloak)
-# Correction des chemins de volumes pour le contexte local
-sed -i 's|\./deploy/keycloak/|../../deploy/keycloak/|g' "$PROJECT_DIR/docker-compose.yml"
-sed -i 's|\./nginx/|../../nginx/|g' "$PROJECT_DIR/docker-compose.yml"
-sed -i 's|\./deploy/docker/secrets/|../../deploy/docker/secrets/|g' "$PROJECT_DIR/docker-compose.yml"
-
+# 3. Lancement des services Docker
 log_info "Lancement des services Docker..."
-sudo docker compose -f "$PROJECT_DIR/docker-compose.yml" --env-file "$ENV_FILE" up -d
+# On se place dans le dossier prod pour que docker-compose trouve les fichiers relatifs si besoin
+cd "$PROD_DIR"
+sudo docker compose down || true
+sudo docker compose --env-file "$ENV_FILE" up -d
+
 log_info "Services Docker démarrés."
 
 # 4. Initialisation de la base de données
-log_info "Attente du démarrage de MySQL..."
+log_info "Attente du démarrage de MySQL (30s)..."
 sleep 30
-sudo docker exec agilestest-test-gui-2-mysql-1 mysql -u root -prootpass123 -e "CREATE DATABASE IF NOT EXISTS keycloak;" || true
-log_info "Base de données Keycloak prête."
-
-# 5. Installation des services systemd pour la persistance
-log_info "Configuration de la persistance (systemd)..."
-sudo cp "$PROJECT_DIR/../../agilestest-docker.service" /etc/systemd/system/
-sudo cp "$PROJECT_DIR/../../agilestest-backend.service" /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable agilestest-docker agilestest-backend
-sudo systemctl restart agilestest-docker agilestest-backend
-log_info "Services de persistance activés."
-
-# 6. Configuration Nginx
-log_info "Configuration du serveur web (Nginx)..."
-sudo cp "$PROJECT_DIR/../../nginx/nginx-sandbox.conf" /etc/nginx/sites-available/agilestest
-sudo ln -sf /etc/nginx/sites-available/agilestest /etc/nginx/sites-enabled/agilestest
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t && sudo systemctl restart nginx
-log_info "Serveur web prêt."
+# On essaie de créer la base keycloak si elle n'existe pas
+sudo docker exec prod-mysql-1 mysql -u root -prootpass123 -e "CREATE DATABASE IF NOT EXISTS keycloak;" || log_warn "Impossible de créer la DB keycloak automatiquement, vérifiez les logs de MySQL."
 
 echo -e "${GREEN}"
 echo "=========================================="
-echo "  ✅ DÉPLOIEMENT TERMINÉ !"
+echo "  ✅ SERVICES DOCKER LANCÉS !"
 echo "=========================================="
 echo -e "${NC}"
-echo "La plateforme est accessible sur le port 8080."
-echo "Pour configurer un domaine (HTTPS), utilisez Certbot."
+echo "La plateforme est en cours de démarrage."
+echo "Vérifiez l'accès sur http://192.168.200.83:8080"
