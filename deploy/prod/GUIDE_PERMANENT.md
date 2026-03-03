@@ -15,7 +15,7 @@ Ce guide vous permet de transformer la plateforme temporaire en un **site web pe
 Connectez-vous à votre serveur via SSH :
 
 ```bash
-ssh root@votre-ip-serveur
+ssh root@192.168.200.83
 ```
 
 Mettez à jour le système :
@@ -78,8 +78,8 @@ sudo certbot --nginx -d votre-domaine.com
 
 -   **Voir les logs du backend** : `journalctl -u agilestest-backend -f`
 -   **Redémarrer la plateforme** : `sudo systemctl restart agilestest-docker agilestest-backend`
--   **Accéder à Keycloak** : `http://votre-ip:8180` (Identifiants par défaut : admin / admin)
--   **Accéder à MinIO** : `http://votre-ip:9001` (Identifiants par défaut : minioadmin / minioadmin)
+-   **Accéder à Keycloak** : `http://192.168.200.83:8180` (Identifiants par défaut : admin / admin)
+-   **Accéder à MinIO** : `http://192.168.200.83:9001` (Identifiants par défaut : minioadmin / minioadmin)
 
 ---
 
