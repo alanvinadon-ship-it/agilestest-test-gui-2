@@ -77,7 +77,7 @@ log_info "Services Docker démarrés."
 
 # 4. Initialisation de la base de données
 log_info "Attente du démarrage de MySQL..."
-sleep 15
+sleep 30
 sudo docker exec agilestest-test-gui-2-mysql-1 mysql -u root -prootpass123 -e "CREATE DATABASE IF NOT EXISTS keycloak;" || true
 log_info "Base de données Keycloak prête."
 
