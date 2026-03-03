@@ -63,7 +63,7 @@ services:
   # ── Database migrations (one-shot) ────────────────────────────────────────
   db-migrate:
     build:
-      context: .
+      context: ../../
       dockerfile: Dockerfile
       target: builder
     network_mode: host
@@ -81,7 +81,7 @@ services:
   # ── Backend (Express + tRPC + static frontend) ───────────────────────────
   backend:
     build:
-      context: .
+      context: ../../
       dockerfile: Dockerfile
       target: production
     restart: unless-stopped
