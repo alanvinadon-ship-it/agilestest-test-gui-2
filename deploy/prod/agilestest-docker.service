@@ -1,0 +1,17 @@
+[Unit]
+Description=AgilesTest Docker Services (MySQL, MinIO, Keycloak)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/ubuntu/agilestest-test-gui-2
+ExecStart=/usr/bin/docker compose -f docker-compose.sandbox.yml --env-file .env.prod up -d mysql minio minio-init keycloak
+ExecStop=/usr/bin/docker compose -f docker-compose.sandbox.yml --env-file .env.prod down
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=agilestest-docker
+
+[Install]
+WantedBy=multi-user.target
