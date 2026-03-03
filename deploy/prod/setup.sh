@@ -6,7 +6,7 @@
 set -e
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ENV_FILE="$PROJECT_DIR/.env"
+ENV_FILE="$PROJECT_DIR/.env.prod"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -45,9 +45,15 @@ if ! command -v nginx &> /dev/null; then
 fi
 
 # 2. Configuration de l'environnement
+# Créer le dossier des secrets si nécessaire
+mkdir -p "$PROJECT_DIR/deploy/docker/secrets"
+if [ ! -f "$PROJECT_DIR/deploy/docker/secrets/ai_config_master_key.txt" ]; then
+    openssl rand -hex 32 > "$PROJECT_DIR/deploy/docker/secrets/ai_config_master_key.txt"
+fi
+
 if [ ! -f "$ENV_FILE" ]; then
     log_info "Configuration du fichier .env..."
-    cp "$PROJECT_DIR/.env.example" "$ENV_FILE"
+    cp "$PROJECT_DIR/.env.example" "$ENV_FILE" && chmod 600 "$ENV_FILE"
     
     # Génération de secrets uniques
     JWT_SECRET=$(openssl rand -hex 32)
@@ -56,10 +62,15 @@ if [ ! -f "$ENV_FILE" ]; then
     sed -i "s/JWT_SECRET=.*/JWT_SECRET=$JWT_SECRET/" "$ENV_FILE"
     sed -i "s/ENCRYPTION_MASTER_KEY=.*/ENCRYPTION_MASTER_KEY=$ENC_KEY/" "$ENV_FILE"
     
-    log_info "Secrets générés avec succès dans .env"
+    log_info "Secrets générés avec succès dans .env.prod"
 fi
 
 # 3. Lancement des services Docker (MySQL, MinIO, Keycloak)
+# Correction des chemins de volumes pour le contexte local
+sed -i 's|\./deploy/keycloak/|../../deploy/keycloak/|g' "$PROJECT_DIR/docker-compose.yml"
+sed -i 's|\./nginx/|../../nginx/|g' "$PROJECT_DIR/docker-compose.yml"
+sed -i 's|\./deploy/docker/secrets/|../../deploy/docker/secrets/|g' "$PROJECT_DIR/docker-compose.yml"
+
 log_info "Lancement des services Docker..."
 sudo docker compose -f "$PROJECT_DIR/docker-compose.yml" --env-file "$ENV_FILE" up -d
 log_info "Services Docker démarrés."
@@ -72,8 +83,8 @@ log_info "Base de données Keycloak prête."
 
 # 5. Installation des services systemd pour la persistance
 log_info "Configuration de la persistance (systemd)..."
-sudo cp "$PROJECT_DIR/agilestest-docker.service" /etc/systemd/system/
-sudo cp "$PROJECT_DIR/agilestest-backend.service" /etc/systemd/system/
+sudo cp "$PROJECT_DIR/../../agilestest-docker.service" /etc/systemd/system/
+sudo cp "$PROJECT_DIR/../../agilestest-backend.service" /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable agilestest-docker agilestest-backend
 sudo systemctl restart agilestest-docker agilestest-backend
@@ -81,7 +92,7 @@ log_info "Services de persistance activés."
 
 # 6. Configuration Nginx
 log_info "Configuration du serveur web (Nginx)..."
-sudo cp "$PROJECT_DIR/nginx.conf" /etc/nginx/sites-available/agilestest
+sudo cp "$PROJECT_DIR/../../nginx/nginx-sandbox.conf" /etc/nginx/sites-available/agilestest
 sudo ln -sf /etc/nginx/sites-available/agilestest /etc/nginx/sites-enabled/agilestest
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl restart nginx
