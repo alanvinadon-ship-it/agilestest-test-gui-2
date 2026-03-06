@@ -1,0 +1,108 @@
+{
+  "project_info": {
+    "title": "Intégration Stratégique de Keycloak avec AgilesTest",
+    "created": 1772778028.884797,
+    "last_updated": 1772779203.7597783,
+    "total_slides": 8
+  },
+  "slides": [
+    {
+      "id": "slide_1_titre",
+      "state": "edited",
+      "pageNum": 1
+    },
+    {
+      "id": "slide_2_pourquoi_keycloak",
+      "state": "edited",
+      "pageNum": 2
+    },
+    {
+      "id": "slide_3_architecture_oauth2_oidc",
+      "state": "edited",
+      "pageNum": 3
+    },
+    {
+      "id": "slide_4_configuration_realm_agilestest",
+      "state": "edited",
+      "pageNum": 4
+    },
+    {
+      "id": "slide_5_parametrage_client_agilestest",
+      "state": "edited",
+      "pageNum": 5
+    },
+    {
+      "id": "slide_6_integration_backend_synchronisation",
+      "state": "edited",
+      "pageNum": 6
+    },
+    {
+      "id": "slide_7_securite_reverse_proxy_nginx",
+      "state": "edited",
+      "pageNum": 7
+    },
+    {
+      "id": "slide_8_conclusion_perspectives",
+      "state": "edited",
+      "pageNum": 8
+    }
+  ],
+  "outline": [
+    {
+      "id": "slide_1_titre",
+      "title": "Intégration Stratégique de Keycloak avec AgilesTest",
+      "summary": "Introduction à la sécurisation de la plateforme AgilesTest via Keycloak et les protocoles OAuth2/OIDC.",
+      "image_plan": "Use a suitable image if needed",
+      "slide_template_key": ""
+    },
+    {
+      "id": "slide_2_pourquoi_keycloak",
+      "title": "Keycloak : Sécurité et Gestion Centralisée des Identités",
+      "summary": "Explication des bénéfices de Keycloak pour le Single Sign-On (SSO) et la réduction de la surface d'attaque.",
+      "image_plan": "Use a suitable image if needed",
+      "slide_template_key": ""
+    },
+    {
+      "id": "slide_3_architecture_oauth2_oidc",
+      "title": "Architecture OAuth2/OIDC : Flux d'Autorisation Sécurisés",
+      "summary": "Détails techniques sur le flux \"Authorization Code\" et l'utilisation des jetons JWT pour l'identité.",
+      "image_plan": "Use a suitable image if needed",
+      "slide_template_key": ""
+    },
+    {
+      "id": "slide_4_configuration_realm_agilestest",
+      "title": "Configuration du Realm \"Agilestest\" : Isolation et Sécurité",
+      "summary": "Isolation des accès, politiques de sécurité spécifiques (MFA) et personnalisation du thème visuel.",
+      "image_plan": "Use a suitable image if needed",
+      "slide_template_key": ""
+    },
+    {
+      "id": "slide_5_parametrage_client_agilestest",
+      "title": "Paramétrage du Client OAuth2 : Pont Applicatif Sécurisé",
+      "summary": "Réglages critiques du Client ID, Client Secret et des Redirect URIs pour la protection contre les attaques.",
+      "image_plan": "Use a suitable image if needed",
+      "slide_template_key": ""
+    },
+    {
+      "id": "slide_6_integration_backend_synchronisation",
+      "title": "Intégration Backend : Synchronisation et Gestion des Profils",
+      "summary": "Lien entre le code source et Keycloak, création automatique d'utilisateurs et gestion du callback OAuth.",
+      "image_plan": "Use a suitable image if needed",
+      "slide_template_key": ""
+    },
+    {
+      "id": "slide_7_securite_reverse_proxy_nginx",
+      "title": "Sécurité Réseau : Nginx et Terminaison SSL HTTPS",
+      "summary": "Rôle du proxy inverse Nginx, gestion des en-têtes X-Forwarded et mode proxy edge de Keycloak.",
+      "image_plan": "Use a suitable image if needed",
+      "slide_template_key": ""
+    },
+    {
+      "id": "slide_8_conclusion_perspectives",
+      "title": "Conclusion : Une Infrastructure d'Identité Évolutive et Robuste",
+      "summary": "Synthèse des bénéfices et ouverture sur l'ajout futur de fournisseurs d'identité externes.",
+      "image_plan": "Use a suitable image if needed",
+      "slide_template_key": ""
+    }
+  ]
+}
