@@ -1,6 +1,6 @@
 # Scénarios : Finalisation et Génération de Scripts
 
-> Ce guide décrit le cycle de vie complet d'un scénario de test dans AgilesTest, depuis sa création en tant que brouillon jusqu'à sa finalisation, puis la génération automatique de scripts exécutables par l'IA.
+> Ce guide décrit le cycle de vie complet d'un scénario de test dans AgilesTest, depuis sa création en tant que brouillon jusqu'à sa finalisation, puis la génération automatique de scripts exécutables par l'IA. Chaque étape clé est illustrée par des captures d'écran annotées.
 
 ---
 
@@ -54,7 +54,13 @@ Avant de commencer à travailler avec les scénarios, assurez-vous que les élé
 
 ## Créer un scénario (Brouillon)
 
-La création d'un scénario se fait depuis la page **Configuration → Scénarios**. Cliquez sur le bouton **+ Nouveau scénario** en haut à droite de la page.
+La création d'un scénario se fait depuis la page **Configuration → Scénarios**. La capture ci-dessous montre la vue d'ensemble de cette page avec ses principaux éléments d'interface.
+
+![Page Scénarios — Vue d'ensemble annotée](/manus-storage/01-scenarios-page-annotated_389ba4f3.png)
+
+> **Légende de la capture** : **(1)** Menu Scénarios dans la barre latérale — **(2)** Filtres par type de test (Tous, VABF, VSR, VABE) — **(3)** Filtres par statut (Tous, Brouillon, Finalisé, Déprécié) — **(4)** Bouton « + Nouveau scénario » pour créer un scénario — **(5)** En-tête du profil de test avec le type, le domaine et le runner associé.
+
+Cliquez sur le bouton **+ Nouveau scénario** (repère 4) en haut à droite de la page pour ouvrir le formulaire de création.
 
 ### Informations obligatoires
 
@@ -89,7 +95,11 @@ La section **Datasets requis** permet de spécifier les types de jeux de donnée
 
 ## Finaliser un scénario (DRAFT → FINAL)
 
-La finalisation est l'étape qui transforme un brouillon en scénario officiel, prêt pour la génération de scripts et l'exécution.
+La finalisation est l'étape qui transforme un brouillon en scénario officiel, prêt pour la génération de scripts et l'exécution. La capture ci-dessous montre un scénario déplié au statut Brouillon avec ses boutons d'action.
+
+![Scénario déplié — Détails et boutons d'action](/manus-storage/02-scenario-details-annotated_7faee76a.png)
+
+> **Légende de la capture** : **(1)** Badge de statut « Brouillon » (orange) — **(2)** Titre et code unique du scénario — **(3)** Barre de boutons d'action (de gauche à droite : Finaliser, Générer Prompt IA, Générer Script, Éditer, Publier template, Exporter JSON, Supprimer) — **(4)** Politique de capture réseau (Aucune, Runner, Probe) — **(5)** Indicateur de datasets liés au scénario.
 
 ### Conditions de validation
 
@@ -103,17 +113,27 @@ Avant de pouvoir finaliser un scénario, trois conditions doivent être remplies
 
 ### Procédure pas à pas
 
-**Étape 1 — Accéder à la page Scénarios.** Naviguez vers **Configuration → Scénarios** dans le menu latéral. Sélectionnez le projet concerné si ce n'est pas déjà fait.
+**Étape 1 — Accéder à la page Scénarios.** Naviguez vers **Configuration → Scénarios** dans le menu latéral (repère 1 de la première capture). Sélectionnez le projet concerné si ce n'est pas déjà fait.
 
-**Étape 2 — Identifier le scénario à finaliser.** Les scénarios au statut **Brouillon** sont identifiés par un badge orange « Brouillon ». Utilisez les filtres en haut de page (Tous / Brouillon / Finalisé / Déprécié) pour afficher uniquement les brouillons.
+**Étape 2 — Identifier le scénario à finaliser.** Les scénarios au statut **Brouillon** sont identifiés par un badge orange « Brouillon » (repère 1 de la capture ci-dessus). Utilisez les filtres par statut (repère 3 de la première capture) pour afficher uniquement les brouillons.
 
-**Étape 3 — Vérifier le contenu.** Avant de finaliser, assurez-vous que le scénario contient toutes les étapes nécessaires avec leurs résultats attendus. Cliquez sur le scénario pour le déplier et vérifier son contenu.
+**Étape 3 — Vérifier le contenu.** Avant de finaliser, assurez-vous que le scénario contient toutes les étapes nécessaires avec leurs résultats attendus. Cliquez sur le scénario pour le déplier et vérifier son contenu, comme illustré dans la capture ci-dessus.
 
-**Étape 4 — Cliquer sur le bouton Finaliser.** Dans la barre d'actions à droite du scénario, cliquez sur l'icône de validation (coche verte ✓). Ce bouton n'apparaît que pour les scénarios au statut DRAFT et si vous disposez de la permission `scenarios.activate`.
+**Étape 4 — Cliquer sur le bouton Finaliser.** Dans la barre d'actions (repère 3), cliquez sur l'icône de validation (coche verte ✓), qui est le premier bouton à gauche. Ce bouton n'apparaît que pour les scénarios au statut DRAFT et si vous disposez de la permission `scenarios.activate`.
 
-**Étape 5 — Confirmer dans la boîte de dialogue.** Une boîte de dialogue « Finaliser le scénario » s'ouvre et affiche un récapitulatif du scénario (nom, code, nombre d'étapes, version) ainsi que le résultat de la validation automatique des trois conditions. Si toutes les conditions sont remplies (trois coches vertes), cliquez sur **Finaliser → FINAL**. Si des conditions ne sont pas remplies (triangles orange), la finalisation sera refusée et les erreurs seront affichées en rouge.
+**Étape 5 — Confirmer dans la boîte de dialogue.** La capture ci-dessous montre la boîte de dialogue de finalisation qui s'ouvre après avoir cliqué sur le bouton Finaliser.
 
-**Étape 6 — Confirmation.** Après une finalisation réussie, un message de succès s'affiche et le statut du scénario passe à **FINAL**. La liste des scénarios est automatiquement rafraîchie.
+![Boîte de dialogue — Finaliser le scénario](/manus-storage/03-finalize-dialog-annotated_f08155eb.png)
+
+> **Légende de la capture** : **(1)** Titre de la boîte de dialogue « Finaliser le scénario » — **(2)** Récapitulatif du scénario concerné (nom complet, code, nombre d'étapes, version) — **(3)** Checklist de validation automatique des 3 critères (titre non vide, au moins 1 étape, au moins 1 résultat attendu) avec indicateurs visuels — **(4)** Bouton de confirmation « Finaliser → FINAL » (actif uniquement si les 3 critères sont remplis) — **(5)** Bouton « Annuler » pour fermer sans modifier.
+
+Si toutes les conditions sont remplies (trois coches vertes dans le repère 3), cliquez sur **Finaliser → FINAL** (repère 4). Si des conditions ne sont pas remplies (triangles orange), la finalisation sera refusée et les erreurs seront affichées en rouge.
+
+**Étape 6 — Confirmation.** Après une finalisation réussie, un message de succès s'affiche et le statut du scénario passe à **FINAL**. La liste des scénarios est automatiquement rafraîchie. Vous pouvez vérifier le résultat en utilisant le filtre « Finalisé » comme illustré ci-dessous.
+
+![Filtre Finalisé actif](/manus-storage/06-filter-finalise-annotated_a8366e8e.png)
+
+> **Légende de la capture** : **(1)** Filtre « Finalisé » activé (surligné en vert) pour afficher uniquement les scénarios au statut FINAL — **(2)** Indicateur du workflow (DRAFT → FINAL → DEPRECATED) affiché en en-tête de page.
 
 ### Que se passe-t-il après la finalisation ?
 
@@ -138,13 +158,17 @@ Avant de lancer la génération, les éléments suivants doivent être en place 
 
 ### Procédure de génération en 5 étapes
 
-La génération de script suit un processus en 5 phases, guidé par un assistant modal.
+La génération de script suit un processus en 5 phases, guidé par un assistant modal. La capture ci-dessous montre l'écran de configuration initial du modal de génération.
+
+![Modal de génération de script IA — Phase Configuration](/manus-storage/04-generate-script-annotated_bf3ac5fa.png)
+
+> **Légende de la capture** : **(1)** Titre du modal avec le code du scénario et le badge « LLM » indiquant l'utilisation de l'intelligence artificielle — **(2)** Fil d'Ariane des 5 étapes du processus (Configuration → Plan IA → Revue du plan → Génération IA → Résultat) — **(3)** Sélecteurs de configuration : environnement cible (DEV, PREPROD, etc.) et bundle actif associé — **(4)** Message d'avertissement si aucun bundle ACTIVE n'est trouvé pour l'environnement sélectionné — **(5)** Zone d'information sur le mode de génération (streaming SSE) et bouton « Lancer la planification IA ».
 
 #### Phase 1 — Configuration
 
-Cliquez sur l'icône **Générer Script** (icône code `</>` en cyan) dans la barre d'actions du scénario. Le modal de génération s'ouvre sur l'étape de configuration.
+Cliquez sur l'icône **Générer Script** (icône code `</>` en cyan, repère 3 de la barre d'actions du scénario) dans la barre d'actions du scénario. Le modal de génération s'ouvre sur l'étape de configuration (repère 2 montre l'étape active).
 
-Sélectionnez l'**environnement cible** parmi les options disponibles :
+Sélectionnez l'**environnement cible** (repère 3, sélecteur de gauche) parmi les options disponibles :
 
 | Environnement | Usage |
 |---------------|-------|
@@ -153,9 +177,9 @@ Sélectionnez l'**environnement cible** parmi les options disponibles :
 | **PILOT_ORANGE** | Pilote client Orange |
 | **PROD** | Production |
 
-Sélectionnez ensuite le **bundle** actif correspondant à l'environnement choisi. Le bundle regroupe les datasets (jeux de données) nécessaires à l'exécution du script. Si aucun bundle ACTIVE n'est disponible pour l'environnement sélectionné, un message d'avertissement s'affiche.
+Sélectionnez ensuite le **bundle** actif (repère 3, sélecteur de droite) correspondant à l'environnement choisi. Le bundle regroupe les datasets (jeux de données) nécessaires à l'exécution du script. Si aucun bundle ACTIVE n'est disponible pour l'environnement sélectionné, un message d'avertissement s'affiche (repère 4).
 
-Cliquez sur **Lancer la planification IA** pour démarrer.
+Cliquez sur **Lancer la planification IA** (repère 5) pour démarrer.
 
 #### Phase 2 — Planification IA
 
@@ -190,18 +214,14 @@ Le LLM génère le code en temps réel via **streaming SSE** (Server-Sent Events
 
 #### Phase 5 — Résultat
 
-Une fois la génération terminée, le résultat est présenté sous forme de **package de scripts** contenant :
-
-- Les **fichiers générés** : code source complet, fichiers de configuration, helpers. Chaque fichier peut être consulté individuellement via les onglets.
-- Les **notes de génération** : recommandations du LLM sur l'utilisation du script.
-- Les **avertissements** : points d'attention identifiés par le LLM.
+Une fois la génération terminée, le résultat est présenté sous forme de **package de scripts** contenant les **fichiers générés** (code source complet, fichiers de configuration, helpers consultables individuellement via les onglets), les **notes de génération** (recommandations du LLM sur l'utilisation du script), et les **avertissements** (points d'attention identifiés par le LLM).
 
 Deux actions sont disponibles à cette étape :
 
 | Action | Description |
 |--------|-------------|
 | **Copier** | Copie le contenu d'un fichier dans le presse-papiers. |
-| **Sauvegarder** | Enregistre le script complet en base de données, rattaché au scénario, au bundle et à l'environnement. |
+| **Sauvegarder** | Enregistre le script en base de données au statut DRAFT. |
 
 Cliquez sur **Sauvegarder** pour persister le script. Un message de confirmation s'affiche et le script devient accessible depuis la page **Scripts Générés**.
 
@@ -215,7 +235,11 @@ Cliquez sur l'icône **Générer Prompt IA** (icône bulle de message en violet)
 
 ## Gérer les scripts générés
 
-Les scripts générés sont accessibles depuis la page **Configuration → Scripts Générés** dans le menu latéral.
+Les scripts générés sont accessibles depuis la page **Configuration → Scripts Générés** dans le menu latéral. La capture ci-dessous montre cette page.
+
+![Page Scripts Générés](/manus-storage/05-scripts-generes-annotated_df6a9ea2.png)
+
+> **Légende de la capture** : **(1)** Titre de la page « Scripts Générés » — **(2)** Compteur du nombre total de scripts — **(3)** Filtres de recherche : champ texte, sélecteur de framework (Playwright, RobotFramework, Cypress, K6), sélecteur de statut (Brouillon, Actif, Déprécié) — **(4)** Zone d'affichage des scripts (vide ici, avec un message invitant à utiliser le bouton « Générer Script » depuis un scénario) — **(5)** Lien « Scripts Générés » dans le menu latéral.
 
 ### Statuts des scripts
 
@@ -229,7 +253,7 @@ Les scripts suivent leur propre cycle de vie, indépendant de celui des scénari
 
 ### Filtres et recherche
 
-La page Scripts Générés propose plusieurs filtres pour retrouver rapidement un script :
+La page Scripts Générés propose plusieurs filtres pour retrouver rapidement un script (repère 3 de la capture ci-dessus) :
 
 | Filtre | Options |
 |--------|---------|
@@ -320,15 +344,15 @@ Le système de contrôle d'accès basé sur les rôles (RBAC) d'AgilesTest défi
 
 ### Le bouton Finaliser n'apparaît pas
 
-Ce problème peut avoir deux causes. Premièrement, vérifiez que le scénario est bien au statut **DRAFT** (badge orange « Brouillon »). Le bouton Finaliser n'apparaît pas pour les scénarios déjà finalisés ou dépréciés. Deuxièmement, vérifiez que votre rôle dispose de la permission `scenarios.activate`. Contactez votre administrateur si nécessaire.
+Ce problème peut avoir deux causes. Premièrement, vérifiez que le scénario est bien au statut **DRAFT** (badge orange « Brouillon », repère 1 de la capture du scénario déplié). Le bouton Finaliser n'apparaît pas pour les scénarios déjà finalisés ou dépréciés. Deuxièmement, vérifiez que votre rôle dispose de la permission `scenarios.activate`. Contactez votre administrateur si nécessaire.
 
 ### La finalisation échoue avec des erreurs de validation
 
-Si la boîte de dialogue affiche des triangles orange, corrigez les problèmes identifiés avant de réessayer. Les erreurs les plus courantes sont : un titre vide ou composé uniquement d'espaces, aucune étape définie dans le scénario, ou aucun résultat attendu renseigné dans les étapes. Retournez à l'édition du scénario (bouton crayon) pour compléter les informations manquantes.
+Si la boîte de dialogue affiche des triangles orange (repère 3 de la capture de la boîte de finalisation), corrigez les problèmes identifiés avant de réessayer. Les erreurs les plus courantes sont : un titre vide ou composé uniquement d'espaces, aucune étape définie dans le scénario, ou aucun résultat attendu renseigné dans les étapes. Retournez à l'édition du scénario (bouton crayon dans la barre d'actions) pour compléter les informations manquantes.
 
 ### Aucun bundle disponible pour la génération de script
 
-La génération de script nécessite un bundle au statut **ACTIVE** pour l'environnement sélectionné. Rendez-vous dans **Configuration → Bundles** pour créer un bundle, y associer les datasets nécessaires, puis l'activer. Assurez-vous que l'environnement du bundle correspond à celui sélectionné dans le modal de génération.
+La génération de script nécessite un bundle au statut **ACTIVE** pour l'environnement sélectionné (repère 4 de la capture du modal de génération montre l'avertissement correspondant). Rendez-vous dans **Configuration → Bundles** pour créer un bundle, y associer les datasets nécessaires, puis l'activer. Assurez-vous que l'environnement du bundle correspond à celui sélectionné dans le modal de génération.
 
 ### Erreur "Inputs manquants bloquants" lors de la planification
 

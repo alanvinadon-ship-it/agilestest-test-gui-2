@@ -1,0 +1,30 @@
+Screenshot Notes for Documentation
+====================================
+
+01-scenarios-page.webp:
+- Page Scénarios avec le projet "Test de connexion site web" sélectionné
+- Barre de filtres: Tous/VABF/VSR/VABE et Tous/Brouillon/Finalisé/Déprécié
+- Boutons: Importer JSON, + Nouveau scénario
+- Un profil VABF WEB visible: "Test UI Login AgileSuite (UI End-to-End)"
+- Runner: Playwright / Robot Framework
+
+02-scenario-details-draft.webp:
+- Scénarios dépliés avec statut "Brouillon" (badge orange)
+- Scénario: [VABF-WEB-002-NAVIGATION-PRINCIPALE-WWW-AGIL] Navigation principale
+- Tags: VABF, code: VABF-WEB-002-NAVIGATION-PRINCIPALE-WWW-AGIL, v1
+- 4 étapes, date 20/04/2026
+- Dataset tag: form_data
+- Politique de capture: Aucune / A-Runner / B-Probe
+- Boutons d'action visibles (gauche à droite):
+  - Coche verte (Finaliser) [index 60]
+  - Bulle violette (Générer Prompt IA) [index 61]
+  - Code cyan (Générer Script) [index 62]
+  - Crayon (Éditer) [index 63]
+  - Globe (Publier template) [index 64]
+  - Télécharger (Exporter JSON) [index 65]
+  - Poubelle (Supprimer) [index 66]
+- Datasets: 0/4 env prêts
+
+03 - Need to capture: Finalize dialog
+04 - Need to capture: Generate Script modal (config step)
+05 - Need to capture: Scripts Générés page
