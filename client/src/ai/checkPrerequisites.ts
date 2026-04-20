@@ -49,6 +49,19 @@ function block(key: string, category: DiagnosticItem['category'], label: string,
   return { key, category, label, severity: 'BLOCKING', message };
 }
 
+/**
+ * Drizzle retourne les colonnes en camelCase (valuesJson, datasetTypeId)
+ * mais le type frontend utilise snake_case (values_json, dataset_type_id).
+ * Ces helpers supportent les deux formats.
+ */
+function getValuesJson(ds: any): Record<string, unknown> {
+  return ds.valuesJson || ds.values_json || {};
+}
+
+function getDatasetTypeId(ds: any): string {
+  return ds.datasetTypeId || ds.dataset_type_id || '';
+}
+
 // ─── Main function ───────────────────────────────────────────────────────
 
 export interface CheckPrerequisitesInput {
@@ -160,8 +173,9 @@ export function checkPrerequisites(input: CheckPrerequisitesInput): Prerequisite
     items.push(block('dataset.empty', 'dataset', 'Datasets', 'Le bundle ne contient aucun dataset. Ajoutez au moins un dataset au bundle.'));
   } else {
     // Vérifier que les datasets ont des valeurs
+    // Note: Drizzle retourne camelCase (valuesJson), le type frontend utilise snake_case (values_json)
     const emptyDatasets = bundleDatasets.filter(ds => {
-      const vals = ds.values_json || {};
+      const vals = getValuesJson(ds);
       return Object.keys(vals).length === 0;
     });
 
@@ -170,7 +184,7 @@ export function checkPrerequisites(input: CheckPrerequisitesInput): Prerequisite
     } else if (emptyDatasets.length > 0) {
       items.push(block('dataset.values', 'dataset', 'Valeurs des datasets', `${emptyDatasets.length}/${bundleDatasets.length} dataset(s) sans valeurs. Tous les datasets doivent avoir des valeurs pour la génération IA.`));
     } else {
-      const totalKeys = bundleDatasets.reduce((sum, ds) => sum + Object.keys(ds.values_json || {}).length, 0);
+      const totalKeys = bundleDatasets.reduce((sum, ds) => sum + Object.keys(getValuesJson(ds)).length, 0);
       items.push(ok('dataset', 'dataset', 'Datasets', `${bundleDatasets.length} dataset(s) avec ${totalKeys} clé(s) au total`));
     }
 
@@ -178,7 +192,7 @@ export function checkPrerequisites(input: CheckPrerequisitesInput): Prerequisite
     if (scenario) {
       const requiredTypes = scenario.required_dataset_types || [];
       if (requiredTypes.length > 0) {
-        const coveredTypes = new Set(bundleDatasets.map(ds => ds.dataset_type_id));
+        const coveredTypes = new Set(bundleDatasets.map(ds => getDatasetTypeId(ds)));
         const missingTypes = requiredTypes.filter(t => !coveredTypes.has(t));
         if (missingTypes.length > 0) {
           items.push(block('dataset.coverage', 'dataset', 'Couverture types', `Type(s) requis manquant(s) dans le bundle : ${missingTypes.join(', ')}. Ajoutez ces types de dataset au bundle.`));

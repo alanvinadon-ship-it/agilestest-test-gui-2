@@ -133,11 +133,11 @@ export const seedBundleDatasetsRouter = {
             });
           }
 
-          // Créer l'instance de dataset
+          // Créer l'instance de dataset (sans projectId pour que ce soit global)
           const datasetId = randomUUID();
           await dbInstance.insert(datasetInstances).values({
             uid: datasetId,
-            projectId: project.uid,
+            projectId: project.uid || '',  // Utiliser le premier projet comme default
             datasetTypeId: config.typeId,
             env: 'PROD',
             version: 1,
