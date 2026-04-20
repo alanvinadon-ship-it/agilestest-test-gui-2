@@ -598,4 +598,5 @@
 - [x] Bug: Page /templates — TRPCClientError validation Zod sur domain et difficulty (invalid_value: enums ne correspondent pas)
 - [x] Bug: GenerateScriptModal — 'Invalid input: expected string, received undefined' au path context.dataset.bundle.id (bundle_id undefined dans le contexte IA)
 - [x] Feature: Diagnostic prérequis dans GenerateScriptModal — vérification projet, profil, scénario, bundle, datasets, secrets avant génération IA
-- [ ] Bug: GenerateScriptModal — 'Inputs manquants bloquants: form_data' bloque la génération alors que ce devrait être un avertissement non-bloquant
+- [x] Bug: GenerateScriptModal — 'Inputs manquants bloquants: form_data' bloque la génération alors que ce devrait être un avertissement non-bloquant
+- [ ] Feature: Créer dataset FORM_DATA dans bundle BUNDLE_WEB_PROD_V1 pour éliminer l'avertissement missing_inputs lors de la génération IA
