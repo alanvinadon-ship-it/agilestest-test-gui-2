@@ -2,14 +2,19 @@
  * GenerateScriptModal — Génère un script de test via l'IA réelle (LLM server-side)
  * avec streaming SSE pour la phase de génération de code.
  *
- * Flow: Sélection env+bundle → Plan (LLM) → Revue du plan → Génération (LLM streaming) → Résultat
+ * Flow: Sélection env+bundle → Diagnostic prérequis → Plan (LLM) → Revue du plan → Génération (LLM streaming) → Résultat
  */
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Sparkles, AlertTriangle, CheckCircle2, Copy, Save, Loader2, FileCode, ChevronRight, Brain, Zap, Radio } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import {
+  X, Sparkles, AlertTriangle, CheckCircle2, Copy, Save, Loader2,
+  FileCode, ChevronRight, Brain, Zap, Radio, ShieldCheck, ShieldAlert,
+  ShieldX, CircleDot, Info,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { useProject } from '../state/projectStore';
 import { trpc } from '@/lib/trpc';
 import { buildAiScriptContext } from '../ai/buildContext';
+import { checkPrerequisites, type PrerequisiteReport, type DiagnosticItem, type DiagnosticSeverity } from '../ai/checkPrerequisites';
 import type { TestProfile, TestScenario, TargetEnv, DatasetInstance, DatasetSecretKey } from '../types';
 import type { AiScriptContext, ScriptPlanResult, ScriptPackage } from '../ai/types';
 
@@ -56,6 +61,98 @@ async function consumeSSEStream(
   }
 }
 
+// ─── Diagnostic UI helpers ──────────────────────────────────────────────
+
+function severityIcon(severity: DiagnosticSeverity) {
+  switch (severity) {
+    case 'OK': return <CheckCircle2 className="w-3.5 h-3.5 text-green-400 shrink-0" />;
+    case 'WARNING': return <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />;
+    case 'BLOCKING': return <ShieldX className="w-3.5 h-3.5 text-red-400 shrink-0" />;
+  }
+}
+
+function severityBg(severity: DiagnosticSeverity) {
+  switch (severity) {
+    case 'OK': return 'bg-green-500/5 border-green-500/10';
+    case 'WARNING': return 'bg-amber-500/5 border-amber-500/10';
+    case 'BLOCKING': return 'bg-red-500/5 border-red-500/10';
+  }
+}
+
+function DiagnosticPanel({ report, loading }: { report: PrerequisiteReport | null; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-muted-foreground py-3">
+        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        Vérification des prérequis en cours…
+      </div>
+    );
+  }
+
+  if (!report) return null;
+
+  const { items, canProceed, counts } = report;
+
+  // Group by category
+  const categories: Array<{ key: DiagnosticItem['category']; label: string; icon: React.ReactNode }> = [
+    { key: 'project', label: 'Projet', icon: <CircleDot className="w-3 h-3" /> },
+    { key: 'profile', label: 'Profil', icon: <CircleDot className="w-3 h-3" /> },
+    { key: 'scenario', label: 'Scénario', icon: <CircleDot className="w-3 h-3" /> },
+    { key: 'bundle', label: 'Bundle', icon: <CircleDot className="w-3 h-3" /> },
+    { key: 'dataset', label: 'Datasets', icon: <CircleDot className="w-3 h-3" /> },
+    { key: 'secret', label: 'Secrets', icon: <CircleDot className="w-3 h-3" /> },
+  ];
+
+  return (
+    <div className="space-y-3">
+      {/* Summary banner */}
+      <div className={`flex items-center gap-2 p-3 rounded-md border ${canProceed ? 'bg-green-500/5 border-green-500/20' : 'bg-red-500/5 border-red-500/20'}`}>
+        {canProceed ? (
+          <ShieldCheck className="w-4 h-4 text-green-400 shrink-0" />
+        ) : (
+          <ShieldAlert className="w-4 h-4 text-red-400 shrink-0" />
+        )}
+        <div className="flex-1">
+          <span className={`text-xs font-semibold ${canProceed ? 'text-green-400' : 'text-red-400'}`}>
+            {canProceed ? 'Prérequis validés — prêt pour la génération' : 'Prérequis manquants — génération impossible'}
+          </span>
+          <div className="flex items-center gap-3 mt-0.5 text-[10px] text-muted-foreground">
+            {counts.ok > 0 && <span className="flex items-center gap-0.5"><CheckCircle2 className="w-2.5 h-2.5 text-green-400" />{counts.ok} OK</span>}
+            {counts.warning > 0 && <span className="flex items-center gap-0.5"><AlertTriangle className="w-2.5 h-2.5 text-amber-400" />{counts.warning} avertissement(s)</span>}
+            {counts.blocking > 0 && <span className="flex items-center gap-0.5"><ShieldX className="w-2.5 h-2.5 text-red-400" />{counts.blocking} bloquant(s)</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* Detailed items grouped by category */}
+      <div className="space-y-1">
+        {categories.map(cat => {
+          const catItems = items.filter(i => i.category === cat.key);
+          if (catItems.length === 0) return null;
+          return (
+            <div key={cat.key}>
+              {catItems.map((item, idx) => (
+                <div
+                  key={`${item.key}-${idx}`}
+                  className={`flex items-start gap-2 px-3 py-1.5 rounded border text-[11px] mb-1 ${severityBg(item.severity)}`}
+                >
+                  {severityIcon(item.severity)}
+                  <div className="flex-1 min-w-0">
+                    <span className="font-semibold text-foreground">{item.label}</span>
+                    <span className="text-muted-foreground ml-1.5">{item.message}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main component ─────────────────────────────────────────────────────
+
 export default function GenerateScriptModal({ scenario, profile, onClose, onSaved }: Props) {
   const { currentProject } = useProject();
   const utils = trpc.useUtils();
@@ -71,6 +168,10 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
   const [viewFileIdx, setViewFileIdx] = useState(0);
   const [saved, setSaved] = useState(false);
   const [planUsage, setPlanUsage] = useState<{ prompt_tokens: number; completion_tokens: number } | null>(null);
+
+  // Prerequisite check state
+  const [diagReport, setDiagReport] = useState<PrerequisiteReport | null>(null);
+  const [diagLoading, setDiagLoading] = useState(false);
 
   // Streaming state
   const [streamingContent, setStreamingContent] = useState('');
@@ -100,6 +201,69 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
       }
     }
   }, [bundlesData]);
+
+  // ── Run prerequisite check whenever bundle selection changes ──────────
+  useEffect(() => {
+    if (!selectedBundleId || !currentProject) {
+      // Run a partial check without bundle data
+      const report = checkPrerequisites({
+        project: currentProject as any,
+        profile,
+        scenario,
+        bundle: null,
+        bundleDatasets: [],
+        secrets: [],
+      });
+      setDiagReport(report);
+      return;
+    }
+
+    let cancelled = false;
+    const runCheck = async () => {
+      setDiagLoading(true);
+      try {
+        const bundle = await utils.bundles.get.fetch({ bundleId: selectedBundleId });
+        const itemsResult = await utils.bundleItems.list.fetch({ bundleId: selectedBundleId });
+        const items = itemsResult?.data || [];
+        const datasets: DatasetInstance[] = [];
+        const allSecrets: DatasetSecretKey[] = [];
+        for (const item of items) {
+          try {
+            const ds = await utils.datasetInstances.get.fetch({ datasetId: item.datasetId });
+            if (ds) datasets.push(ds as any);
+            const secretsResult = await utils.datasetSecrets.list.fetch({ datasetId: item.datasetId });
+            if (secretsResult?.data) allSecrets.push(...(secretsResult.data as any[]));
+          } catch { /* skip */ }
+        }
+        if (cancelled) return;
+        const report = checkPrerequisites({
+          project: currentProject as any,
+          profile,
+          scenario,
+          bundle: bundle as any,
+          bundleDatasets: datasets,
+          secrets: allSecrets,
+        });
+        setDiagReport(report);
+      } catch (e: any) {
+        if (!cancelled) {
+          setDiagReport(checkPrerequisites({
+            project: currentProject as any,
+            profile,
+            scenario,
+            bundle: null,
+            bundleDatasets: [],
+            secrets: [],
+          }));
+        }
+      } finally {
+        if (!cancelled) setDiagLoading(false);
+      }
+    };
+
+    runCheck();
+    return () => { cancelled = true; };
+  }, [selectedBundleId, currentProject, profile, scenario]);
 
   const buildContext = async (): Promise<AiScriptContext> => {
     if (!currentProject || !selectedBundleId) throw new Error('Bundle requis');
@@ -251,6 +415,10 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
     toast.success('Contenu copié');
   };
 
+  const canLaunch = useMemo(() => {
+    return !!selectedBundleId && !planMutation.isPending && (diagReport?.canProceed ?? false);
+  }, [selectedBundleId, planMutation.isPending, diagReport]);
+
   const stepLabels: Record<Step, string> = {
     config: 'Configuration',
     planning: 'Plan IA',
@@ -306,7 +474,7 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
                   <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Environnement</label>
                   <select
                     value={selectedEnv}
-                    onChange={e => { setSelectedEnv(e.target.value as TargetEnv); setSelectedBundleId(''); }}
+                    onChange={e => { setSelectedEnv(e.target.value as TargetEnv); setSelectedBundleId(''); setDiagReport(null); }}
                     className="text-xs px-3 py-1.5 bg-secondary/30 border border-border rounded-md text-foreground"
                   >
                     {ALL_ENVS.map(e => <option key={e} value={e}>{e}</option>)}
@@ -338,6 +506,9 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
                 </div>
               )}
 
+              {/* ── Diagnostic prérequis ── */}
+              <DiagnosticPanel report={diagReport} loading={diagLoading} />
+
               <div className="bg-primary/5 border border-primary/10 rounded-md p-3 text-xs text-muted-foreground">
                 <div className="flex items-center gap-1.5 mb-1 text-primary font-semibold">
                   <Brain className="w-3.5 h-3.5" />
@@ -347,14 +518,22 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
                 Les fichiers produits sont complets et exécutables.
               </div>
 
-              <button
-                onClick={handleStartPlanning}
-                disabled={!selectedBundleId || planMutation.isPending}
-                className="px-6 py-2 text-sm font-semibold rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center gap-2"
-              >
-                <Sparkles className="w-4 h-4" />
-                Lancer la planification IA
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleStartPlanning}
+                  disabled={!canLaunch}
+                  className="px-6 py-2 text-sm font-semibold rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Lancer la planification IA
+                </button>
+                {diagReport && !diagReport.canProceed && (
+                  <span className="text-[10px] text-red-400 flex items-center gap-1">
+                    <Info className="w-3 h-3" />
+                    Corrigez les prérequis bloquants pour continuer
+                  </span>
+                )}
+              </div>
             </div>
           )}
 
