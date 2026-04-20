@@ -55,7 +55,7 @@ function BundleStatusBadge({ status }: { status: BundleStatus }) {
 // ─── Helper: map DB row to frontend DatasetBundle ────────────────────────
 function toFrontendBundle(row: any): DatasetBundle {
   return {
-    bundle_id: row.bundleId,
+    bundle_id: row.uid ?? row.bundleId,
     project_id: row.projectId,
     name: row.name,
     env: row.env,
@@ -70,7 +70,7 @@ function toFrontendBundle(row: any): DatasetBundle {
 
 function toFrontendInstance(row: any): DatasetInstance {
   return {
-    dataset_id: row.datasetId,
+    dataset_id: row.uid ?? row.datasetId,
     project_id: row.projectId,
     dataset_type_id: row.datasetTypeId,
     env: row.env,
