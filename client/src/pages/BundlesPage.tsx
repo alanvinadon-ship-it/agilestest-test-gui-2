@@ -201,33 +201,71 @@ function ValidateBundleModal({ bundle, onClose, projectId }: {
 
   const handleValidate = async () => {
     if (!scenarioId) return;
-    // Client-side validation: check required dataset types vs bundle contents
-    const scenario = scenarios.find((s: any) => String(s.id) === scenarioId);
-    if (!scenario) return;
-    const requiredTypes: string[] = scenario.requiredDatasetTypes ? JSON.parse(scenario.requiredDatasetTypes) : [];
-    const bundleDatasetIds = new Set(items.map(bi => bi.datasetId));
-    const bundleDatasets = allInstances.filter(d => bundleDatasetIds.has(d.dataset_id));
-    const coveredTypes = new Set(bundleDatasets.map(d => d.dataset_type_id));
-    const missingTypes = requiredTypes.filter(t => !coveredTypes.has(t));
+    try {
+      // Client-side validation: check required dataset types vs bundle contents
+      const scenario = scenarios.find((s: any) => String(s.id) === String(scenarioId));
+      if (!scenario) {
+        setResult({
+          ok: false,
+          missing_types: [],
+          conflicts: [],
+          schema_errors_by_type: {},
+          warnings: ['Scénario introuvable. Veuillez en sélectionner un autre.'],
+        });
+        return;
+      }
 
-    // Check for type duplicates
-    const typeCounts = new Map<string, string[]>();
-    bundleDatasets.forEach(d => {
-      const arr = typeCounts.get(d.dataset_type_id) || [];
-      arr.push(d.dataset_id);
-      typeCounts.set(d.dataset_type_id, arr);
-    });
-    const conflicts = Array.from(typeCounts.entries())
-      .filter(([, ids]) => ids.length > 1)
-      .map(([typeId, ids]) => ({ dataset_type_id: typeId, dataset_ids: ids }));
+      // requiredDatasetTypes is stored as JSON in DB — Drizzle returns it already parsed
+      let requiredTypes: string[] = [];
+      const raw = scenario.requiredDatasetTypes;
+      if (Array.isArray(raw)) {
+        requiredTypes = raw;
+      } else if (typeof raw === 'string') {
+        try { requiredTypes = JSON.parse(raw); } catch { requiredTypes = []; }
+      }
 
-    setResult({
-      ok: missingTypes.length === 0 && conflicts.length === 0,
-      missing_types: missingTypes,
-      conflicts,
-      schema_errors_by_type: {},
-      warnings: [],
-    });
+      const bundleDatasetIds = new Set(items.map(bi => bi.datasetId));
+      const bundleDatasets = allInstances.filter(d => bundleDatasetIds.has(d.dataset_id));
+      const coveredTypes = new Set(bundleDatasets.map(d => d.dataset_type_id));
+      const missingTypes = requiredTypes.filter(t => !coveredTypes.has(t));
+
+      // Check for type duplicates
+      const typeCounts = new Map<string, string[]>();
+      bundleDatasets.forEach(d => {
+        const arr = typeCounts.get(d.dataset_type_id) || [];
+        arr.push(d.dataset_id);
+        typeCounts.set(d.dataset_type_id, arr);
+      });
+      const conflicts = Array.from(typeCounts.entries())
+        .filter(([, ids]) => ids.length > 1)
+        .map(([typeId, ids]) => ({ dataset_type_id: typeId, dataset_ids: ids }));
+
+      // Build warnings
+      const warnings: string[] = [];
+      if (requiredTypes.length === 0) {
+        warnings.push('Ce scénario ne déclare aucun type de dataset requis. La validation de couverture est ignorée.');
+      }
+      if (bundleDatasets.length === 0) {
+        warnings.push('Ce bundle ne contient aucun dataset. Ajoutez des datasets avant de valider.');
+      }
+
+      const ok = missingTypes.length === 0 && conflicts.length === 0;
+      setResult({
+        ok,
+        missing_types: missingTypes,
+        conflicts,
+        schema_errors_by_type: {},
+        warnings,
+      });
+    } catch (err: any) {
+      setResult({
+        ok: false,
+        missing_types: [],
+        conflicts: [],
+        schema_errors_by_type: {},
+        warnings: [`Erreur lors de la validation : ${err.message || 'Erreur inconnue'}`],
+      });
+    }
   };
 
   return (

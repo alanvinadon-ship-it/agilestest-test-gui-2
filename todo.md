@@ -587,3 +587,4 @@
 - [x] Fix: pageSize > 100 provoquant TRPCClientError sur /scenarios (SuggestScenariosModal pageSize: 1000, AdminProjectAccessPage pageSize: 200, DriveReportingPage pageSize: 200/500)
 - [x] Docs: Documentation workflow finalisation scénarios (DRAFT → FINAL) + génération et utilisation des scripts
 - [x] Docs: Ajouter captures d'écran annotées à la documentation Scénarios & Scripts
+- [x] Bug: Bouton Valider dans ValidateBundleModal ne fait rien quand on clique dessus
