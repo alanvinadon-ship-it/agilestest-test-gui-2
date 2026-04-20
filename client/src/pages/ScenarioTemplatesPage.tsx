@@ -92,20 +92,20 @@ export default function ScenarioTemplatesPage() {
 
   // All templates (built-in + community published)
   const { data: templates, isLoading } = trpc.scenarioTemplates.list.useQuery({
-    domain: domainFilter as any,
-    difficulty: difficultyFilter as any,
+    domain: domainFilter || undefined,
+    difficulty: difficultyFilter || undefined,
     search: search || undefined,
     communityOnly: tab === "community" ? true : undefined,
-  }, { enabled: tab === "all" });
+  } as any, { enabled: tab === "all" });
 
   // Community-only templates via listPublic
   const { data: communityData, isLoading: communityLoading } = trpc.scenarioTemplates.listPublic.useQuery({
     page: communityPage,
     pageSize: COMMUNITY_PAGE_SIZE,
     search: search || undefined,
-    domain: domainFilter as any,
+    domain: domainFilter || undefined,
     testType: undefined,
-  }, { enabled: tab === "community" });
+  } as any, { enabled: tab === "community" });
 
   // Fetch detail for expanded template (includes comments + ratings)
   const { data: expandedDetail } = trpc.scenarioTemplates.get.useQuery(

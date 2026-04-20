@@ -594,4 +594,5 @@
 - [x] Feature: Ajouter sélecteur de catalogue prédéfini dans le modal de création de gabarit de dataset
 - [x] Bug: bundleId et datasetId reçoivent undefined lors de l'ajout d'un dataset à un bundle
 - [x] Bug: button imbriqué dans button sur la page /bundles (HTML invalide)
-- [ ] Bug: 'Cannot convert undefined or null to object' dans GenerateScriptModal lors de la génération de script IA
+- [x] Bug: 'Cannot convert undefined or null to object' dans GenerateScriptModal lors de la génération de script IA
+- [ ] Bug: Page /templates — TRPCClientError validation Zod sur domain et difficulty (invalid_value: enums ne correspondent pas)
