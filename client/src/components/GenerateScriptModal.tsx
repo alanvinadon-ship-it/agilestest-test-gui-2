@@ -105,15 +105,15 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
     if (!currentProject || !selectedBundleId) throw new Error('Bundle requis');
     const bundle = await utils.bundles.get.fetch({ bundleId: selectedBundleId });
     const itemsResult = await utils.bundleItems.list.fetch({ bundleId: selectedBundleId });
-    const items = itemsResult.data;
+    const items = itemsResult?.data || [];
     const datasets: DatasetInstance[] = [];
     const allSecrets: DatasetSecretKey[] = [];
     for (const item of items) {
       try {
         const ds = await utils.datasetInstances.get.fetch({ datasetId: item.datasetId });
-        datasets.push(ds as any);
+        if (ds) datasets.push(ds as any);
         const secretsResult = await utils.datasetSecrets.list.fetch({ datasetId: item.datasetId });
-        allSecrets.push(...(secretsResult.data as any[]));
+        if (secretsResult?.data) allSecrets.push(...(secretsResult.data as any[]));
       } catch { /* skip */ }
     }
     return buildAiScriptContext({

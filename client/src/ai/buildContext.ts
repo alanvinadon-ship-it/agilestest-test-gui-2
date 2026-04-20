@@ -16,7 +16,8 @@ import type {
 function mergeDatasetValues(datasets: DatasetInstance[]): Record<string, unknown> {
   const merged: Record<string, unknown> = {};
   for (const ds of datasets) {
-    for (const [key, value] of Object.entries(ds.values_json)) {
+    const values = ds.values_json || {};
+    for (const [key, value] of Object.entries(values)) {
       // Préfixe par dataset_type_id pour éviter les collisions
       merged[`${ds.dataset_type_id}.${key}`] = value;
       // Aussi disponible sans préfixe (dernier gagne)
@@ -121,10 +122,11 @@ export function buildAiScriptContext(input: BuildContextInput): AiScriptContext 
   const maskedKeys = extractMaskedKeys(secrets);
 
   // Extraire expected_results et required_inputs depuis les steps
-  const expectedResults = scenario.steps.map(s => s.expected_result).filter(Boolean);
+  const steps = scenario.steps || [];
+  const expectedResults = steps.map(s => s.expected_result).filter(Boolean);
   const requiredInputs: string[] = [];
-  for (const step of scenario.steps) {
-    if (step.parameters) {
+  for (const step of steps) {
+    if (step.parameters && typeof step.parameters === 'object') {
       for (const key of Object.keys(step.parameters)) {
         if (!requiredInputs.includes(key)) requiredInputs.push(key);
       }
@@ -148,7 +150,7 @@ export function buildAiScriptContext(input: BuildContextInput): AiScriptContext 
       id: scenario.id,
       title: scenario.name,
       scenario_code: scenario.scenario_code,
-      steps: scenario.steps.map(s => ({
+      steps: (scenario.steps || []).map(s => ({
         id: s.id,
         order: s.order,
         action: s.action,
