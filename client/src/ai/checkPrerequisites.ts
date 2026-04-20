@@ -95,10 +95,8 @@ export function checkPrerequisites(input: CheckPrerequisitesInput): Prerequisite
 
     // Config / runner_type
     const config = profile.config || profile.parameters || {};
-    const runnerType = (config as any)?.runner_type;
-    if (!runnerType) {
-      items.push(warn('profile.runner', 'profile', 'Runner', 'Aucun runner_type configuré. Le runner par défaut "playwright" sera utilisé.'));
-    }
+    const runnerType = (config as any)?.runner_type || 'playwright';
+    items.push(ok('profile.runner', 'profile', 'Runner', `Runner configuré : ${runnerType}`));
   }
 
   // ── 3. Scénario ────────────────────────────────────────────────────────
@@ -170,7 +168,7 @@ export function checkPrerequisites(input: CheckPrerequisitesInput): Prerequisite
     if (emptyDatasets.length === bundleDatasets.length) {
       items.push(block('dataset.values', 'dataset', 'Valeurs des datasets', 'Tous les datasets sont vides (aucune valeur). Le LLM ne pourra pas générer de données de test.'));
     } else if (emptyDatasets.length > 0) {
-      items.push(warn('dataset.values', 'dataset', 'Valeurs des datasets', `${emptyDatasets.length}/${bundleDatasets.length} dataset(s) sans valeurs. Le script pourrait être incomplet.`));
+      items.push(block('dataset.values', 'dataset', 'Valeurs des datasets', `${emptyDatasets.length}/${bundleDatasets.length} dataset(s) sans valeurs. Tous les datasets doivent avoir des valeurs pour la génération IA.`));
     } else {
       const totalKeys = bundleDatasets.reduce((sum, ds) => sum + Object.keys(ds.values_json || {}).length, 0);
       items.push(ok('dataset', 'dataset', 'Datasets', `${bundleDatasets.length} dataset(s) avec ${totalKeys} clé(s) au total`));
@@ -183,7 +181,7 @@ export function checkPrerequisites(input: CheckPrerequisitesInput): Prerequisite
         const coveredTypes = new Set(bundleDatasets.map(ds => ds.dataset_type_id));
         const missingTypes = requiredTypes.filter(t => !coveredTypes.has(t));
         if (missingTypes.length > 0) {
-          items.push(warn('dataset.coverage', 'dataset', 'Couverture types', `Type(s) requis manquant(s) dans le bundle : ${missingTypes.join(', ')}`));
+          items.push(block('dataset.coverage', 'dataset', 'Couverture types', `Type(s) requis manquant(s) dans le bundle : ${missingTypes.join(', ')}. Ajoutez ces types de dataset au bundle.`));
         } else {
           items.push(ok('dataset.coverage', 'dataset', 'Couverture types', 'Tous les types de dataset requis sont couverts'));
         }

@@ -189,12 +189,13 @@ describe("checkPrerequisites", () => {
       expect(report.canProceed).toBe(true);
     });
 
-    it("should warn when profile has no runner_type", () => {
+    it("should show OK when profile has no runner_type (uses default)", () => {
       const report = checkPrerequisites(fullInput({
         profile: makeProfile({ config: {}, parameters: {} }),
       }));
-      const warning = report.items.find(i => i.key === "profile.runner" && i.severity === "WARNING");
-      expect(warning).toBeDefined();
+      const ok = report.items.find(i => i.key === "profile.runner" && i.severity === "OK");
+      expect(ok).toBeDefined();
+      expect(ok!.message).toContain("playwright");
     });
   });
 
@@ -285,29 +286,30 @@ describe("checkPrerequisites", () => {
       expect(blocking).toBeDefined();
     });
 
-    it("should warn when some datasets are empty", () => {
+    it("should block when some datasets are empty", () => {
       const report = checkPrerequisites(fullInput({
         bundleDatasets: [
           makeDataset({ values_json: { key: "val" } }),
           makeDataset({ uid: "ds-002", values_json: {} }),
         ],
       }));
-      const warning = report.items.find(i => i.key === "dataset.values" && i.severity === "WARNING");
-      expect(warning).toBeDefined();
-      // Still can proceed
-      expect(report.canProceed).toBe(true);
+      const blocking = report.items.find(i => i.key === "dataset.values" && i.severity === "BLOCKING");
+      expect(blocking).toBeDefined();
+      // Cannot proceed when any dataset is empty
+      expect(report.canProceed).toBe(false);
     });
 
-    it("should warn when required dataset types are not covered", () => {
+    it("should block when required dataset types are not covered", () => {
       const report = checkPrerequisites(fullInput({
         bundleDatasets: [
           makeDataset({ dataset_type_id: "CREDENTIALS", values_json: { user: "a" } }),
           // Missing URLS type
         ],
       }));
-      const warning = report.items.find(i => i.key === "dataset.coverage" && i.severity === "WARNING");
-      expect(warning).toBeDefined();
-      expect(warning!.message).toContain("URLS");
+      const blocking = report.items.find(i => i.key === "dataset.coverage" && i.severity === "BLOCKING");
+      expect(blocking).toBeDefined();
+      expect(blocking!.message).toContain("URLS");
+      expect(report.canProceed).toBe(false);
     });
 
     it("should show OK when all required types are covered", () => {
@@ -315,6 +317,7 @@ describe("checkPrerequisites", () => {
       const coverage = report.items.find(i => i.key === "dataset.coverage");
       expect(coverage).toBeDefined();
       expect(coverage!.severity).toBe("OK");
+      expect(report.canProceed).toBe(true);
     });
   });
 
