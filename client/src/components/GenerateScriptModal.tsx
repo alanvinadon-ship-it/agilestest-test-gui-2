@@ -302,13 +302,7 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
       setPlan(result.plan);
       setPlanUsage(result.usage as any);
 
-      const blocking = result.plan.missing_inputs.filter((m: any) => m.severity === 'BLOCKING');
-      if (blocking.length > 0) {
-        setError(`Inputs manquants bloquants: ${blocking.map((b: any) => b.key).join(', ')}`);
-        setStep('config');
-        return;
-      }
-
+      // Missing inputs are shown in plan_review step as warnings, never block the flow
       setStep('plan_review');
     } catch (e: any) {
       setError(e.message || 'Erreur lors de la planification IA');
@@ -610,18 +604,24 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
                 </div>
               )}
 
-              {/* Missing inputs */}
+              {/* Missing inputs — shown as warnings, never block generation */}
               {plan.missing_inputs.length > 0 && (
-                <div className="bg-red-500/5 border border-red-500/10 rounded-md p-3">
-                  <h4 className="text-xs font-semibold text-red-400 mb-1">Inputs manquants</h4>
+                <div className="bg-amber-500/5 border border-amber-500/10 rounded-md p-3">
+                  <h4 className="text-xs font-semibold text-amber-400 mb-1 flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Inputs manquants ({plan.missing_inputs.length}) — le LLM utilisera des placeholders
+                  </h4>
                   {plan.missing_inputs.map((m, i) => (
-                    <div key={i} className="flex items-center gap-1.5 text-[11px] text-red-400/80">
-                      <span className={`px-1 py-0.5 rounded text-[9px] font-bold ${m.severity === 'BLOCKING' ? 'bg-red-500/20' : 'bg-amber-500/20 text-amber-400'}`}>
+                    <div key={i} className="flex items-center gap-1.5 text-[11px] text-amber-400/80">
+                      <span className="px-1 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-400">
                         {m.severity}
                       </span>
                       <span className="font-mono">{m.key}</span> — {m.reason}
                     </div>
                   ))}
+                  <p className="text-[10px] text-muted-foreground mt-2">
+                    Ces inputs manquants n'empêchent pas la génération. Le script produit contiendra des placeholders que vous pourrez compléter manuellement.
+                  </p>
                 </div>
               )}
 

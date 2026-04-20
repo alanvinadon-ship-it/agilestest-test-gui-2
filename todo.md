@@ -597,4 +597,5 @@
 - [x] Bug: 'Cannot convert undefined or null to object' dans GenerateScriptModal lors de la génération de script IA
 - [x] Bug: Page /templates — TRPCClientError validation Zod sur domain et difficulty (invalid_value: enums ne correspondent pas)
 - [x] Bug: GenerateScriptModal — 'Invalid input: expected string, received undefined' au path context.dataset.bundle.id (bundle_id undefined dans le contexte IA)
-- [ ] Feature: Diagnostic prérequis dans GenerateScriptModal — vérification projet, profil, scénario, bundle, datasets, secrets avant génération IA
+- [x] Feature: Diagnostic prérequis dans GenerateScriptModal — vérification projet, profil, scénario, bundle, datasets, secrets avant génération IA
+- [ ] Bug: GenerateScriptModal — 'Inputs manquants bloquants: form_data' bloque la génération alors que ce devrait être un avertissement non-bloquant
