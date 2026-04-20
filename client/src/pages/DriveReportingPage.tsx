@@ -575,7 +575,7 @@ export default function DriveReportingPage() {
 
   // tRPC: campaigns for project
   const { data: campaignsData } = trpc.driveCampaigns.list.useQuery(
-    { projectId, pageSize: 200 },
+    { projectId, pageSize: 100 },
     { enabled: !!projectId }
   );
   const campaigns = (campaignsData?.data || []) as unknown as DriveCampaign[];
@@ -611,7 +611,7 @@ export default function DriveReportingPage() {
 
   // tRPC: KPI samples for all jobs in campaign
   const { data: samplesData } = trpc.kpiSamples.list.useQuery(
-    { campaignId: selectedCampaignId, pageSize: 500 },
+    { campaignId: selectedCampaignId, pageSize: 100 },
     { enabled: !!selectedCampaignId }
   );
   const allSamples = (samplesData?.data || []) as unknown as KpiSample[];

@@ -584,3 +584,4 @@
 - [ ] Keycloak Admin Config: Connection validation and error handling
 - [ ] Keycloak Admin Config: Social provider testing (Google, GitHub)
 - [ ] Keycloak Admin Config: Configuration history and audit log
+- [x] Fix: pageSize > 100 provoquant TRPCClientError sur /scenarios (SuggestScenariosModal pageSize: 1000, AdminProjectAccessPage pageSize: 200, DriveReportingPage pageSize: 200/500)

@@ -46,7 +46,7 @@ function useIncidentData(incidentId: string) {
 
   // 1. Campaigns for project
   const { data: campaignsData } = trpc.driveCampaigns.list.useQuery(
-    { projectId, pageSize: 200 },
+    { projectId, pageSize: 100 },
     { enabled: !!projectId }
   );
   const campaign = campaignsData?.data?.[0] ?? null;

@@ -86,7 +86,7 @@ export default function SuggestScenariosModal({ profile, projectId, projectName,
 
   // Fetch scenarios for the project to build the ScenarioStore
   const { data: scenariosData } = trpc.scenarios.list.useQuery(
-    { projectId, pageSize: 1000 },
+    { projectId, pageSize: 100 },
     { enabled: !!projectId && open }
   );
   const createMutation = trpc.scenarios.create.useMutation();

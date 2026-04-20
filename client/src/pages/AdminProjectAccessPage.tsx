@@ -23,7 +23,7 @@ import type { ProjectMembership, ProjectRole, AdminUser } from '../admin/types';
 export default function AdminProjectAccessPage() {
   const { user: currentUser } = useAuth();
   const { currentProject } = useProject();
-  const { data: projectsData } = trpc.projects.list.useQuery({ page: 1, pageSize: 200 });
+  const { data: projectsData } = trpc.projects.list.useQuery({ page: 1, pageSize: 100 });
   const allProjects = useMemo(() => projectsData?.data || [], [projectsData]);
   const actor = currentUser
     ? { id: currentUser.id, name: currentUser.full_name, email: currentUser.email }
