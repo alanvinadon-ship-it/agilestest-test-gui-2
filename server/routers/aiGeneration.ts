@@ -15,7 +15,7 @@ import { protectedProcedure } from "../_core/trpc";
 import { invokeLLM } from "../_core/llm";
 import { getDb } from "../db";
 import { generatedScripts } from "../../drizzle/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 
 // ─── Zod schemas for AI output validation ───────────────────────────────
 
@@ -478,6 +478,11 @@ export const aiGenerationRouter = router({
         : `Script v${nextVersion}`;
 
       const scriptUid = (await import("crypto")).randomUUID();
+      // Map env to script status: PROD/PREPROD/PILOT_ORANGE → VALIDATED, DEV → DRAFT
+      const status = ['PROD', 'PREPROD', 'PILOT_ORANGE'].includes(input.env.toUpperCase())
+        ? 'VALIDATED'
+        : 'DRAFT';
+
       const res = await db.insert(generatedScripts).values({
         uid: scriptUid,
         projectId: input.projectId,
@@ -486,7 +491,7 @@ export const aiGenerationRouter = router({
         language: input.codeLanguage.toLowerCase(),
         code: codePayload,
         version: nextVersion,
-        status: "DRAFT",
+        status: status as 'DRAFT' | 'VALIDATED' | 'DEPRECATED',
         createdBy: String(ctx.user!.id),
       });
 

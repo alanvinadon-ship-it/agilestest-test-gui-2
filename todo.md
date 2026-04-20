@@ -600,3 +600,4 @@
 - [x] Feature: Diagnostic prérequis dans GenerateScriptModal — vérification projet, profil, scénario, bundle, datasets, secrets avant génération IA
 - [x] Bug: GenerateScriptModal — 'Inputs manquants bloquants: form_data' bloque la génération alors que ce devrait être un avertissement non-bloquant
 - [ ] Feature: Créer dataset FORM_DATA dans bundle BUNDLE_WEB_PROD_V1 pour éliminer l'avertissement missing_inputs lors de la génération IA
+- [ ] Bug: Scripts générés sauvegardés en statut 'DRAFT' au lieu du statut de l'environnement sélectionné (PROD, PREPROD, etc.)
