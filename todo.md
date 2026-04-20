@@ -595,4 +595,5 @@
 - [x] Bug: bundleId et datasetId reçoivent undefined lors de l'ajout d'un dataset à un bundle
 - [x] Bug: button imbriqué dans button sur la page /bundles (HTML invalide)
 - [x] Bug: 'Cannot convert undefined or null to object' dans GenerateScriptModal lors de la génération de script IA
-- [ ] Bug: Page /templates — TRPCClientError validation Zod sur domain et difficulty (invalid_value: enums ne correspondent pas)
+- [x] Bug: Page /templates — TRPCClientError validation Zod sur domain et difficulty (invalid_value: enums ne correspondent pas)
+- [ ] Bug: GenerateScriptModal — 'Invalid input: expected string, received undefined' au path context.dataset.bundle.id (bundle_id undefined dans le contexte IA)

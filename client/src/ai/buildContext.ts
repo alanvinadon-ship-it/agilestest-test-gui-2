@@ -135,11 +135,11 @@ export function buildAiScriptContext(input: BuildContextInput): AiScriptContext 
 
   return {
     project: {
-      id: project.id,
-      name: project.name,
+      id: String(project.id || ''),
+      name: project.name || '',
     },
     profile: {
-      id: profile.id,
+      id: String(profile.id || ''),
       domain: profile.domain || (profile as any).protocol || 'WEB',
       test_type: profile.test_type,
       profile_type: (profile as any).profile_type || 'UI_E2E',
@@ -147,16 +147,16 @@ export function buildAiScriptContext(input: BuildContextInput): AiScriptContext 
       config: profile.config || profile.parameters || {},
     },
     scenario: {
-      id: scenario.id,
-      title: scenario.name,
+      id: String(scenario.id || ''),
+      title: scenario.name || '',
       scenario_code: scenario.scenario_code,
-      steps: (scenario.steps || []).map(s => ({
-        id: s.id,
-        order: s.order,
-        action: s.action,
-        description: s.description,
-        expected_result: s.expected_result,
-        parameters: s.parameters,
+      steps: (scenario.steps || []).map((s, idx) => ({
+        id: String(s.id || `step-${idx + 1}`),
+        order: typeof s.order === 'number' ? s.order : idx + 1,
+        action: s.action || '',
+        description: s.description || '',
+        expected_result: s.expected_result || '',
+        parameters: (s.parameters && typeof s.parameters === 'object') ? s.parameters : {},
       })),
       expected_results: expectedResults,
       required_inputs: requiredInputs,
@@ -166,9 +166,9 @@ export function buildAiScriptContext(input: BuildContextInput): AiScriptContext 
     dataset: {
       env: bundle.env,
       bundle: {
-        id: bundle.bundle_id,
+        id: (bundle as any).uid || bundle.bundle_id || String((bundle as any).id || ''),
         name: bundle.name,
-        version: bundle.version,
+        version: typeof bundle.version === 'number' ? bundle.version : 1,
       },
       resolved: {
         merged_json: mergedJson,
