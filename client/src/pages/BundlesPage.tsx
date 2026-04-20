@@ -588,6 +588,9 @@ export default function BundlesPage() {
       utils.bundles.list.invalidate();
       toast.success('Bundle activé');
     },
+    onError: (err) => {
+      toast.error(err.message || 'Erreur lors de l\'activation du bundle');
+    },
   });
 
   const deprecateMutation = trpc.bundles.update.useMutation({

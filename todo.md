@@ -588,3 +588,6 @@
 - [x] Docs: Documentation workflow finalisation scénarios (DRAFT → FINAL) + génération et utilisation des scripts
 - [x] Docs: Ajouter captures d'écran annotées à la documentation Scénarios & Scripts
 - [x] Bug: Bouton Valider dans ValidateBundleModal ne fait rien quand on clique dessus
+- [x] Feature: UI pour gérer requiredDatasetTypes dans l'édition des scénarios (déjà implémenté)
+- [x] Feature: Permettre la création de datasets pour l'environnement PROD dans DatasetInstancesPage (déjà implémenté)
+- [x] Feature: Validation backend empêchant l'activation d'un bundle vide (sans datasets)

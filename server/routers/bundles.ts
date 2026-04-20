@@ -396,6 +396,23 @@ export const bundlesRouter = router({
   })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+    // Validation: empêcher l'activation d'un bundle vide (sans datasets)
+    if (input.status === "ACTIVE") {
+      const items = await db.select().from(bundleItems).where(eq(bundleItems.bundleId, input.bundleId));
+      if (items.length === 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Impossible d'activer un bundle vide. Ajoutez au moins un dataset avant d'activer le bundle.",
+        });
+      }
+      // Vérifier que le bundle existe
+      const [bundle] = await db.select().from(datasetBundles).where(eq(datasetBundles.uid, input.bundleId)).limit(1);
+      if (!bundle) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Bundle introuvable." });
+      }
+    }
+
     const u: Record<string, unknown> = {};
     if (input.name !== undefined) u.name = input.name;
     if (input.status !== undefined) u.status = input.status;
