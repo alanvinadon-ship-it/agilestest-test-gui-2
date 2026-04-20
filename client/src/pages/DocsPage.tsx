@@ -47,6 +47,7 @@ const GUIDES: GuideEntry[] = [
   { slug: 'dr-runbook', title: 'DR Runbook K8s', icon: AlertTriangle, file: '/docs/DR_RUNBOOK.md', description: 'Disaster Recovery — backup, restore, rotation secrets' },
   { slug: 'parity-checklist', title: 'Parité Compose ↔ K8s', icon: ClipboardList, file: '/docs/PARITY_CHECKLIST.md', description: 'Checklist de parité fonctionnelle entre les deux modes' },
   { slug: 'smoke-tests', title: 'Smoke Tests', icon: Target, file: '/docs/SMOKE_TESTS.md', description: 'Étapes et résultats attendus des smoke tests' },
+  { slug: 'scenario-workflow', title: 'Scénarios & Scripts', icon: FileText, file: '/docs/SCENARIO_WORKFLOW_SCRIPTS.md', description: 'Finalisation scénarios (DRAFT → FINAL) et génération de scripts IA' },
 ];
 
 // ─── TOC extraction ─────────────────────────────────────────────────────
