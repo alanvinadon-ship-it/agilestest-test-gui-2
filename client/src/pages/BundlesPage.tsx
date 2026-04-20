@@ -712,8 +712,9 @@ export default function BundlesPage() {
 
             return (
               <div key={bundle.bundle_id} className="bg-card border border-border rounded-lg overflow-hidden">
-                <button type="button" onClick={() => setExpandedBundle(isExpanded ? null : bundle.bundle_id)}
-                  className="w-full flex items-center justify-between px-5 py-4 hover:bg-secondary/30 transition-colors">
+                <div role="button" tabIndex={0} onClick={() => setExpandedBundle(isExpanded ? null : bundle.bundle_id)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedBundle(isExpanded ? null : bundle.bundle_id); } }}
+                  className="w-full flex items-center justify-between px-5 py-4 hover:bg-secondary/30 transition-colors cursor-pointer">
                   <div className="flex items-center gap-3">
                     <Package className="w-4 h-4 text-primary/60" />
                     <span className="text-sm font-medium text-foreground font-mono">{bundle.name}</span>
@@ -750,7 +751,7 @@ export default function BundlesPage() {
                     )}
                     <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                   </div>
-                </button>
+                </div>
 
                 {isExpanded && (
                   <div className="border-t border-border">
