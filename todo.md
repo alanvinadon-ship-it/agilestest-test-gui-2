@@ -591,3 +591,4 @@
 - [x] Feature: UI pour gérer requiredDatasetTypes dans l'édition des scénarios (déjà implémenté)
 - [x] Feature: Permettre la création de datasets pour l'environnement PROD dans DatasetInstancesPage (déjà implémenté)
 - [x] Feature: Validation backend empêchant l'activation d'un bundle vide (sans datasets)
+- [x] Feature: Ajouter sélecteur de catalogue prédéfini dans le modal de création de gabarit de dataset

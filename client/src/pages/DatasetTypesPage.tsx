@@ -3,8 +3,9 @@ import { trpc } from '@/lib/trpc';
 import type { DatasetTypeField, TestType } from '../types';
 import {
   Plus, Database, Search, Filter, Edit2, Trash2, X, AlertCircle,
-  ChevronDown, ChevronRight, Check,
+  ChevronDown, ChevronRight, Check, BookOpen,
 } from 'lucide-react';
+import { DATASET_TYPE_CATALOG, type DatasetTypeSeed } from '../config/datasetTypeCatalog';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -140,6 +141,32 @@ function DatasetTypeModal({
   const [tags, setTags] = useState(initial?.tags?.join(', ') || '');
   const [fields, setFields] = useState<DatasetTypeField[]>(initial?.schema_fields || []);
   const [error, setError] = useState('');
+  const [showCatalog, setShowCatalog] = useState(!isEdit);
+  const [catalogFilter, setCatalogFilter] = useState('');
+
+  const filteredCatalog = useMemo(() => {
+    if (!catalogFilter) return DATASET_TYPE_CATALOG;
+    const q = catalogFilter.toLowerCase();
+    return DATASET_TYPE_CATALOG.filter(dt =>
+      dt.name.toLowerCase().includes(q) ||
+      dt.dataset_type_id.toLowerCase().includes(q) ||
+      dt.domain.toLowerCase().includes(q) ||
+      dt.description.toLowerCase().includes(q) ||
+      dt.tags?.some(t => t.toLowerCase().includes(q))
+    );
+  }, [catalogFilter]);
+
+  function applyFromCatalog(seed: DatasetTypeSeed) {
+    setSlug(seed.dataset_type_id);
+    setName(seed.name);
+    setDomain(seed.domain);
+    setTestType(seed.test_type || '');
+    setDescription(seed.description);
+    setTags(seed.tags?.join(', ') || '');
+    setFields(seed.schema_fields.map(f => ({ ...f })));
+    setShowCatalog(false);
+    setError('');
+  }
 
   function addField() {
     setFields([...fields, { name: '', type: 'string', required: false, description: '', example: '' }]);
@@ -197,6 +224,55 @@ function DatasetTypeModal({
           {error && (
             <div className="flex items-center gap-2 p-3 rounded bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
               <AlertCircle className="w-4 h-4 shrink-0" />{error}
+            </div>
+          )}
+
+          {/* Catalogue prédéfini */}
+          {!isEdit && (
+            <div>
+              <button
+                onClick={() => setShowCatalog(!showCatalog)}
+                className="flex items-center gap-2 text-sm font-semibold text-orange-400 hover:text-orange-300 transition-colors mb-2"
+              >
+                <BookOpen className="w-4 h-4" />
+                {showCatalog ? 'Masquer le catalogue' : 'Choisir depuis le catalogue prédéfini'}
+                <ChevronDown className={`w-3 h-3 transition-transform ${showCatalog ? 'rotate-180' : ''}`} />
+              </button>
+              {showCatalog && (
+                <div className="border border-orange-500/20 rounded-lg bg-orange-500/5 p-3 space-y-2">
+                  <input
+                    type="text"
+                    value={catalogFilter}
+                    onChange={e => setCatalogFilter(e.target.value)}
+                    placeholder="Rechercher un gabarit (ex: users, login, auth, load_test...)" 
+                    className="w-full px-3 py-2 rounded bg-muted/50 border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+                  />
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {filteredCatalog.length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic py-2">Aucun gabarit trouvé.</p>
+                    ) : (
+                      filteredCatalog.map(dt => (
+                        <button
+                          key={dt.dataset_type_id}
+                          onClick={() => applyFromCatalog(dt)}
+                          className="w-full text-left px-3 py-2 rounded hover:bg-orange-500/10 transition-colors group"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs text-orange-400">{dt.dataset_type_id}</span>
+                            <DomainBadge domain={dt.domain} />
+                            {dt.test_type && <TestTypeBadge testType={dt.test_type} />}
+                          </div>
+                          <div className="text-sm font-medium text-foreground mt-0.5">{dt.name}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{dt.description}</div>
+                          <div className="text-[10px] text-muted-foreground/60 mt-0.5">
+                            {dt.schema_fields.length} champ(s) — {dt.tags?.join(', ')}
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
