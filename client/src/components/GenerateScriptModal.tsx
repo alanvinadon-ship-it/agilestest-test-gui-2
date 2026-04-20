@@ -196,11 +196,15 @@ export default function GenerateScriptModal({ scenario, profile, onClose, onSave
   useEffect(() => {
     if (bundlesData?.data) {
       setBundles(bundlesData.data);
+      // Auto-select first bundle when data arrives and none is selected
       if (bundlesData.data.length > 0 && !selectedBundleId) {
         setSelectedBundleId(bundlesData.data[0].uid);
       }
+    } else {
+      // Clear bundles when no data (e.g. env changed, no bundles found)
+      setBundles([]);
     }
-  }, [bundlesData]);
+  }, [bundlesData, selectedBundleId]);
 
   // ── Run prerequisite check whenever bundle selection changes ──────────
   useEffect(() => {

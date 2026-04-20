@@ -599,8 +599,9 @@
 - [x] Bug: GenerateScriptModal — 'Invalid input: expected string, received undefined' au path context.dataset.bundle.id (bundle_id undefined dans le contexte IA)
 - [x] Feature: Diagnostic prérequis dans GenerateScriptModal — vérification projet, profil, scénario, bundle, datasets, secrets avant génération IA
 - [x] Bug: GenerateScriptModal — 'Inputs manquants bloquants: form_data' bloque la génération alors que ce devrait être un avertissement non-bloquant
-- [ ] Feature: Créer dataset FORM_DATA dans bundle BUNDLE_WEB_PROD_V1 pour éliminer l'avertissement missing_inputs lors de la génération IA
+- [x] Feature: Créer dataset FORM_DATA dans bundle BUNDLE_WEB_PROD_V1 pour éliminer l'avertissement missing_inputs lors de la génération IA (seed exécuté, 7 datasets créés)
 - [x] Bug: Scripts générés sauvegardés en statut 'DRAFT' au lieu du statut de l'environnement sélectionné (PROD, PREPROD, etc.)
-- [ ] Bug: Prérequis bloquant — Runner non configuré. Le LLM ne peut pas générer de script sans runner_type défini
-- [ ] Bug: Prérequis bloquant — Valeurs des datasets vides. Tous les datasets du bundle doivent avoir des valeurs pour la génération IA
-- [ ] Bug: Prérequis bloquant — Couverture types incomplète. Le dataset type form_data n'existe pas ou n'est pas dans le bundle
+- [x] Bug: Prérequis bloquant — Runner non configuré. Corrigé : valeur par défaut 'playwright' + support camelCase/snake_case
+- [x] Bug: Prérequis bloquant — Valeurs des datasets vides. Corrigé : helpers getValuesJson()/getDatasetTypeId() supportent camelCase et snake_case
+- [x] Bug: Prérequis bloquant — Couverture types incomplète. Corrigé : seed 7 datasets (search_data, auth_data, form_data) + fix camelCase
+- [x] Bug: Dropdown bundle ne se rafraîchit pas quand on change l'environnement dans GenerateScriptModal (useEffect corrigé pour gérer le cas bundlesData vide)
