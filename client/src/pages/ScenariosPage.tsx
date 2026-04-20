@@ -91,22 +91,40 @@ function FinalizeDialog({ scenario, onClose, onFinalized }: {
 }) {
   const [result, setResult] = useState<{ success: boolean; errors: string[] } | null>(null);
   const [processing, setProcessing] = useState(false);
+  const utils = trpc.useUtils();
+
+  // Validation checks
+  const errors: string[] = [];
+  if (!scenario.name?.trim()) errors.push('Le titre du scénario est vide');
+  if (!scenario.steps || scenario.steps.length === 0) errors.push('Au moins 1 étape est requise');
+  if (!scenario.steps?.some((s: any) => s.expected_result?.trim())) errors.push('Au moins 1 résultat attendu est requis');
+
+  const updateMutation = trpc.scenarios.update.useMutation({
+    onSuccess: () => {
+      utils.scenarios.list.invalidate();
+      setResult({ success: true, errors: [] });
+      setProcessing(false);
+      setTimeout(() => { onFinalized(); onClose(); }, 800);
+    },
+    onError: (err) => {
+      setResult({ success: false, errors: [err.message || 'Erreur lors de la finalisation'] });
+      setProcessing(false);
+    },
+  });
 
   const handleFinalize = () => {
+    // Validate before attempting finalization
+    if (errors.length > 0) {
+      setResult({ success: false, errors });
+      return;
+    }
+
     setProcessing(true);
-    setTimeout(() => {
-      // Finalize via tRPC: update status to FINAL
-      try {
-        // We use a direct fetch to the tRPC mutation since this is a sub-component
-        // The parent will invalidate the cache via onFinalized
-        setResult({ success: true, errors: [] });
-        setProcessing(false);
-        setTimeout(() => { onFinalized(); onClose(); }, 800);
-      } catch (err: any) {
-        setResult({ success: false, errors: [err.message || 'Erreur lors de la finalisation'] });
-        setProcessing(false);
-      }
-    }, 400);
+    // Call tRPC mutation to update scenario status to FINAL
+    updateMutation.mutate({
+      scenarioId: Number(scenario.id),
+      status: 'FINAL',
+    });
   };
 
   return (
