@@ -11,7 +11,7 @@ import { DATASET_TYPE_CATALOG, type DatasetTypeSeed } from '../config/datasetTyp
 
 const DOMAINS = ['WEB', 'API', 'IMS', 'EPC', '5GC', 'RAN', 'IOT', 'MOBILE', 'DESKTOP'] as const;
 const TEST_TYPES: TestType[] = ['VABF', 'VSR', 'VABE'];
-const FIELD_TYPES = ['string', 'number', 'boolean', 'email', 'url', 'date', 'phone', 'ip', 'enum'] as const;
+const FIELD_TYPES = ['string', 'number', 'boolean', 'email', 'url', 'date', 'phone', 'ip', 'enum', 'object'] as const;
 
 const DOMAIN_COLORS: Record<string, string> = {
   WEB: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
@@ -49,6 +49,7 @@ function FieldTypeBadge({ type }: { type: string }) {
     string: 'text-blue-400', number: 'text-amber-400', boolean: 'text-emerald-400',
     email: 'text-cyan-400', url: 'text-purple-400', date: 'text-rose-400',
     phone: 'text-orange-400', ip: 'text-teal-400', enum: 'text-fuchsia-400',
+    object: 'text-yellow-400',
   };
   return <span className={`font-mono text-[10px] ${colors[type] || 'text-muted-foreground'}`}>{type}</span>;
 }
@@ -71,13 +72,24 @@ function SchemaPreview({ fields, placeholders }: { fields: DatasetTypeField[]; p
         </thead>
         <tbody>
           {fields.map((f, i) => (
-            <tr key={i} className="border-t border-border/30">
-              <td className="px-2 py-1 font-mono text-foreground">{f.name}</td>
-              <td className="px-2 py-1"><FieldTypeBadge type={f.type} /></td>
-              <td className="px-2 py-1 text-center">{f.required ? <Check className="w-3 h-3 text-emerald-400 mx-auto" /> : <span className="text-muted-foreground">—</span>}</td>
-              <td className="px-2 py-1 text-muted-foreground">{f.description}</td>
-              <td className="px-2 py-1 font-mono text-orange-400/70">{placeholders[f.name] || f.example || '—'}</td>
-            </tr>
+            <>
+              <tr key={i} className={`border-t border-border/30 ${f.type === 'object' ? 'bg-yellow-500/5' : ''}`}>
+                <td className="px-2 py-1 font-mono text-foreground">{f.name}</td>
+                <td className="px-2 py-1"><FieldTypeBadge type={f.type} /></td>
+                <td className="px-2 py-1 text-center">{f.required ? <Check className="w-3 h-3 text-emerald-400 mx-auto" /> : <span className="text-muted-foreground">—</span>}</td>
+                <td className="px-2 py-1 text-muted-foreground">{f.description}</td>
+                <td className="px-2 py-1 font-mono text-orange-400/70">{placeholders[f.name] || f.example || '—'}</td>
+              </tr>
+              {f.type === 'object' && f.nested?.map((nf, ni) => (
+                <tr key={`${i}-${ni}`} className="border-t border-border/20 bg-muted/10">
+                  <td className="px-2 py-1 font-mono text-muted-foreground pl-6">↳ {nf.name}</td>
+                  <td className="px-2 py-1"><FieldTypeBadge type={nf.type} /></td>
+                  <td className="px-2 py-1 text-center">{nf.required ? <Check className="w-3 h-3 text-emerald-400 mx-auto" /> : <span className="text-muted-foreground">—</span>}</td>
+                  <td className="px-2 py-1 text-muted-foreground/70 text-[10px]">{nf.description}</td>
+                  <td className="px-2 py-1 font-mono text-orange-400/50 text-[10px]">{nf.example || '—'}</td>
+                </tr>
+              ))}
+            </>
           ))}
         </tbody>
       </table>
@@ -363,28 +375,104 @@ function DatasetTypeModal({
             ) : (
               <div className="space-y-2">
                 {fields.map((f, i) => (
-                  <div key={i} className="grid grid-cols-[1fr_100px_50px_1fr_auto] gap-2 items-center bg-muted/20 rounded p-2">
-                    <input
-                      type="text" value={f.name} onChange={e => updateField(i, 'name', e.target.value)}
-                      placeholder="nom_champ"
-                      className="px-2 py-1 rounded bg-muted/50 border border-border text-xs text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-orange-500/50"
-                    />
-                    <select value={f.type} onChange={e => updateField(i, 'type', e.target.value)}
-                      className="px-2 py-1 rounded bg-muted/50 border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-orange-500/50">
-                      {FIELD_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                    <label className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <input type="checkbox" checked={f.required} onChange={e => updateField(i, 'required', e.target.checked)} />
-                      Req
-                    </label>
-                    <input
-                      type="text" value={f.description} onChange={e => updateField(i, 'description', e.target.value)}
-                      placeholder="description"
-                      className="px-2 py-1 rounded bg-muted/50 border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-orange-500/50"
-                    />
-                    <button onClick={() => removeField(i)} className="p-1 rounded hover:bg-red-500/10 text-red-400">
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+                  <div key={i} className="space-y-1">
+                    <div className={`grid grid-cols-[1fr_100px_50px_1fr_auto] gap-2 items-center rounded p-2 ${f.type === 'object' ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-muted/20'}`}>
+                      <input
+                        type="text" value={f.name} onChange={e => updateField(i, 'name', e.target.value)}
+                        placeholder="nom_champ"
+                        className="px-2 py-1 rounded bg-muted/50 border border-border text-xs text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+                      />
+                      <select value={f.type} onChange={e => {
+                        updateField(i, 'type', e.target.value);
+                        if (e.target.value === 'object' && !f.nested) {
+                          updateField(i, 'nested', []);
+                        }
+                      }}
+                        className="px-2 py-1 rounded bg-muted/50 border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-orange-500/50">
+                        {FIELD_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                      <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <input type="checkbox" checked={f.required} onChange={e => updateField(i, 'required', e.target.checked)} />
+                        Req
+                      </label>
+                      <input
+                        type="text" value={f.description} onChange={e => updateField(i, 'description', e.target.value)}
+                        placeholder="description"
+                        className="px-2 py-1 rounded bg-muted/50 border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+                      />
+                      <button onClick={() => removeField(i)} className="p-1 rounded hover:bg-red-500/10 text-red-400">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                    {/* Nested fields for object type */}
+                    {f.type === 'object' && (
+                      <div className="ml-6 pl-3 border-l-2 border-yellow-500/30 space-y-1">
+                        {(f.nested || []).map((nf, ni) => (
+                          <div key={ni} className="grid grid-cols-[1fr_80px_40px_1fr_80px_auto] gap-1.5 items-center bg-muted/10 rounded p-1.5">
+                            <input
+                              type="text" value={nf.name}
+                              onChange={e => {
+                                const nested = [...(f.nested || [])];
+                                nested[ni] = { ...nested[ni], name: e.target.value };
+                                updateField(i, 'nested', nested);
+                              }}
+                              placeholder="sous_champ"
+                              className="px-1.5 py-0.5 rounded bg-muted/50 border border-border text-[10px] text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-yellow-500/50"
+                            />
+                            <select value={nf.type}
+                              onChange={e => {
+                                const nested = [...(f.nested || [])];
+                                nested[ni] = { ...nested[ni], type: e.target.value as any };
+                                updateField(i, 'nested', nested);
+                              }}
+                              className="px-1 py-0.5 rounded bg-muted/50 border border-border text-[10px] text-foreground focus:outline-none focus:ring-1 focus:ring-yellow-500/50">
+                              {FIELD_TYPES.filter(t => t !== 'object').map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                            <label className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                              <input type="checkbox" checked={nf.required}
+                                onChange={e => {
+                                  const nested = [...(f.nested || [])];
+                                  nested[ni] = { ...nested[ni], required: e.target.checked };
+                                  updateField(i, 'nested', nested);
+                                }} />
+                              R
+                            </label>
+                            <input
+                              type="text" value={nf.description}
+                              onChange={e => {
+                                const nested = [...(f.nested || [])];
+                                nested[ni] = { ...nested[ni], description: e.target.value };
+                                updateField(i, 'nested', nested);
+                              }}
+                              placeholder="description"
+                              className="px-1.5 py-0.5 rounded bg-muted/50 border border-border text-[10px] text-foreground focus:outline-none focus:ring-1 focus:ring-yellow-500/50"
+                            />
+                            <input
+                              type="text" value={nf.example || ''}
+                              onChange={e => {
+                                const nested = [...(f.nested || [])];
+                                nested[ni] = { ...nested[ni], example: e.target.value };
+                                updateField(i, 'nested', nested);
+                              }}
+                              placeholder="exemple"
+                              className="px-1.5 py-0.5 rounded bg-muted/50 border border-border text-[10px] text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-yellow-500/50"
+                            />
+                            <button onClick={() => {
+                              const nested = (f.nested || []).filter((_, idx) => idx !== ni);
+                              updateField(i, 'nested', nested);
+                            }} className="p-0.5 rounded hover:bg-red-500/10 text-red-400">
+                              <Trash2 className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                        ))}
+                        <button onClick={() => {
+                          const nested = [...(f.nested || []), { name: '', type: 'string' as const, required: false, description: '', example: '' }];
+                          updateField(i, 'nested', nested);
+                        }} className="text-[10px] text-yellow-400 hover:text-yellow-300 flex items-center gap-1 mt-1">
+                          <Plus className="w-2.5 h-2.5" /> Ajouter un sous-champ
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

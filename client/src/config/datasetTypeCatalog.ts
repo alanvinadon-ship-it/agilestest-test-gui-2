@@ -74,6 +74,30 @@ const FORM_DATA: DatasetTypeSeed = {
     { name: 'field_type', type: 'enum', required: false, description: 'Type de champ HTML', example: 'text', enum_values: ['text', 'email', 'number', 'tel', 'select', 'checkbox', 'textarea', 'date'] },
     { name: 'is_required', type: 'boolean', required: false, description: 'Champ obligatoire', example: 'true' },
     { name: 'validation_regex', type: 'string', required: false, description: 'Pattern de validation', example: '^[A-Za-z ]+$' },
+    {
+      name: 'user_info',
+      type: 'object',
+      required: true,
+      description: 'Informations utilisateur structurées (prénom, nom, email, téléphone)',
+      nested: [
+        { name: 'firstName', type: 'string', required: true, description: 'Prénom', example: 'Jean' },
+        { name: 'lastName', type: 'string', required: true, description: 'Nom de famille', example: 'Kouassi' },
+        { name: 'email', type: 'email', required: true, description: 'Adresse email', example: 'jean@example.com' },
+        { name: 'phone', type: 'phone', required: false, description: 'Numéro de téléphone', example: '+225 07 01 02 03 04' },
+      ]
+    },
+    {
+      name: 'address',
+      type: 'object',
+      required: false,
+      description: 'Adresse postale complète',
+      nested: [
+        { name: 'street', type: 'string', required: true, description: 'Rue et numéro', example: '123 Rue de la Paix' },
+        { name: 'city', type: 'string', required: true, description: 'Ville', example: 'Abidjan' },
+        { name: 'zipCode', type: 'string', required: false, description: 'Code postal', example: '01 BP 1234' },
+        { name: 'country', type: 'string', required: true, description: 'Pays', example: "C\u00f4te d'Ivoire" },
+      ]
+    },
   ],
   example_placeholders: {
     field_name: 'champ_{{index}}',
@@ -81,7 +105,7 @@ const FORM_DATA: DatasetTypeSeed = {
     field_type: 'text',
     is_required: 'true',
   },
-  tags: ['formulaire', 'saisie', 'validation'],
+  tags: ['formulaire', 'saisie', 'validation', 'object'],
 };
 
 const SEARCH_DATA: DatasetTypeSeed = {

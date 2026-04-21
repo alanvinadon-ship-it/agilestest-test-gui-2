@@ -59,6 +59,30 @@ export const seedRouter = {
               { name: 'field_type', type: 'enum', required: false, description: 'Type de champ HTML', example: 'text', enum_values: ['text', 'email', 'number', 'tel', 'select', 'checkbox', 'textarea', 'date'] },
               { name: 'is_required', type: 'boolean', required: false, description: 'Champ obligatoire', example: 'true' },
               { name: 'validation_regex', type: 'string', required: false, description: 'Pattern de validation', example: '^[A-Za-z ]+$' },
+              {
+                name: 'user_info',
+                type: 'object',
+                required: true,
+                description: 'Informations utilisateur imbriquées',
+                nested: [
+                  { name: 'firstName', type: 'string', required: true, description: 'Prénom', example: 'Jean' },
+                  { name: 'lastName', type: 'string', required: true, description: 'Nom', example: 'Kouassi' },
+                  { name: 'email', type: 'email', required: true, description: 'Email', example: 'jean@example.com' },
+                  { name: 'phone', type: 'phone', required: false, description: 'Téléphone', example: '+225 07 01 02 03 04' },
+                ]
+              },
+              {
+                name: 'address',
+                type: 'object',
+                required: true,
+                description: 'Adresse complète',
+                nested: [
+                  { name: 'street', type: 'string', required: true, description: 'Rue', example: '123 Rue de la Paix' },
+                  { name: 'city', type: 'string', required: true, description: 'Ville', example: 'Abidjan' },
+                  { name: 'zipCode', type: 'string', required: false, description: 'Code postal', example: '01 BP 1234' },
+                  { name: 'country', type: 'string', required: true, description: 'Pays', example: 'Côte d\'Ivoire' },
+                ]
+              },
             ] as any,
             examplePlaceholders: {
               field_name: 'champ_{{index}}',
@@ -66,7 +90,7 @@ export const seedRouter = {
               field_type: 'text',
               is_required: 'true',
             },
-            tags: ['formulaire', 'saisie', 'validation'],
+            tags: ['formulaire', 'saisie', 'validation', 'object'],
           });
         }
 
@@ -89,58 +113,59 @@ export const seedRouter = {
           version: 1,
           status: 'ACTIVE',
           valuesJson: {
-            nom_complet: 'Jean Kouassi',
-            email: 'jean.kouassi@test.ci',
-            telephone: '+225 07 01 02 03 04',
-            adresse: '123 Rue de la Paix, Abidjan',
-            code_postal: '01 BP 1234',
-            ville: 'Abidjan',
-            pays: 'Côte d\'Ivoire',
-            champ_1: 'Valeur test 1',
-            champ_2: 'Valeur test 2',
-            champ_3: 'Valeur test 3',
-            titre: 'M.',
-            civilite: 'Monsieur',
-            secteur_activite: 'Télécommunications',
-            password: 'Test@Secure!2026',
-            password_confirm: 'Test@Secure!2026',
-            accepte_conditions: 'true',
-            accepte_newsletter: 'false',
+            field_name: 'nom_complet',
+            field_value: 'Jean Kouassi',
+            field_type: 'text',
+            is_required: 'true',
+            validation_regex: '^[A-Za-z ]+$',
+            user_info: {
+              firstName: 'Jean',
+              lastName: 'Kouassi',
+              email: 'jean.kouassi@test.ci',
+              phone: '+225 07 01 02 03 04',
+            },
+            address: {
+              street: '123 Rue de la Paix',
+              city: 'Abidjan',
+              zipCode: '01 BP 1234',
+              country: 'Côte d\'Ivoire',
+            },
           },
-          notes: 'Dataset FORM_DATA pour les tests de soumission de formulaires - Environnement PROD',
-          createdBy: ctx.user.id.toString(),
+          notes: 'Dataset FORM_DATA avec champs object - Environnement PROD',
+          createdBy: ctx.user?.openId || 'system',
         });
 
         // 4. Récupérer le bundle BUNDLE_WEB_PROD_V1
-        const [bundle] = await db.select().from(datasetBundles).where(eq(datasetBundles.name, 'BUNDLE_WEB_PROD_V1')).limit(1);
-
-        let bundleId: string | undefined;
+        const [bundle] = await db.select().from(datasetBundles)
+          .where(eq(datasetBundles.name, 'BUNDLE_WEB_PROD_V1'))
+          .limit(1);
 
         if (bundle) {
-          // 5. Ajouter l'instance au bundle
-          try {
+          // Vérifier si l'item existe déjà
+          const [existingItem] = await db.select().from(bundleItems)
+            .where(eq(bundleItems.bundleId, bundle.uid))
+            .limit(1);
+
+          if (!existingItem) {
             await db.insert(bundleItems).values({
               bundleId: bundle.uid,
               datasetId: datasetInstanceUid,
             });
-            bundleId = bundle.uid;
-          } catch (e) {
-            // L'item pourrait déjà exister, continuer quand même
-            console.log('Note: Bundle item may already exist');
           }
         }
 
         return {
           success: true,
-          message: 'Dataset FORM_DATA créé et ajouté au bundle avec succès',
+          message: 'Dataset FORM_DATA créé avec succès (avec champs object)',
           datasetTypeUid,
           datasetInstanceUid,
-          bundleId,
+          bundleId: bundle?.uid,
         };
-      } catch (error: any) {
+      } catch (error) {
+        console.error('Seed error:', error);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
-          message: `Erreur lors de la création du dataset FORM_DATA: ${error.message}`,
+          message: error instanceof Error ? error.message : 'Erreur lors du seed',
         });
       }
     }),

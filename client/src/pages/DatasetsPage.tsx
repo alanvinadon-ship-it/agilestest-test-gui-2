@@ -244,7 +244,7 @@ function EditDatasetModal({ instance, onClose }: {
     },
   });
 
-  const handleFieldChange = (fieldName: string, value: string) => {
+  const handleFieldChange = (fieldName: string, value: string | Record<string, any>) => {
     setValuesJson(prev => ({ ...prev, [fieldName]: value }));
     setJsonError(null);
   };
@@ -330,39 +330,83 @@ function EditDatasetModal({ instance, onClose }: {
             <div className="space-y-3">
               {dt?.schema_fields.map(field => {
                 const currentValue = String(valuesJson[field.name] ?? '');
+                const objectValue = field.type === 'object' ? (valuesJson[field.name] as Record<string, any> || {}) : null;
 
                 return (
-                  <div key={field.name} className="grid grid-cols-[1fr_2fr] gap-3 items-start">
-                    <div className="pt-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-sm font-mono text-foreground">{field.name}</span>
-                        {field.required && <span className="text-destructive text-xs">*</span>}
+                  <div key={field.name}>
+                    {field.type === 'object' ? (
+                      /* Object field editor */
+                      <div className="border border-border rounded-md p-3 space-y-2 bg-background/50">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-mono text-foreground">{field.name}</span>
+                          {field.required && <span className="text-destructive text-xs">*</span>}
+                          <span className="text-xs text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded">object</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">{field.description}</p>
+                        
+                        {/* Nested fields */}
+                        <div className="space-y-2 pl-3 border-l border-border/50 mt-2">
+                          {field.nested?.map(nestedField => {
+                            const nestedValue = String(objectValue?.[nestedField.name] ?? '');
+                            return (
+                              <div key={nestedField.name} className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                                <div className="pt-1">
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs font-mono text-muted-foreground">{nestedField.name}</span>
+                                    {nestedField.required && <span className="text-destructive text-[10px]">*</span>}
+                                  </div>
+                                  <p className="text-[9px] text-muted-foreground/60">{nestedField.description}</p>
+                                </div>
+                                <input
+                                  type={nestedField.type === 'number' ? 'number' : nestedField.type === 'boolean' ? 'checkbox' : 'text'}
+                                  value={nestedValue}
+                                  onChange={e => {
+                                    const newObj = { ...objectValue, [nestedField.name]: e.target.value };
+                                    handleFieldChange(field.name, newObj);
+                                  }}
+                                  className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30"
+                                  placeholder={nestedField.example || ''}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{field.description}</p>
-                      <p className="text-[10px] text-muted-foreground/60 font-mono">
-                        type: {field.type}{field.example ? ` — ex: ${field.example}` : ''}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      {field.type === 'enum' && field.enum_values ? (
-                        <select
-                          value={currentValue}
-                          onChange={e => handleFieldChange(field.name, e.target.value)}
-                          className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30"
-                        >
-                          <option value="">—</option>
-                          {field.enum_values.map(v => <option key={v} value={v}>{v}</option>)}
-                        </select>
-                      ) : (
-                        <input
-                          type={field.type === 'number' ? 'number' : field.type === 'boolean' ? 'checkbox' : 'text'}
-                          value={currentValue}
-                          onChange={e => handleFieldChange(field.name, e.target.value)}
-                          className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30"
-                          placeholder={field.example || ''}
-                        />
-                      )}
-                    </div>
+                    ) : (
+                      /* Regular field editor */
+                      <div className="grid grid-cols-[1fr_2fr] gap-3 items-start">
+                        <div className="pt-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-mono text-foreground">{field.name}</span>
+                            {field.required && <span className="text-destructive text-xs">*</span>}
+                          </div>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{field.description}</p>
+                          <p className="text-[10px] text-muted-foreground/60 font-mono">
+                            type: {field.type}{field.example ? ` — ex: ${field.example}` : ''}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {field.type === 'enum' && field.enum_values ? (
+                            <select
+                              value={currentValue}
+                              onChange={e => handleFieldChange(field.name, e.target.value)}
+                              className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30"
+                            >
+                              <option value="">—</option>
+                              {field.enum_values.map(v => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                          ) : (
+                            <input
+                              type={field.type === 'number' ? 'number' : field.type === 'boolean' ? 'checkbox' : 'text'}
+                              value={currentValue}
+                              onChange={e => handleFieldChange(field.name, e.target.value)}
+                              className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30"
+                              placeholder={field.example || ''}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}

@@ -605,3 +605,8 @@
 - [x] Bug: Prérequis bloquant — Valeurs des datasets vides. Corrigé : helpers getValuesJson()/getDatasetTypeId() supportent camelCase et snake_case
 - [x] Bug: Prérequis bloquant — Couverture types incomplète. Corrigé : seed 7 datasets (search_data, auth_data, form_data) + fix camelCase
 - [x] Bug: Dropdown bundle ne se rafraîchit pas quand on change l'environnement dans GenerateScriptModal (useEffect corrigé pour gérer le cas bundlesData vide)
+- [x] Feature: Ajouter le type de champ 'object' aux schemaFields (type: 'object', nested: [...])
+- [x] Feature: UI d'édition pour les champs object imbriqués dans DatasetInstancesPage
+- [x] Feature: Validation et sérialisation des objets imbriqués dans les valuesJson
+- [x] Feature: Remplir le dataset form_data avec les clés spécifiques du formulaire (firstName, lastName, email, etc.)
+- [x] Test: 12 tests Vitest pour le champ object (type, catalog, sérialisation) — server/objectField.test.ts

@@ -537,7 +537,7 @@ export interface ScenarioDatasetValidation {
 
 export interface DatasetTypeField {
   name: string;
-  type: 'string' | 'number' | 'boolean' | 'email' | 'url' | 'date' | 'phone' | 'ip' | 'enum';
+  type: 'string' | 'number' | 'boolean' | 'email' | 'url' | 'date' | 'phone' | 'ip' | 'enum' | 'object';
   required: boolean;
   description: string;
   example?: string;
@@ -545,6 +545,7 @@ export interface DatasetTypeField {
   min?: number;
   max?: number;
   pattern?: string;
+  nested?: DatasetTypeField[]; // Pour les objets imbriqués
 }
 
 export interface DatasetType {
