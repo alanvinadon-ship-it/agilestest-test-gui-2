@@ -623,3 +623,7 @@
 - [x] Feature: Bouton Restore version (restoreVersion crée auto-save avant restauration)
 - [x] Test: 8 tests Vitest pour l'éditeur de scripts (get, autoSave, saveVersion x2, getVersionHistory, restoreVersion, update status, delete) — server/scriptEditor.test.ts
 - [x] Bug: Enum ScriptStatus 'ACTIVE' n'existe pas dans MySQL (DRAFT/VALIDATED/DEPRECATED) — corrigé dans ai/types.ts, scriptRepository.ts, GeneratedScriptsPage.tsx, ScriptEditPage.tsx, testing.ts router
+- [x] Feature: Composant MonacoDiffViewer avec Monaco DiffEditor (side-by-side, inline toggle)
+- [x] Feature: Onglet Diff dans ScriptEditPage — sélection de deux versions à comparer
+- [x] Feature: Intégration avec getVersionHistory pour charger le code des versions
+- [x] Test: 14 tests Vitest pour le diff viewer (structure, props, sélection versions) — server/diffViewer.test.ts
