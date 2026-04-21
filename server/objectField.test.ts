@@ -123,6 +123,88 @@ describe('DATASET_TYPE_CATALOG form_data', () => {
   });
 });
 
+describe('mergeDatasetValues flattening', () => {
+  // Simulate the mergeDatasetValues function
+  function mergeDatasetValues(datasets: { dataset_type_id: string; values_json: Record<string, any> }[]): Record<string, unknown> {
+    const merged: Record<string, unknown> = {};
+    for (const ds of datasets) {
+      const values = ds.values_json || {};
+      for (const [key, value] of Object.entries(values)) {
+        merged[`${ds.dataset_type_id}.${key}`] = value;
+        merged[key] = value;
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          for (const [nestedKey, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+            merged[`${ds.dataset_type_id}.${key}.${nestedKey}`] = nestedValue;
+            merged[`${key}.${nestedKey}`] = nestedValue;
+          }
+        }
+      }
+    }
+    return merged;
+  }
+
+  it('should flatten nested object fields to dot-notation keys', () => {
+    const datasets = [{
+      dataset_type_id: 'form_data',
+      values_json: {
+        field_name: 'nom_complet',
+        user_info: { firstName: 'Jean', lastName: 'Kouassi', email: 'jean@test.ci' },
+      },
+    }];
+    const merged = mergeDatasetValues(datasets);
+    
+    // Original keys
+    expect(merged['form_data.field_name']).toBe('nom_complet');
+    expect(merged['field_name']).toBe('nom_complet');
+    
+    // Object key preserved
+    expect(merged['form_data.user_info']).toEqual({ firstName: 'Jean', lastName: 'Kouassi', email: 'jean@test.ci' });
+    expect(merged['user_info']).toEqual({ firstName: 'Jean', lastName: 'Kouassi', email: 'jean@test.ci' });
+    
+    // Flattened nested keys
+    expect(merged['form_data.user_info.firstName']).toBe('Jean');
+    expect(merged['user_info.firstName']).toBe('Jean');
+    expect(merged['form_data.user_info.lastName']).toBe('Kouassi');
+    expect(merged['user_info.lastName']).toBe('Kouassi');
+    expect(merged['form_data.user_info.email']).toBe('jean@test.ci');
+    expect(merged['user_info.email']).toBe('jean@test.ci');
+  });
+
+  it('should not flatten arrays', () => {
+    const datasets = [{
+      dataset_type_id: 'test',
+      values_json: {
+        tags: ['a', 'b', 'c'],
+      },
+    }];
+    const merged = mergeDatasetValues(datasets);
+    expect(merged['tags']).toEqual(['a', 'b', 'c']);
+    // Should NOT have tags.0, tags.1 etc.
+    expect(merged['tags.0']).toBeUndefined();
+  });
+
+  it('should handle multiple datasets with objects', () => {
+    const datasets = [
+      {
+        dataset_type_id: 'form_data',
+        values_json: {
+          user_info: { firstName: 'Jean' },
+        },
+      },
+      {
+        dataset_type_id: 'auth_data',
+        values_json: {
+          credentials: { username: 'admin', password: 'secret' },
+        },
+      },
+    ];
+    const merged = mergeDatasetValues(datasets);
+    expect(merged['form_data.user_info.firstName']).toBe('Jean');
+    expect(merged['auth_data.credentials.username']).toBe('admin');
+    expect(merged['credentials.password']).toBe('secret');
+  });
+});
+
 describe('Object field value serialization', () => {
   it('should serialize object values correctly in JSON', () => {
     const valuesJson: Record<string, any> = {

@@ -26,7 +26,15 @@ function formatDatasetKeys(merged: Record<string, unknown>, maskedKeys: string[]
   const lines: string[] = [];
   for (const [key, value] of Object.entries(merged)) {
     const isMasked = maskedKeys.some(mk => key.includes(mk) || mk.includes(key));
-    lines.push(`  ${key}: ${isMasked ? '***MASKED***' : JSON.stringify(value)}`);
+    if (isMasked) {
+      lines.push(`  ${key}: ***MASKED***`);
+    } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const obj = value as Record<string, unknown>;
+      const subKeys = Object.keys(obj).join(', ');
+      lines.push(`  ${key}: {${subKeys}} (object with ${Object.keys(obj).length} fields)`);
+    } else {
+      lines.push(`  ${key}: ${JSON.stringify(value)}`);
+    }
   }
   return lines.join('\n');
 }

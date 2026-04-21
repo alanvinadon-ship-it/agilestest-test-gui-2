@@ -610,3 +610,7 @@
 - [x] Feature: Validation et sérialisation des objets imbriqués dans les valuesJson
 - [x] Feature: Remplir le dataset form_data avec les clés spécifiques du formulaire (firstName, lastName, email, etc.)
 - [x] Test: 12 tests Vitest pour le champ object (type, catalog, sérialisation) — server/objectField.test.ts
+- [x] Bug: Warning LLM 'form_data no specific keys' — mergeDatasetValues aplati les objets imbriqués en clés dot-notation (user_info.firstName, address.city)
+- [x] Bug: formatDatasetKeys affiche les objets comme blobs JSON — corrigé pour afficher {sous-clés} (object with N fields)
+- [x] Bug: Prompt règle 5 severity BLOCKING → WARNING + explication des clés aplaties dans 3 fichiers (promptTemplates, aiGeneration, driveTestTemplates)
+- [x] Test: 15 tests Vitest (3 nouveaux pour mergeDatasetValues flattening) — server/objectField.test.ts

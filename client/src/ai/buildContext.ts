@@ -22,6 +22,15 @@ function mergeDatasetValues(datasets: DatasetInstance[]): Record<string, unknown
       merged[`${ds.dataset_type_id}.${key}`] = value;
       // Aussi disponible sans préfixe (dernier gagne)
       merged[key] = value;
+
+      // Aplatir les objets imbriqués (1 niveau) pour exposer les sous-clés
+      // Ex: user_info: { firstName: "Jean" } → user_info.firstName: "Jean"
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        for (const [nestedKey, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+          merged[`${ds.dataset_type_id}.${key}.${nestedKey}`] = nestedValue;
+          merged[`${key}.${nestedKey}`] = nestedValue;
+        }
+      }
     }
   }
   return merged;

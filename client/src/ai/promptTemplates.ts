@@ -25,7 +25,16 @@ function formatDatasetKeys(merged: Record<string, unknown>, maskedKeys: string[]
   const lines: string[] = [];
   for (const [key, value] of Object.entries(merged)) {
     const isMasked = maskedKeys.some(mk => key.includes(mk) || mk.includes(key));
-    lines.push(`  ${key}: ${isMasked ? '***MASKED***' : JSON.stringify(value)}`);
+    if (isMasked) {
+      lines.push(`  ${key}: ***MASKED***`);
+    } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+      // Afficher les objets avec leurs sous-clés détaillées
+      const obj = value as Record<string, unknown>;
+      const subKeys = Object.keys(obj).join(', ');
+      lines.push(`  ${key}: {${subKeys}} (object with ${Object.keys(obj).length} fields)`);
+    } else {
+      lines.push(`  ${key}: ${JSON.stringify(value)}`);
+    }
   }
   return lines.join('\n');
 }
@@ -77,7 +86,7 @@ ${formatDatasetKeys(ctx.dataset.resolved.merged_json, ctx.dataset.secrets_policy
 2. Plan files following the framework's conventions.
 3. Map EVERY scenario step to a specific file and function/keyword.
 4. Reference dataset keys by their exact names — NEVER invent selectors or values.
-5. If any required input is missing from the dataset, add it to missing_inputs with severity BLOCKING.
+5. If any required input is missing from the dataset, add it to missing_inputs with severity WARNING. Object-type keys (e.g. user_info, address) contain nested fields that are also available as flattened keys (e.g. user_info.firstName, address.city).
 6. Secret keys (${ctx.dataset.secrets_policy.masked_keys.join(', ') || 'none'}) must be referenced via environment variables, NEVER hardcoded.
 
 ## OUTPUT FORMAT
