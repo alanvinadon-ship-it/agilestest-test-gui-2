@@ -139,13 +139,13 @@ export const localScriptRepository = {
       if (s.scenario_id === target.scenario_id &&
           s.framework === target.framework &&
           s.script_id !== scriptId &&
-          s.status === 'ACTIVE') {
+          s.status === 'VALIDATED') {
         s.status = 'DEPRECATED';
         s.updated_at = new Date().toISOString();
       }
     }
 
-    target.status = 'ACTIVE';
+    target.status = 'VALIDATED';
     target.updated_at = new Date().toISOString();
     writeAll(scripts);
     return target;
@@ -168,10 +168,10 @@ export const localScriptRepository = {
     return readAll().filter(s => s.project_id === projectId && s.scenario_id === scenarioId).length;
   },
 
-  /** Récupère le script ACTIVE pour un scénario donné (le plus récent si plusieurs) */
+  /** Récupère le script VALIDATED pour un scénario donné (le plus récent si plusieurs) */
   getActive(projectId: string, scenarioId: string): GeneratedScript | null {
     const scripts = readAll().filter(s =>
-      s.project_id === projectId && s.scenario_id === scenarioId && s.status === 'ACTIVE'
+      s.project_id === projectId && s.scenario_id === scenarioId && s.status === 'VALIDATED'
     );
     if (scripts.length === 0) return null;
     scripts.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());

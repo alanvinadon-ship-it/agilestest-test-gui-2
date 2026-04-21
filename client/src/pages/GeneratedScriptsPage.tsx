@@ -12,7 +12,7 @@ import type { ScriptFramework, ScriptStatus } from '../ai/types';
 import {
   Code2, FileCode, Trash2, CheckCircle2, Archive, Download,
   Search, ChevronDown, ChevronRight, Copy, Sparkles,
-  AlertTriangle, Loader2, GitCompare, Play,
+  AlertTriangle, Loader2, GitCompare, Play, Pencil,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLocation } from 'wouter';
@@ -31,7 +31,7 @@ const FRAMEWORK_META: Record<string, { label: string; color: string }> = {
 
 const STATUS_META: Record<string, { label: string; color: string; icon: typeof CheckCircle2 }> = {
   DRAFT:      { label: 'Brouillon',  color: 'text-slate-400 bg-slate-500/10 border-slate-500/20', icon: FileCode },
-  ACTIVE:     { label: 'Actif',      color: 'text-green-400 bg-green-500/10 border-green-500/20', icon: CheckCircle2 },
+  VALIDATED:  { label: 'Validé',     color: 'text-green-400 bg-green-500/10 border-green-500/20', icon: CheckCircle2 },
   DEPRECATED: { label: 'Déprécié',   color: 'text-amber-400 bg-amber-500/10 border-amber-500/20', icon: Archive },
 };
 
@@ -43,7 +43,7 @@ const ENV_META: Record<TargetEnv, { label: string; color: string }> = {
 };
 
 const ALL_FRAMEWORKS: ScriptFramework[] = ['playwright', 'robotframework', 'cypress', 'k6', 'custom'];
-const ALL_STATUSES: ScriptStatus[] = ['DRAFT', 'ACTIVE', 'DEPRECATED'];
+const ALL_STATUSES: ScriptStatus[] = ['DRAFT', 'VALIDATED', 'DEPRECATED'];
 const ALL_ENVS: TargetEnv[] = ['DEV', 'PREPROD', 'PILOT_ORANGE', 'PROD'];
 
 /** Parse the JSON-encoded `code` column back into files/plan/metadata */
@@ -122,7 +122,7 @@ export default function GeneratedScriptsPage() {
 
   const handleActivate = (scriptId: number) => {
     updateMutation.mutate(
-      { scriptId, status: 'ACTIVE' },
+      { scriptId, status: 'VALIDATED' },
       { onSuccess: () => toast.success('Script activé') },
     );
   };
@@ -324,7 +324,7 @@ export default function GeneratedScriptsPage() {
 
                   {/* Actions */}
                   <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                    {canActivateScript && script.status !== 'ACTIVE' && (
+                    {canActivateScript && script.status !== 'VALIDATED' && (
                       <button
                         onClick={() => handleActivate(script.id)}
                         disabled={updateMutation.isPending}
@@ -334,6 +334,13 @@ export default function GeneratedScriptsPage() {
                         <CheckCircle2 className="w-3.5 h-3.5" />
                       </button>
                     )}
+                    <button
+                      onClick={() => navigate(`/scripts/${script.id}/edit`)}
+                      className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+                      title="Éditer dans Monaco"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
                     <button
                       onClick={() => handleExecute(script)}
                       disabled={executeMutation.isPending}

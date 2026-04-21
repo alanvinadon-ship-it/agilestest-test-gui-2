@@ -6,7 +6,7 @@ import { getDb } from "../db";
 import {
   testProfiles, testScenarios, datasets, executions,
   artifacts, incidents, captures, probes, generatedScripts,
-  aiAnalyses,
+  aiAnalyses, scriptVersions,
 } from "../../drizzle/schema";
 import { paginationInput } from "../../shared/pagination";
 import { normalizePagination, countRows } from "../lib/pagination";
@@ -852,7 +852,7 @@ export const scriptsRouter = router({
   }),
   update: protectedProcedure.input(z.object({
     scriptId: z.number(), name: z.string().optional(), code: z.string().optional(),
-    status: z.enum(["DRAFT", "ACTIVE", "DEPRECATED"]).optional(),
+    status: z.enum(["DRAFT", "VALIDATED", "DEPRECATED"]).optional(),
   })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
@@ -896,5 +896,87 @@ export const scriptsRouter = router({
       .where(and(...conditions))
       .orderBy(desc(generatedScripts.createdAt));
     return { data };
+  }),
+
+  /** Save current code as a new version snapshot before editing */
+  saveVersion: protectedProcedure.input(z.object({
+    scriptId: z.number(),
+    changeSummary: z.string().optional(),
+  })).mutation(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    // Get current script
+    const [script] = await db.select().from(generatedScripts).where(eq(generatedScripts.id, input.scriptId)).limit(1);
+    if (!script) throw new TRPCError({ code: "NOT_FOUND", message: "Script not found" });
+    // Get next version number
+    const [maxV] = await db.select({ maxVersion: sql<number>`COALESCE(MAX(${scriptVersions.version}), 0)` })
+      .from(scriptVersions).where(eq(scriptVersions.scriptId, input.scriptId));
+    const nextVersion = (maxV?.maxVersion ?? 0) + 1;
+    const uid = randomUUID();
+    await db.insert(scriptVersions).values({
+      uid,
+      scriptId: input.scriptId,
+      version: nextVersion,
+      code: script.code,
+      changeSummary: input.changeSummary || `Version ${nextVersion}`,
+      createdBy: String(ctx.user!.id),
+    });
+    // Also bump version on the main script
+    await db.update(generatedScripts).set({ version: nextVersion }).where(eq(generatedScripts.id, input.scriptId));
+    return { success: true, version: nextVersion };
+  }),
+
+  /** Get version history for a specific script */
+  getVersionHistory: protectedProcedure.input(z.object({
+    scriptId: z.number(),
+  })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const data = await db.select().from(scriptVersions)
+      .where(eq(scriptVersions.scriptId, input.scriptId))
+      .orderBy(desc(scriptVersions.version));
+    return { data };
+  }),
+
+  /** Restore a specific version (copy version code back to main script) */
+  restoreVersion: protectedProcedure.input(z.object({
+    scriptId: z.number(),
+    versionId: z.number(),
+  })).mutation(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const [version] = await db.select().from(scriptVersions)
+      .where(and(eq(scriptVersions.id, input.versionId), eq(scriptVersions.scriptId, input.scriptId)))
+      .limit(1);
+    if (!version) throw new TRPCError({ code: "NOT_FOUND", message: "Version not found" });
+    // Save current state as a new version before restoring
+    const [script] = await db.select().from(generatedScripts).where(eq(generatedScripts.id, input.scriptId)).limit(1);
+    if (script) {
+      const [maxV] = await db.select({ maxVersion: sql<number>`COALESCE(MAX(${scriptVersions.version}), 0)` })
+        .from(scriptVersions).where(eq(scriptVersions.scriptId, input.scriptId));
+      const nextV = (maxV?.maxVersion ?? 0) + 1;
+      await db.insert(scriptVersions).values({
+        uid: randomUUID(),
+        scriptId: input.scriptId,
+        version: nextV,
+        code: script.code,
+        changeSummary: `Auto-save before restore to v${version.version}`,
+        createdBy: String(ctx.user!.id),
+      });
+    }
+    // Restore the version code
+    await db.update(generatedScripts).set({ code: version.code }).where(eq(generatedScripts.id, input.scriptId));
+    return { success: true, restoredVersion: version.version };
+  }),
+
+  /** Update script code with auto-save (no version bump, just update code in place) */
+  autoSave: protectedProcedure.input(z.object({
+    scriptId: z.number(),
+    code: z.string(),
+  })).mutation(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    await db.update(generatedScripts).set({ code: input.code }).where(eq(generatedScripts.id, input.scriptId));
+    return { success: true, savedAt: new Date().toISOString() };
   }),
 });

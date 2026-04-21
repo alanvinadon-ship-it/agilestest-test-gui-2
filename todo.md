@@ -614,3 +614,12 @@
 - [x] Bug: formatDatasetKeys affiche les objets comme blobs JSON — corrigé pour afficher {sous-clés} (object with N fields)
 - [x] Bug: Prompt règle 5 severity BLOCKING → WARNING + explication des clés aplaties dans 3 fichiers (promptTemplates, aiGeneration, driveTestTemplates)
 - [x] Test: 15 tests Vitest (3 nouveaux pour mergeDatasetValues flattening) — server/objectField.test.ts
+- [x] Feature: Table script_versions créée en base (id, uid, script_id, version, code, change_summary, created_by, created_at)
+- [x] Feature: Routes tRPC backend — saveVersion, getVersionHistory, restoreVersion, autoSave
+- [x] Feature: Composant ScriptEditor avec Monaco Editor (TypeScript, thème vs-dark, minimap, wordWrap)
+- [x] Feature: Page /scripts/:id/edit — charger, éditer, enregistrer, status DRAFT/VALIDATED/DEPRECATED
+- [x] Feature: Auto-save (5s debounce) + Versions panel + Restore version
+- [ ] Feature: Exécution Playwright — sandbox, timeout 30s, capture logs/erreurs/screenshots/traces (TODO futur)
+- [x] Feature: Bouton Restore version (restoreVersion crée auto-save avant restauration)
+- [x] Test: 8 tests Vitest pour l'éditeur de scripts (get, autoSave, saveVersion x2, getVersionHistory, restoreVersion, update status, delete) — server/scriptEditor.test.ts
+- [x] Bug: Enum ScriptStatus 'ACTIVE' n'existe pas dans MySQL (DRAFT/VALIDATED/DEPRECATED) — corrigé dans ai/types.ts, scriptRepository.ts, GeneratedScriptsPage.tsx, ScriptEditPage.tsx, testing.ts router

@@ -14,7 +14,7 @@ import type { TargetEnv, TestType, BundleStatus } from '../types';
 
 export type CodeLanguage = 'TypeScript' | 'Robot' | 'Python';
 export type ScriptFramework = 'playwright' | 'robotframework' | 'cypress' | 'selenium' | 'k6' | 'custom';
-export type ScriptStatus = 'DRAFT' | 'ACTIVE' | 'DEPRECATED';
+export type ScriptStatus = 'DRAFT' | 'VALIDATED' | 'DEPRECATED';
 
 // ─── AiScriptContext (données d'entrée normalisées) ───────────────────────
 

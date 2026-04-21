@@ -47,6 +47,7 @@ import ImportExportPage from "./pages/ImportExportPage";
 import AccountSettingsPage from "./pages/AccountSettingsPage";
 import AdminBrandingPage from "./pages/AdminBrandingPage";
 import AiSettingsPage from "./pages/AiSettingsPage";
+import ScriptEditPage from "./pages/ScriptEditPage";
 import KeycloakConfigPage from "./pages/admin/KeycloakConfigPage";
 import DriveRunsPage from "./pages/DriveRunsPage";
 import DriveRunDetailPage from "./pages/DriveRunDetailPage";
@@ -141,6 +142,9 @@ function AppRouter() {
               </Route>
               <Route path="/scripts">
                 <ProjectScoped><GeneratedScriptsPage /></ProjectScoped>
+              </Route>
+              <Route path="/scripts/:id/edit">
+                <ProjectScoped><ScriptEditPage /></ProjectScoped>
               </Route>
               <Route path="/executions">
                 <ProjectScoped><ExecutionsPage /></ProjectScoped>

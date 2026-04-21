@@ -1330,3 +1330,19 @@ export const keycloakConfigHistory = mysqlTable("keycloak_config_history", {
 
 export type KeycloakConfigHistory = typeof keycloakConfigHistory.$inferSelect;
 export type InsertKeycloakConfigHistory = typeof keycloakConfigHistory.$inferInsert;
+
+// ─── Script Versions (version history for generated scripts) ───────────────
+// DB columns: id, uid, script_id, version, code, change_summary, created_by, created_at
+export const scriptVersions = mysqlTable("script_versions", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull().unique(),
+  scriptId: int("script_id").notNull(),
+  version: int("version").notNull(),
+  code: text("code"),
+  changeSummary: varchar("change_summary", { length: 500 }),
+  createdBy: varchar("created_by", { length: 64 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ScriptVersion = typeof scriptVersions.$inferSelect;
+export type InsertScriptVersion = typeof scriptVersions.$inferInsert;
