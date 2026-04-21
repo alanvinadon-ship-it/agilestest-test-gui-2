@@ -8,7 +8,7 @@ import type { DriveScenarioTemplate, ScenarioStep, ArtifactUploadPolicy, TestTyp
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 function step(order: number, action: string, description: string, expected: string): ScenarioStep {
-  return { id: `s${order}`, order, action, description, expected_result: expected, parameters: {} };
+  return { id: `s${order}`, order, action, target: '', locatorStrategy: '', inputBinding: null, expectedResult: expected, description, expected_result: expected, parameters: {} };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

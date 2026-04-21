@@ -627,3 +627,15 @@
 - [x] Feature: Onglet Diff dans ScriptEditPage — sélection de deux versions à comparer
 - [x] Feature: Intégration avec getVersionHistory pour charger le code des versions
 - [x] Test: 14 tests Vitest pour le diff viewer (structure, props, sélection versions) — server/diffViewer.test.ts
+- [x] Feature: Types TypeScript — ScenarioAction (9 actions), LocatorStrategy (8 stratégies), ScenarioStep mis à jour avec target, locatorStrategy, inputBinding, expectedResult
+- [x] Feature: Schéma DB inchangé (steps stockés en JSON) — validation Zod structurée ajoutée au router tRPC
+- [x] Feature: Mutation tRPC scenarios.create/update avec schéma Zod structuré (action, target, locatorStrategy, inputBinding, expectedResult)
+- [x] Feature: Refonte UI formulaire Nouveau scénario — 5 colonnes (ACTION, CIBLE, LOCATOR, BINDING, RÉSULTAT ATTENDU)
+- [x] Feature: Validations frontend (profil, nom, action obligatoires + binding pour FILL/SELECT/UPLOAD + expectedResult pour ASSERT)
+- [x] Feature: Placeholders intelligents via ACTION_PLACEHOLDERS — auto-fill target, locator, binding, expected quand on change l'action
+- [ ] Feature: Réordonner les étapes (monter/descendre) — TODO futur
+- [x] Feature: Aperçu DSL JSON live du draft — bouton DSL + Copier dans le presse-papier
+- [x] Feature: Auto-détection des bindings manquants — bordures orange + warning en bas de la liste
+- [x] Feature: Duplication d'étape — bouton Dupliquer (icône) à droite de chaque étape
+- [x] Test: 26 tests Vitest pour le formulaire structuré (types, enum, placeholders, validation, backward compat, DSL) — server/scenarioForm.test.ts
+- [ ] Doc: Documentation du nouveau format scénario + mapping DSL → Playwright — TODO futur

@@ -4,7 +4,8 @@ import { useAuth } from '../auth/AuthContext';
 import { usePermission, PermissionKey } from '../security';
 import { trpc } from '@/lib/trpc';
 
-import type { TestProfile, TestScenario, TestType, ScenarioStatus } from '../types';
+import type { TestProfile, TestScenario, TestType, ScenarioStatus, ScenarioAction, LocatorStrategy, ScenarioStep } from '../types';
+import { SCENARIO_ACTIONS, LOCATOR_STRATEGIES, ACTION_PLACEHOLDERS, ACTIONS_REQUIRING_BINDING, ACTIONS_REQUIRING_EXPECTED } from '../types';
 import {
   Plus, FileText, Loader2, Trash2, X, AlertCircle, Search,
   ChevronDown, GripVertical, ClipboardCheck, Shield, Gauge, Filter, Edit2,
@@ -209,6 +210,11 @@ function FinalizeDialog({ scenario, onClose, onFinalized }: {
 
 // ─── Create Scenario Modal ─────────────────────────────────────────────────
 
+/** Crée un step vide avec les nouveaux champs structurés */
+function emptyStep(order: number): ScenarioStep {
+  return { id: `step-${Date.now()}-${order}`, order, action: '', target: '', locatorStrategy: '', inputBinding: null, expectedResult: '', description: '', expected_result: '', parameters: {} };
+}
+
 function CreateScenarioModal({ isOpen, onClose, profiles, testTypeFilter }: {
   isOpen: boolean; onClose: () => void; profiles: TestProfile[]; testTypeFilter: string;
 }) {
@@ -217,10 +223,9 @@ function CreateScenarioModal({ isOpen, onClose, profiles, testTypeFilter }: {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [profileId, setProfileId] = useState('');
-  const [steps, setSteps] = useState([
-    { id: 'step-1', order: 0, action: '', description: '', expected_result: '', parameters: {} as Record<string, unknown> },
-  ]);
+  const [steps, setSteps] = useState<ScenarioStep[]>([emptyStep(0)]);
   const [error, setError] = useState<string | null>(null);
+  const [showDslPreview, setShowDslPreview] = useState(false);
 
   const availableProfiles = useMemo(() => {
     if (!profiles || profiles.length === 0) return [];
@@ -234,7 +239,7 @@ function CreateScenarioModal({ isOpen, onClose, profiles, testTypeFilter }: {
     onSuccess: () => {
       utils.scenarios.list.invalidate();
       setName(''); setDescription(''); setProfileId('');
-      setSteps([{ id: 'step-1', order: 0, action: '', description: '', expected_result: '', parameters: {} }]);
+      setSteps([emptyStep(0)]);
       onClose();
     },
     onError: (err) => {
@@ -242,24 +247,67 @@ function CreateScenarioModal({ isOpen, onClose, profiles, testTypeFilter }: {
     },
   });
 
-  const addStep = () => setSteps([...steps, { id: `step-${steps.length + 1}`, order: steps.length, action: '', description: '', expected_result: '', parameters: {} }]);
-  const removeStep = (i: number) => setSteps(steps.filter((_, idx) => idx !== i));
-  const updateStep = (i: number, field: string, value: string) => {
+  const addStep = () => setSteps([...steps, emptyStep(steps.length)]);
+  const duplicateStep = (i: number) => {
+    const src = steps[i];
+    const dup: ScenarioStep = { ...src, id: `step-${Date.now()}-dup`, order: steps.length };
     const newSteps = [...steps];
-    (newSteps[i] as Record<string, unknown>)[field] = value;
+    newSteps.splice(i + 1, 0, dup);
     setSteps(newSteps);
   };
+  const removeStep = (i: number) => setSteps(steps.filter((_, idx) => idx !== i));
+  const updateStep = (i: number, field: keyof ScenarioStep, value: string | null) => {
+    const newSteps = [...steps];
+    const step = { ...newSteps[i] };
+    (step as any)[field] = value;
+    // Auto-fill placeholders quand on change l'action
+    if (field === 'action' && value && SCENARIO_ACTIONS.includes(value as ScenarioAction)) {
+      const ph = ACTION_PLACEHOLDERS[value as ScenarioAction];
+      if (!step.target) step.target = ph.target;
+      if (!step.locatorStrategy) step.locatorStrategy = ph.locatorStrategy;
+      if (!step.inputBinding && ph.inputBinding) step.inputBinding = ph.inputBinding;
+      if (!step.expectedResult) step.expectedResult = ph.expectedResult;
+    }
+    newSteps[i] = step;
+    setSteps(newSteps);
+  };
+
+  // Détecter les bindings manquants
+  const missingBindings = useMemo(() => {
+    return steps.filter(s =>
+      ACTIONS_REQUIRING_BINDING.includes(s.action as ScenarioAction) && !s.inputBinding
+    ).map(s => ({ step: s.order + 1, action: s.action }));
+  }, [steps]);
+
+  // Générer le DSL JSON pour l'aperçu
+  const dslJson = useMemo(() => {
+    return steps.map((s, i) => ({
+      step: i + 1,
+      action: s.action || '?',
+      target: s.target || '?',
+      locator: s.locatorStrategy || '?',
+      binding: s.inputBinding || null,
+      expected: s.expectedResult || null,
+    }));
+  }, [steps]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     if (!name.trim() || !profileId) { setError('Le nom et le profil sont requis.'); return; }
+    if (steps.some(s => !s.action)) { setError('Chaque étape doit avoir une action.'); return; }
     mutation.mutate({
       projectId: currentProject?.id || '',
       profileId: profileId,
       name: name.trim(), description: description.trim(), status: 'DRAFT',
       testType: selectedProfile?.test_type as any || 'VABF',
-      steps: steps.map((s, i) => ({ id: `step-${i + 1}`, order: i + 1, action: s.action, description: s.description, expected_result: s.expected_result, parameters: {} })),
+      steps: steps.map((s, i) => ({
+        id: `step-${i + 1}`, order: i + 1,
+        action: s.action, target: s.target || '', locatorStrategy: s.locatorStrategy || '',
+        inputBinding: s.inputBinding || null, expectedResult: s.expectedResult || '',
+        description: s.description || '', expected_result: s.expectedResult || '',
+        parameters: {},
+      })),
     });
   };
 
@@ -268,12 +316,12 @@ function CreateScenarioModal({ isOpen, onClose, profiles, testTypeFilter }: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-card rounded-lg shadow-xl border border-border w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-card z-10">
+      <div className="relative bg-card rounded-lg shadow-xl border border-border w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <h2 className="text-lg font-heading font-semibold text-foreground">Nouveau scénario</h2>
           <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
         </div>
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
           {error && (
             <div className="flex items-start gap-2 bg-destructive/10 border border-destructive/20 rounded-md p-3">
               <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
@@ -307,37 +355,116 @@ function CreateScenarioModal({ isOpen, onClose, profiles, testTypeFilter }: {
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2}
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring/30" />
           </div>
+
+          {/* ─── Étapes structurées (5 colonnes) ─── */}
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-3">
               <label className="text-sm font-medium text-foreground">Étapes</label>
-              <button type="button" onClick={addStep} className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80">
-                <Plus className="w-3 h-3" /> Ajouter
-              </button>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => setShowDslPreview(!showDslPreview)}
+                  className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors ${
+                    showDslPreview ? 'bg-cyan-500/15 text-cyan-400' : 'text-muted-foreground hover:text-foreground'
+                  }`}>
+                  <Code2 className="w-3 h-3" /> DSL
+                </button>
+                <button type="button" onClick={addStep} className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80">
+                  <Plus className="w-3 h-3" /> Ajouter
+                </button>
+              </div>
             </div>
-            <div className="space-y-2">
-              {steps.map((step, i) => (
-                <div key={i} className="flex gap-2 items-start bg-secondary/30 rounded-md p-3">
-                  <GripVertical className="w-4 h-4 text-muted-foreground shrink-0 mt-2" />
-                  <div className="flex-1 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono text-muted-foreground w-6">#{i + 1}</span>
-                      <input type="text" value={step.action} onChange={(e) => updateStep(i, 'action', e.target.value)}
-                        placeholder="Action (NAVIGATE, CLICK, ASSERT)" className="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
+
+            {/* En-têtes des colonnes */}
+            <div className="grid grid-cols-[32px_120px_1fr_100px_1fr_1fr_32px] gap-1 mb-1 px-1">
+              <span />
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Action</span>
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Cible</span>
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Locator</span>
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Binding</span>
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Résultat attendu</span>
+              <span />
+            </div>
+
+            {/* Lignes d'étapes */}
+            <div className="space-y-1">
+              {steps.map((step, i) => {
+                const actionPh = (step.action && SCENARIO_ACTIONS.includes(step.action as ScenarioAction))
+                  ? ACTION_PLACEHOLDERS[step.action as ScenarioAction] : null;
+                const needsBinding = ACTIONS_REQUIRING_BINDING.includes(step.action as ScenarioAction);
+                const needsExpected = ACTIONS_REQUIRING_EXPECTED.includes(step.action as ScenarioAction);
+                return (
+                  <div key={step.id} className="grid grid-cols-[32px_120px_1fr_100px_1fr_1fr_32px] gap-1 items-center bg-secondary/20 rounded-md px-1 py-1.5 group">
+                    {/* # */}
+                    <span className="text-[10px] font-mono text-muted-foreground text-center">#{i + 1}</span>
+                    {/* Action (dropdown) */}
+                    <select value={step.action} onChange={(e) => updateStep(i, 'action', e.target.value)}
+                      className={`rounded border border-input bg-background px-1.5 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring/30 ${
+                        !step.action ? 'text-muted-foreground' : ''
+                      }`}>
+                      <option value="">-- Action --</option>
+                      {SCENARIO_ACTIONS.map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                    {/* Cible */}
+                    <input type="text" value={step.target || ''} onChange={(e) => updateStep(i, 'target', e.target.value)}
+                      placeholder={actionPh?.target || 'page.element'}
+                      className="rounded border border-input bg-background px-1.5 py-1 text-xs text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-ring/30" />
+                    {/* Locator Strategy (dropdown) */}
+                    <select value={step.locatorStrategy || ''} onChange={(e) => updateStep(i, 'locatorStrategy', e.target.value)}
+                      className="rounded border border-input bg-background px-1 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring/30">
+                      <option value="">-- loc --</option>
+                      {LOCATOR_STRATEGIES.map(l => <option key={l} value={l}>{l}</option>)}
+                    </select>
+                    {/* Input Binding */}
+                    <input type="text" value={step.inputBinding || ''} onChange={(e) => updateStep(i, 'inputBinding', e.target.value || null)}
+                      placeholder={actionPh?.inputBinding || (needsBinding ? 'dataset.key *' : 'optionnel')}
+                      className={`rounded border bg-background px-1.5 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring/30 ${
+                        needsBinding && !step.inputBinding ? 'border-orange-500/50 text-orange-400' : 'border-input text-foreground'
+                      }`} />
+                    {/* Résultat attendu */}
+                    <input type="text" value={step.expectedResult || ''} onChange={(e) => updateStep(i, 'expectedResult', e.target.value)}
+                      placeholder={actionPh?.expectedResult || 'Résultat attendu'}
+                      className={`rounded border bg-background px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring/30 ${
+                        needsExpected && !step.expectedResult ? 'border-orange-500/50 text-orange-400' : 'border-input text-foreground'
+                      }`} />
+                    {/* Actions */}
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button type="button" onClick={() => duplicateStep(i)} title="Dupliquer" className="text-muted-foreground hover:text-primary p-0.5">
+                        <GitBranch className="w-3 h-3" />
+                      </button>
+                      {steps.length > 1 && (
+                        <button type="button" onClick={() => removeStep(i)} title="Supprimer" className="text-muted-foreground hover:text-destructive p-0.5">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
-                    <input type="text" value={step.description} onChange={(e) => updateStep(i, 'description', e.target.value)}
-                      placeholder="Description" className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
-                    <input type="text" value={step.expected_result} onChange={(e) => updateStep(i, 'expected_result', e.target.value)}
-                      placeholder="Résultat attendu" className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
                   </div>
-                  {steps.length > 1 && (
-                    <button type="button" onClick={() => removeStep(i)} className="text-muted-foreground hover:text-destructive p-1">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
+
+            {/* Warnings bindings manquants */}
+            {missingBindings.length > 0 && (
+              <div className="flex items-start gap-2 bg-orange-500/10 border border-orange-500/20 rounded-md p-2 mt-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-orange-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-orange-400">
+                  Bindings manquants : {missingBindings.map(m => `étape ${m.step} (${m.action})`).join(', ')}.
+                  Le LLM utilisera des placeholders.
+                </p>
+              </div>
+            )}
           </div>
+
+          {/* Aperçu DSL JSON */}
+          {showDslPreview && (
+            <div className="bg-secondary/30 border border-border rounded-md p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-cyan-400">Aperçu DSL JSON</span>
+                <button type="button" onClick={() => { navigator.clipboard.writeText(JSON.stringify(dslJson, null, 2)); toast.success('DSL copié'); }}
+                  className="text-xs text-muted-foreground hover:text-foreground">Copier</button>
+              </div>
+              <pre className="text-[10px] font-mono text-muted-foreground overflow-x-auto max-h-40">{JSON.stringify(dslJson, null, 2)}</pre>
+            </div>
+          )}
+
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose} className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors">Annuler</button>
             <button type="submit" disabled={mutation.isPending}
@@ -359,7 +486,7 @@ function EditScenarioModal({ scenario, profile, onClose }: {
   const utils = trpc.useUtils();
   const [name, setName] = useState(scenario.name);
   const [description, setDescription] = useState(scenario.description || '');
-  const [steps, setSteps] = useState(scenario.steps || [{ id: 'step-1', order: 0, action: '', description: '', expected_result: '', parameters: {} as Record<string, unknown> }]);
+  const [steps, setSteps] = useState<ScenarioStep[]>(scenario.steps?.length ? scenario.steps : [emptyStep(0)]);
   const [requiredDatasetTypes, setRequiredDatasetTypes] = useState<string[]>(scenario.required_dataset_types || []);
   const [error, setError] = useState<string | null>(null);
   const isFinal = scenario.status === 'FINAL';
@@ -482,27 +609,57 @@ function EditScenarioModal({ scenario, profile, onClose }: {
             <div>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-foreground">Étapes</h3>
-                <button type="button" onClick={() => setSteps([...steps, { id: `step-${Date.now()}`, order: steps.length, action: '', description: '', expected_result: '', parameters: {} }])}
+                <button type="button" onClick={() => setSteps([...steps, emptyStep(steps.length)])}
                   className="text-xs px-2 py-1 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors">+ Ajouter</button>
               </div>
-              <div className="space-y-3">
-                {steps.map((step, idx) => (
-                  <div key={idx} className="border border-border rounded-md p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-muted-foreground">Étape {idx + 1}</span>
-                      {steps.length > 1 && (
-                        <button type="button" onClick={() => setSteps(steps.filter((_, i) => i !== idx))}
-                          className="text-xs text-destructive hover:text-destructive/80">Supprimer</button>
-                      )}
+              {/* En-têtes des colonnes */}
+              <div className="grid grid-cols-[32px_120px_1fr_100px_1fr_1fr_32px] gap-1 mb-1 px-1">
+                <span />
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Action</span>
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Cible</span>
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Locator</span>
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Binding</span>
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Résultat attendu</span>
+                <span />
+              </div>
+              <div className="space-y-1">
+                {steps.map((step, idx) => {
+                  const actionPh = (step.action && SCENARIO_ACTIONS.includes(step.action as ScenarioAction))
+                    ? ACTION_PLACEHOLDERS[step.action as ScenarioAction] : null;
+                  const needsBinding = ACTIONS_REQUIRING_BINDING.includes(step.action as ScenarioAction);
+                  const needsExpected = ACTIONS_REQUIRING_EXPECTED.includes(step.action as ScenarioAction);
+                  return (
+                    <div key={step.id || idx} className="grid grid-cols-[32px_120px_1fr_100px_1fr_1fr_32px] gap-1 items-center bg-secondary/20 rounded-md px-1 py-1.5 group">
+                      <span className="text-[10px] font-mono text-muted-foreground text-center">#{idx + 1}</span>
+                      <select value={step.action} onChange={(e) => handleStepChange(idx, 'action', e.target.value)}
+                        className={`rounded border border-input bg-background px-1.5 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring/30 ${!step.action ? 'text-muted-foreground' : ''}`}>
+                        <option value="">-- Action --</option>
+                        {SCENARIO_ACTIONS.map(a => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                      <input type="text" value={step.target || ''} onChange={(e) => handleStepChange(idx, 'target', e.target.value)}
+                        placeholder={actionPh?.target || 'page.element'}
+                        className="rounded border border-input bg-background px-1.5 py-1 text-xs text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-ring/30" />
+                      <select value={step.locatorStrategy || ''} onChange={(e) => handleStepChange(idx, 'locatorStrategy', e.target.value)}
+                        className="rounded border border-input bg-background px-1 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring/30">
+                        <option value="">-- loc --</option>
+                        {LOCATOR_STRATEGIES.map(l => <option key={l} value={l}>{l}</option>)}
+                      </select>
+                      <input type="text" value={step.inputBinding || ''} onChange={(e) => handleStepChange(idx, 'inputBinding', e.target.value)}
+                        placeholder={actionPh?.inputBinding || (needsBinding ? 'dataset.key *' : 'optionnel')}
+                        className={`rounded border bg-background px-1.5 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring/30 ${needsBinding && !step.inputBinding ? 'border-orange-500/50 text-orange-400' : 'border-input text-foreground'}`} />
+                      <input type="text" value={step.expectedResult || step.expected_result || ''} onChange={(e) => handleStepChange(idx, 'expectedResult', e.target.value)}
+                        placeholder={actionPh?.expectedResult || 'Résultat attendu'}
+                        className={`rounded border bg-background px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring/30 ${needsExpected && !step.expectedResult ? 'border-orange-500/50 text-orange-400' : 'border-input text-foreground'}`} />
+                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {steps.length > 1 && (
+                          <button type="button" onClick={() => setSteps(steps.filter((_, i) => i !== idx))} title="Supprimer" className="text-muted-foreground hover:text-destructive p-0.5">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <input type="text" value={step.action} onChange={(e) => handleStepChange(idx, 'action', e.target.value)}
-                      placeholder="Action" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
-                    <input type="text" value={step.description} onChange={(e) => handleStepChange(idx, 'description', e.target.value)}
-                      placeholder="Description" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
-                    <input type="text" value={step.expected_result} onChange={(e) => handleStepChange(idx, 'expected_result', e.target.value)}
-                      placeholder="Résultat attendu" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30" />
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </form>

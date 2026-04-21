@@ -455,14 +455,84 @@ export interface ImportReport {
   timestamp: string;
 }
 
+// ─── Scenario DSL Types ──────────────────────────────────────────────────────
+
+/** Actions disponibles pour une étape de scénario */
+export const SCENARIO_ACTIONS = [
+  'NAVIGATE', 'FILL', 'CLICK', 'SELECT', 'CHECK', 'UNCHECK',
+  'UPLOAD', 'WAIT', 'ASSERT',
+] as const;
+export type ScenarioAction = typeof SCENARIO_ACTIONS[number];
+
+/** Stratégies de repérage pour localiser un élément */
+export const LOCATOR_STRATEGIES = [
+  'label', 'role', 'text', 'testId', 'placeholder', 'css', 'xpath', 'ref',
+] as const;
+export type LocatorStrategy = typeof LOCATOR_STRATEGIES[number];
+
+/** Structure d'une étape de scénario (nouveau modèle structuré) */
 export interface ScenarioStep {
   id: string;
   order: number;
-  action: string;
-  description: string;
-  expected_result: string;
-  parameters: Record<string, unknown>;
+  action: ScenarioAction | string;
+  /** Cible de l'action (ex: login.username, contact.submit, urls.full.contact) */
+  target: string;
+  /** Stratégie de repérage (label, role, text, testId, css, xpath, ref) */
+  locatorStrategy: LocatorStrategy | string;
+  /** Référence dataset binding (ex: form_data.email, users.default.username, null) */
+  inputBinding: string | null;
+  /** Résultat attendu (obligatoire pour ASSERT) */
+  expectedResult: string;
+  /** Champs legacy conservés pour compatibilité */
+  description?: string;
+  expected_result?: string;
+  parameters?: Record<string, unknown>;
 }
+
+/** Input pour créer/éditer une étape (formulaire) */
+export interface ScenarioStepInput {
+  id: string;
+  action: ScenarioAction | '';
+  target: string;
+  locatorStrategy: LocatorStrategy | '';
+  inputBinding: string;
+  expectedResult: string;
+}
+
+/** Draft complet d'un scénario (formulaire de création) */
+export interface ScenarioDefinitionDraft {
+  profileId: string;
+  name: string;
+  description: string;
+  steps: ScenarioStepInput[];
+}
+
+/** Métadonnées de placeholder selon l'action sélectionnée */
+export interface ActionPlaceholders {
+  target: string;
+  locatorStrategy: LocatorStrategy;
+  inputBinding: string;
+  expectedResult: string;
+}
+
+/** Mapping action → placeholders intelligents */
+export const ACTION_PLACEHOLDERS: Record<ScenarioAction, ActionPlaceholders> = {
+  NAVIGATE: { target: 'urls.full.contact', locatorStrategy: 'ref', inputBinding: '', expectedResult: 'La page est affichée' },
+  FILL:     { target: 'contact.email', locatorStrategy: 'label', inputBinding: 'form_data.email', expectedResult: 'Le champ contient la valeur saisie' },
+  CLICK:    { target: 'contact.submit', locatorStrategy: 'role', inputBinding: '', expectedResult: 'Le bouton est cliqué' },
+  SELECT:   { target: 'contact.pays', locatorStrategy: 'label', inputBinding: 'form_data.pays', expectedResult: 'La valeur est sélectionnée' },
+  CHECK:    { target: 'contact.cgu', locatorStrategy: 'label', inputBinding: 'form_data.acceptCgu', expectedResult: 'La case est cochée' },
+  UNCHECK:  { target: 'contact.newsletter', locatorStrategy: 'label', inputBinding: '', expectedResult: 'La case est décochée' },
+  UPLOAD:   { target: 'contact.fichier', locatorStrategy: 'testId', inputBinding: 'form_data.fichierPath', expectedResult: 'Le fichier est uploadé' },
+  WAIT:     { target: 'contact.spinner', locatorStrategy: 'testId', inputBinding: '', expectedResult: 'L\'élément a disparu' },
+  ASSERT:   { target: 'contact.successMessage', locatorStrategy: 'text', inputBinding: '', expectedResult: 'Le message de succès est visible' },
+};
+
+/** Actions nécessitant obligatoirement un inputBinding */
+export const ACTIONS_REQUIRING_BINDING: ScenarioAction[] = ['FILL', 'SELECT', 'UPLOAD'];
+
+/** Actions nécessitant obligatoirement un expectedResult */
+export const ACTIONS_REQUIRING_EXPECTED: ScenarioAction[] = ['ASSERT'];
 
 export interface Dataset {
   id: string;
