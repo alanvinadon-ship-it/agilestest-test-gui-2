@@ -639,3 +639,13 @@
 - [x] Feature: Duplication d'étape — bouton Dupliquer (icône) à droite de chaque étape
 - [x] Test: 26 tests Vitest pour le formulaire structuré (types, enum, placeholders, validation, backward compat, DSL) — server/scenarioForm.test.ts
 - [ ] Doc: Documentation du nouveau format scénario + mapping DSL → Playwright — TODO futur
+- [x] Feature: Endpoint tRPC getProjectDatasetBindings — retourne datasets + types + clés aplaties par projet
+- [x] Feature: Composant BindingSelector — combobox searchable avec hiérarchie dataset type → groupe → clé
+- [x] Feature: Intégration BindingSelector dans CreateScenarioModal et EditScenarioModal
+- [x] Feature: Règles métier par action — FILL/SELECT/UPLOAD obligatoire, CLICK null, NAVIGATE/WAIT/CHECK/UNCHECK/ASSERT facultatif
+- [x] Feature: Validations frontend — erreur bloquante si binding requis absent, warning si incohérent
+- [x] Feature: Placeholders dynamiques selon action (ex: FILL → "Sélectionner une clé dataset")
+- [x] Feature: Badges "Obligatoire" / "Optionnel" selon action
+- [x] Feature: Mise à jour DSL preview avec binding sélectionné
+- [x] Feature: Bonus — filtrage bindings par action, auto-suggestion par target, aperçu valeur réelle
+- [x] Test: 22 tests Vitest pour getProjectDatasetBindings et règles de validation binding — server/bindingSelector.test.ts

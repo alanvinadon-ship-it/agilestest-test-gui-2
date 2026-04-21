@@ -16,6 +16,7 @@ import GeneratePromptModal from '../components/GeneratePromptModal';
 import GenerateScriptModal from '../components/GenerateScriptModal';
 
 import SuggestScenariosModal from '../components/SuggestScenariosModal';
+import BindingSelector from '../components/BindingSelector';
 import PublishTemplateModal from '../components/PublishTemplateModal';
 import ScenarioDatasetSection from '../components/ScenarioDatasetSection';
 import { CapturePolicyEditor } from '../capture';
@@ -235,6 +236,12 @@ function CreateScenarioModal({ isOpen, onClose, profiles, testTypeFilter }: {
 
   const selectedProfile = availableProfiles.find(p => p.id === profileId);
 
+  // Fetch project dataset bindings for BindingSelector
+  const { data: bindingGroups, isLoading: bindingsLoading } = trpc.datasets.getProjectBindings.useQuery(
+    { projectId: currentProject?.id || '' },
+    { enabled: !!currentProject?.id }
+  );
+
   const mutation = trpc.scenarios.create.useMutation({
     onSuccess: () => {
       utils.scenarios.list.invalidate();
@@ -413,12 +420,16 @@ function CreateScenarioModal({ isOpen, onClose, profiles, testTypeFilter }: {
                       <option value="">-- loc --</option>
                       {LOCATOR_STRATEGIES.map(l => <option key={l} value={l}>{l}</option>)}
                     </select>
-                    {/* Input Binding */}
-                    <input type="text" value={step.inputBinding || ''} onChange={(e) => updateStep(i, 'inputBinding', e.target.value || null)}
+                    {/* Input Binding — BindingSelector */}
+                    <BindingSelector
+                      value={step.inputBinding}
+                      onChange={(val) => updateStep(i, 'inputBinding', val)}
+                      bindingGroups={bindingGroups || []}
+                      isLoading={bindingsLoading}
+                      required={needsBinding}
+                      compact
                       placeholder={actionPh?.inputBinding || (needsBinding ? 'dataset.key *' : 'optionnel')}
-                      className={`rounded border bg-background px-1.5 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring/30 ${
-                        needsBinding && !step.inputBinding ? 'border-orange-500/50 text-orange-400' : 'border-input text-foreground'
-                      }`} />
+                    />
                     {/* Résultat attendu */}
                     <input type="text" value={step.expectedResult || ''} onChange={(e) => updateStep(i, 'expectedResult', e.target.value)}
                       placeholder={actionPh?.expectedResult || 'Résultat attendu'}
@@ -496,6 +507,12 @@ function EditScenarioModal({ scenario, profile, onClose }: {
     { enabled: !!scenario.project_id },
   );
   const availableDatasetTypes = datasetTypesData?.data || [];
+
+  // Fetch project dataset bindings for BindingSelector
+  const { data: editBindingGroups, isLoading: editBindingsLoading } = trpc.datasets.getProjectBindings.useQuery(
+    { projectId: scenario.project_id || '' },
+    { enabled: !!scenario.project_id }
+  );
 
   const toggleDatasetType = (dtId: string) => {
     setRequiredDatasetTypes(prev => prev.includes(dtId) ? prev.filter(id => id !== dtId) : [...prev, dtId]);
@@ -644,9 +661,15 @@ function EditScenarioModal({ scenario, profile, onClose }: {
                         <option value="">-- loc --</option>
                         {LOCATOR_STRATEGIES.map(l => <option key={l} value={l}>{l}</option>)}
                       </select>
-                      <input type="text" value={step.inputBinding || ''} onChange={(e) => handleStepChange(idx, 'inputBinding', e.target.value)}
+                      <BindingSelector
+                        value={step.inputBinding}
+                        onChange={(val) => handleStepChange(idx, 'inputBinding', val as string)}
+                        bindingGroups={editBindingGroups || []}
+                        isLoading={editBindingsLoading}
+                        required={needsBinding}
+                        compact
                         placeholder={actionPh?.inputBinding || (needsBinding ? 'dataset.key *' : 'optionnel')}
-                        className={`rounded border bg-background px-1.5 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring/30 ${needsBinding && !step.inputBinding ? 'border-orange-500/50 text-orange-400' : 'border-input text-foreground'}`} />
+                      />
                       <input type="text" value={step.expectedResult || step.expected_result || ''} onChange={(e) => handleStepChange(idx, 'expectedResult', e.target.value)}
                         placeholder={actionPh?.expectedResult || 'Résultat attendu'}
                         className={`rounded border bg-background px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring/30 ${needsExpected && !step.expectedResult ? 'border-orange-500/50 text-orange-400' : 'border-input text-foreground'}`} />

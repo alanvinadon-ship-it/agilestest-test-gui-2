@@ -132,7 +132,7 @@ export function buildAiScriptContext(input: BuildContextInput): AiScriptContext 
 
   // Extraire expected_results et required_inputs depuis les steps
   const steps = scenario.steps || [];
-  const expectedResults: string[] = steps.map(s => s.expectedResult || s.expected_result).filter((r): r is string => !!r);
+  const expectedResults: string[] = steps.map(s => (s as any).expectedResult || (s as any).expected_result || '').filter((r: string) => !!r);
   const requiredInputs: string[] = [];
   for (const step of steps) {
     if (step.parameters && typeof step.parameters === 'object') {

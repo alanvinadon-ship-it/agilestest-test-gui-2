@@ -6,7 +6,7 @@ import { getDb } from "../db";
 import {
   testProfiles, testScenarios, datasets, executions,
   artifacts, incidents, captures, probes, generatedScripts,
-  aiAnalyses, scriptVersions,
+  aiAnalyses, scriptVersions, datasetInstances, datasetTypes,
 } from "../../drizzle/schema";
 import { paginationInput } from "../../shared/pagination";
 import { normalizePagination, countRows } from "../lib/pagination";
@@ -388,7 +388,86 @@ export const scenariosRouter = router({
 });
 
 // ─── Datasets ───────────────────────────────────────────────────────────────
+// ─── Helper: flatten nested values_json into dot-notation keys ─────────────
+function flattenValuesJson(values: Record<string, unknown>, prefix = ''): string[] {
+  const keys: string[] = [];
+  for (const [k, v] of Object.entries(values)) {
+    const fullKey = prefix ? `${prefix}.${k}` : k;
+    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+      keys.push(...flattenValuesJson(v as Record<string, unknown>, fullKey));
+    } else {
+      keys.push(fullKey);
+    }
+  }
+  return keys;
+}
+
 export const datasetsRouter = router({
+  // ─── Get project dataset bindings for BindingSelector ──────────────────
+  getProjectBindings: protectedProcedure.input(z.object({
+    projectId: z.string(),
+  })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+    // Get all dataset instances for this project
+    const instances = await db.select().from(datasetInstances)
+      .where(eq(datasetInstances.projectId, input.projectId))
+      .limit(200);
+
+    // Get all dataset types for lookup
+    const types = await db.select().from(datasetTypes).limit(500);
+    const typeMap = new Map(types.map(t => [t.uid, t]));
+
+    // Build binding groups by dataset type
+    const bindingGroups: Array<{
+      datasetType: string;
+      datasetId: string;
+      datasetName: string;
+      env: string;
+      bindings: string[];
+    }> = [];
+
+    // Deduplicate by datasetTypeId (keep first per type)
+    const seenTypes = new Set<string>();
+
+    for (const inst of instances) {
+      const typeId = inst.datasetTypeId;
+      if (seenTypes.has(typeId)) continue;
+      seenTypes.add(typeId);
+
+      const typeInfo = typeMap.get(typeId);
+      const typeName = typeInfo?.name ?? typeId;
+      const typeKey = typeInfo?.datasetTypeId ?? typeId;
+
+      // Parse values_json
+      let values: Record<string, unknown> = {};
+      if (inst.valuesJson) {
+        try {
+          values = typeof inst.valuesJson === 'string'
+            ? JSON.parse(inst.valuesJson)
+            : inst.valuesJson as Record<string, unknown>;
+        } catch { /* ignore parse errors */ }
+      }
+
+      // Flatten nested objects into dot-notation keys
+      const flatKeys = flattenValuesJson(values);
+
+      // Build bindings as "typeKey.key"
+      const bindings = flatKeys.map(k => `${typeKey}.${k}`);
+
+      bindingGroups.push({
+        datasetType: typeKey,
+        datasetId: inst.uid,
+        datasetName: typeName,
+        env: inst.env,
+        bindings,
+      });
+    }
+
+    return bindingGroups;
+  }),
+
   list: protectedProcedure.input(projectScopedList.extend({
     datasetType: z.string().optional(),
   })).query(async ({ input }) => {
