@@ -239,7 +239,9 @@ export default function ExecutionsPage() {
             onClick={() => {
               createExecution.mutate({
                 projectId: String(currentProject.id),
-                targetEnv: 'DEV',
+                targetEnv: 'PROD',
+                executionMode: 'SIMULATED',
+                autoStart: true,
               });
             }}
             disabled={createExecution.isPending}
@@ -294,6 +296,7 @@ export default function ExecutionsPage() {
             <thead>
               <tr className="border-b border-border">
                 <th className="text-left px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Statut</th>
+                <th className="text-left px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Mode</th>
                 <th className="text-left px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Env</th>
                 <th className="text-left px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Script</th>
                 <th className="text-left px-4 py-3 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">Durée</th>
@@ -315,6 +318,15 @@ export default function ExecutionsPage() {
                       <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${config?.cls || 'text-gray-400'}`}>
                         <StatusIcon className={`w-3.5 h-3.5 ${exec.status === 'RUNNING' ? 'animate-spin' : ''}`} />
                         {config?.label || exec.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
+                        exec.executionMode === 'REAL'
+                          ? 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'
+                          : 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+                      }`}>
+                        {exec.executionMode === 'REAL' ? 'RÉEL' : 'SIMULÉ'}
                       </span>
                     </td>
                     <td className="px-4 py-3">

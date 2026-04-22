@@ -4,10 +4,11 @@ import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../_core/trpc";
 import { getDb } from "../db";
 import {
-  testProfiles, testScenarios, datasets, executions,
+  testProfiles, testScenarios, datasets, executions, executionLogs,
   artifacts, incidents, captures, probes, generatedScripts,
   aiAnalyses, scriptVersions, datasetInstances, datasetTypes,
 } from "../../drizzle/schema";
+import { startExecution } from "../executionEngine";
 import { paginationInput } from "../../shared/pagination";
 import { normalizePagination, countRows } from "../lib/pagination";
 import { writeAuditLog } from "../lib/auditLog";
@@ -582,6 +583,8 @@ export const executionsRouter = router({
     projectId: z.string(), profileId: z.string().optional(), scenarioId: z.string().optional(),
     runnerType: z.string().optional(), scriptId: z.string().optional(),
     targetEnv: z.enum(["DEV", "PREPROD", "PILOT_ORANGE", "PROD"]).default("DEV"),
+    executionMode: z.enum(["SIMULATED", "REAL"]).default("SIMULATED"),
+    autoStart: z.boolean().default(false),
   })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
@@ -590,11 +593,38 @@ export const executionsRouter = router({
       uid,
       projectId: input.projectId, profileId: input.profileId ?? "",
       scenarioId: input.scenarioId ?? "", status: "PENDING",
+      executionMode: input.executionMode,
       runnerType: input.runnerType ?? null, scriptId: input.scriptId ?? null,
       targetEnv: input.targetEnv,
     });
-    await writeAuditLog({ userId: ctx.user!.id, action: "EXECUTION_CREATED", entity: "execution", entityId: String(res[0].insertId) });
-    return { success: true, executionId: Number(res[0].insertId) };
+    const executionId = Number(res[0].insertId);
+    await writeAuditLog({ userId: ctx.user!.id, action: "EXECUTION_CREATED", entity: "execution", entityId: String(executionId) });
+    // Auto-start si demandé
+    if (input.autoStart) {
+      startExecution(executionId).catch((err) => console.error(`[ExecutionEngine] Auto-start failed for #${executionId}:`, err));
+    }
+    return { success: true, executionId };
+  }),
+  // ─── Démarrer une exécution (PENDING → RUNNING → PASSED/FAILED) ────────
+  start: protectedProcedure.input(z.object({
+    executionId: z.number(),
+  })).mutation(async ({ input, ctx }) => {
+    await writeAuditLog({ userId: ctx.user!.id, action: "EXECUTION_STARTED", entity: "execution", entityId: String(input.executionId) });
+    // Lancer en arrière-plan (fire-and-forget) pour ne pas bloquer la réponse
+    startExecution(input.executionId).catch((err) => console.error(`[ExecutionEngine] Start failed for #${input.executionId}:`, err));
+    return { success: true };
+  }),
+  // ─── Logs d'exécution (polling temps réel) ─────────────────────────────
+  getLogs: protectedProcedure.input(z.object({
+    executionId: z.number(),
+    afterId: z.number().optional(),
+  })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const conditions: SQL[] = [eq(executionLogs.executionId, input.executionId)];
+    if (input.afterId) conditions.push(sql`${executionLogs.id} > ${input.afterId}`);
+    const logs = await db.select().from(executionLogs).where(and(...conditions)).orderBy(executionLogs.id).limit(200);
+    return logs;
   }),
   updateStatus: protectedProcedure.input(z.object({
     executionId: z.number(),
@@ -648,7 +678,29 @@ export const executionsRouter = router({
 
     return { success: true };
   }),
-
+  // ─── Annuler une exécution ─────────────────────────────────────────────
+  cancel: protectedProcedure.input(z.object({
+    executionId: z.number(),
+  })).mutation(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const [exec] = await db.select().from(executions).where(eq(executions.id, input.executionId)).limit(1);
+    if (!exec) throw new TRPCError({ code: "NOT_FOUND", message: "Exécution introuvable" });
+    if (!["PENDING", "RUNNING"].includes(exec.status)) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: `Impossible d'annuler une exécution en statut ${exec.status}` });
+    }
+    await db.update(executions).set({ status: "CANCELLED", finishedAt: new Date() }).where(eq(executions.id, input.executionId));
+    await db.insert(executionLogs).values({
+      uid: randomUUID(),
+      executionId: input.executionId,
+      stepIndex: 0,
+      level: "WARN",
+      message: "🚫 Exécution annulée par l'utilisateur",
+      detail: { cancelledBy: ctx.user!.id },
+    });
+    await writeAuditLog({ userId: ctx.user!.id, action: "EXECUTION_CANCELLED", entity: "execution", entityId: String(input.executionId) });
+    return { success: true };
+  }),
   compare: protectedProcedure.input(z.object({
     executionIdA: z.number(),
     executionIdB: z.number(),

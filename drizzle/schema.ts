@@ -174,6 +174,7 @@ export const executions = mysqlTable("executions", {
   profileId: varchar("profile_id", { length: 36 }).notNull(),
   scenarioId: varchar("scenario_id", { length: 36 }).notNull(),
   status: mysqlEnum("status", ["PENDING", "RUNNING", "PASSED", "FAILED", "ERROR", "CANCELLED"]).default("PENDING").notNull(),
+  executionMode: mysqlEnum("execution_mode", ["SIMULATED", "REAL"]).default("SIMULATED").notNull(),
   runnerType: varchar("runner_type", { length: 50 }),
   scriptId: varchar("script_id", { length: 36 }),
   scriptVersion: int("script_version"),
@@ -186,12 +187,28 @@ export const executions = mysqlTable("executions", {
   durationMs: int("duration_ms"),
   artifactsCount: int("artifacts_count").default(0),
   incidentsCount: int("incidents_count").default(0),
+  stepsTotal: int("steps_total").default(0),
+  stepsPassed: int("steps_passed").default(0),
+  stepsFailed: int("steps_failed").default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
-
 export type Execution = typeof executions.$inferSelect;
 export type InsertExecution = typeof executions.$inferInsert;
+
+// ─── Execution Logs (journal d'exécution pas-à-pas) ────────────────────────
+export const executionLogs = mysqlTable("execution_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  uid: varchar("uid", { length: 36 }).notNull(),
+  executionId: int("execution_id").notNull(),
+  stepIndex: int("step_index").notNull(),
+  level: mysqlEnum("level", ["INFO", "WARN", "ERROR", "DEBUG", "STEP"]).default("INFO").notNull(),
+  message: text("message").notNull(),
+  detail: json("detail"),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+});
+export type ExecutionLog = typeof executionLogs.$inferSelect;
+export type InsertExecutionLog = typeof executionLogs.$inferInsert;;
 
 // ─── Artifacts ──────────────────────────────────────────────────────────────
 // DB columns: id, uid, execution_id, type, filename, name, mime_type, content_type, size_bytes, storage_path, storage_url, s3_uri, checksum, capture_job_id, download_url, created_at, uploaded_at

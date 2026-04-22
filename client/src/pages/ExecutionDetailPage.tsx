@@ -6,7 +6,7 @@
  * - Analyse IA (résumé, recommandations)
  * - Boutons Analyser IA / Parser JMeter / Rerun
  */
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useRoute, Link, useLocation } from 'wouter';
 import { trpc } from '@/lib/trpc';
 import { useProject } from '../state/projectStore';
@@ -19,6 +19,7 @@ import {
   AlertCircle, Activity, Wrench, Sparkles, Play, RotateCcw,
   Code2, Globe, Package, Server, Brain,
   Eye, Shield, Beaker, Tag, Hash, FileDown,
+  Zap, StopCircle, Terminal, ChevronDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -300,9 +301,156 @@ function AiAnalysisPanel({ analyses }: { analyses: any[] }) {
     </div>
   );
 }
+// ─── Execution Mode Badge ─────────────────────────────────────────────────────
+function ExecutionModeBadge({ mode }: { mode: string }) {
+  const isSimulated = mode === 'SIMULATED';
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border ${
+      isSimulated
+        ? 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+        : 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'
+    }`}>
+      <Zap className="w-3 h-3" />
+      {isSimulated ? 'SIMULÉ' : 'RÉEL'}
+    </span>
+  );
+}
 
-// ─── Main Page ────────────────────────────────────────────────────────────
+// ─── Steps Progress Bar ──────────────────────────────────────────────────────
+function StepsProgressBar({ total, passed, failed, status }: { total: number; passed: number; failed: number; status: string }) {
+  if (!total) return null;
+  const completed = passed + failed;
+  const pct = Math.round((completed / total) * 100);
+  return (
+    <div className="bg-card border border-border rounded-lg p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Activity className="w-4 h-4 text-primary" />
+          <span className="text-sm font-heading font-semibold text-foreground">Étapes</span>
+        </div>
+        <span className="text-xs font-mono text-muted-foreground">
+          {completed}/{total} ({pct}%)
+        </span>
+      </div>
+      <div className="w-full bg-secondary/30 rounded-full h-2.5 overflow-hidden">
+        <div className="h-full flex">
+          {passed > 0 && (
+            <div
+              className="bg-green-500 transition-all duration-500"
+              style={{ width: `${(passed / total) * 100}%` }}
+            />
+          )}
+          {failed > 0 && (
+            <div
+              className="bg-red-500 transition-all duration-500"
+              style={{ width: `${(failed / total) * 100}%` }}
+            />
+          )}
+          {status === 'RUNNING' && completed < total && (
+            <div className="bg-blue-500/50 animate-pulse" style={{ width: `${(1 / total) * 100}%` }} />
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-4 mt-2">
+        <span className="text-xs text-green-400">✅ {passed} réussie(s)</span>
+        {failed > 0 && <span className="text-xs text-red-400">❌ {failed} échouée(s)</span>}
+        {status === 'RUNNING' && completed < total && (
+          <span className="text-xs text-blue-400 flex items-center gap-1">
+            <Loader2 className="w-3 h-3 animate-spin" /> en cours...
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
 
+// ─── Execution Logs Panel (temps réel) ────────────────────────────────────
+function ExecutionLogsPanel({ executionId, status }: { executionId: number; status: string }) {
+  const [expanded, setExpanded] = useState(true);
+  const [lastLogId, setLastLogId] = useState(0);
+  const [allLogs, setAllLogs] = useState<any[]>([]);
+  const logsEndRef = useRef<HTMLDivElement>(null);
+
+  const { data: newLogs } = trpc.executions.getLogs.useQuery(
+    { executionId, afterId: lastLogId },
+    {
+      refetchInterval: status === 'RUNNING' || status === 'PENDING' ? 1500 : false,
+    },
+  );
+
+  useEffect(() => {
+    if (newLogs && newLogs.length > 0) {
+      setAllLogs(prev => {
+        const existingIds = new Set(prev.map((l: any) => l.id));
+        const fresh = newLogs.filter((l: any) => !existingIds.has(l.id));
+        return [...prev, ...fresh];
+      });
+      setLastLogId(newLogs[newLogs.length - 1].id);
+    }
+  }, [newLogs]);
+
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [allLogs.length]);
+
+  if (allLogs.length === 0 && !['RUNNING', 'PENDING'].includes(status)) return null;
+
+  const levelStyles: Record<string, string> = {
+    INFO: 'text-blue-400',
+    WARN: 'text-yellow-400',
+    ERROR: 'text-red-400',
+    DEBUG: 'text-gray-400',
+    STEP: 'text-green-400',
+  };
+
+  return (
+    <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center justify-between w-full px-5 py-3 border-b border-border hover:bg-secondary/20 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <Terminal className="w-4 h-4 text-primary" />
+          <h3 className="text-sm font-heading font-semibold text-foreground">Journal d'exécution</h3>
+          <span className="text-xs text-muted-foreground ml-1">{allLogs.length} entrée(s)</span>
+          {status === 'RUNNING' && (
+            <span className="flex items-center gap-1 text-xs text-blue-400">
+              <Loader2 className="w-3 h-3 animate-spin" /> live
+            </span>
+          )}
+        </div>
+        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
+      </button>
+      {expanded && (
+        <div className="max-h-80 overflow-y-auto bg-black/20 font-mono text-xs">
+          {allLogs.length === 0 ? (
+            <div className="px-5 py-6 text-center">
+              <Loader2 className="w-5 h-5 text-muted-foreground animate-spin mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">En attente des logs...</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border/30">
+              {allLogs.map((log: any) => (
+                <div key={log.id} className="px-4 py-1.5 flex items-start gap-3 hover:bg-white/5">
+                  <span className="text-[10px] text-muted-foreground whitespace-nowrap mt-0.5">
+                    {new Date(log.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </span>
+                  <span className={`text-[10px] font-bold w-10 shrink-0 mt-0.5 ${levelStyles[log.level] || 'text-gray-400'}`}>
+                    {log.level}
+                  </span>
+                  <span className="text-foreground/90 break-all">{log.message}</span>
+                </div>
+              ))}
+              <div ref={logsEndRef} />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Page ──────────────────────────────────────────────────────────────────────
 export default function ExecutionDetailPage() {
   const [, params] = useRoute('/executions/:id');
   const [, navigate] = useLocation();
@@ -324,16 +472,31 @@ export default function ExecutionDetailPage() {
     },
   );
 
-  // Rerun mutation
-  const createExecution = trpc.executions.create.useMutation({
+  // Start execution mutation
+  const startExec = trpc.executions.start.useMutation({
     onSuccess: () => {
-      toast.success('Exécution relancée');
-      utils.executions.list.invalidate();
-      navigate('/executions');
+      toast.success('Exécution démarrée');
+      utils.executions.get.invalidate({ executionId });
     },
     onError: (err) => toast.error(err.message),
   });
-
+  // Cancel execution mutation
+  const cancelExec = trpc.executions.cancel.useMutation({
+    onSuccess: () => {
+      toast.success('Exécution annulée');
+      utils.executions.get.invalidate({ executionId });
+    },
+    onError: (err) => toast.error(err.message),
+  });
+  // Rerun mutation
+  const createExecution = trpc.executions.create.useMutation({
+    onSuccess: (data) => {
+      toast.success('Exécution relancée');
+      utils.executions.list.invalidate();
+      navigate(`/executions/${data.executionId}`);
+    },
+    onError: (err) => toast.error(err.message),
+  });
   const handleRerun = () => {
     if (!execData || !currentProject) return;
     createExecution.mutate({
@@ -342,8 +505,10 @@ export default function ExecutionDetailPage() {
       scenarioId: execData.scenarioId ?? undefined,
       scriptId: execData.scriptId ?? undefined,
       targetEnv: (execData.targetEnv as TargetEnv) || 'DEV',
+      executionMode: (execData.executionMode as 'SIMULATED' | 'REAL') || 'SIMULATED',
+      autoStart: true,
     });
-  };
+  };;
 
   // ─── Loading / Not found ───────────────────────────────────────────────
   if (loadingExec) {
@@ -391,9 +556,31 @@ export default function ExecutionDetailPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {/* Bouton Démarrer — visible uniquement quand PENDING */}
+            {execData.status === 'PENDING' && (
+              <button
+                onClick={() => startExec.mutate({ executionId })}
+                disabled={startExec.isPending}
+                className="inline-flex items-center gap-1.5 rounded-md bg-green-600 hover:bg-green-500 px-4 py-1.5 text-xs font-semibold text-white transition-colors disabled:opacity-50"
+              >
+                {startExec.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                Démarrer
+              </button>
+            )}
+            {/* Bouton Annuler — visible quand RUNNING */}
+            {execData.status === 'RUNNING' && (
+              <button
+                onClick={() => cancelExec.mutate({ executionId })}
+                disabled={cancelExec.isPending}
+                className="inline-flex items-center gap-1.5 rounded-md border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 px-3 py-1.5 text-xs font-medium text-red-400 transition-colors disabled:opacity-50"
+              >
+                {cancelExec.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <StopCircle className="w-3.5 h-3.5" />}
+                Annuler
+              </button>
+            )}
             <ExecutionDetailActions executionId={executionId} status={execData.status} />
             <ExportPdfButton executionId={executionId} />
-            {canRerunExecution && ['PASSED', 'FAILED', 'ERROR'].includes(execData.status) && (
+            {canRerunExecution && ['PASSED', 'FAILED', 'ERROR', 'CANCELLED'].includes(execData.status) && (
               <button
                 onClick={handleRerun}
                 disabled={createExecution.isPending}
@@ -403,6 +590,8 @@ export default function ExecutionDetailPage() {
                 Rerun
               </button>
             )}
+            {/* Mode d'exécution badge */}
+            <ExecutionModeBadge mode={(execData as any).executionMode || 'SIMULATED'} />
             <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md ${config.bg}`}>
               <StatusIcon className={`w-4 h-4 ${config.cls} ${execData.status === 'RUNNING' ? 'animate-spin' : ''}`} />
               <span className={`text-sm font-medium ${config.cls}`}>{config.label}</span>
@@ -485,6 +674,15 @@ export default function ExecutionDetailPage() {
         </div>
       </div>
 
+      {/* Steps Progress */}
+      <StepsProgressBar
+        total={(execData as any).stepsTotal || 0}
+        passed={(execData as any).stepsPassed || 0}
+        failed={(execData as any).stepsFailed || 0}
+        status={execData.status}
+      />
+      {/* Execution Logs (temps réel) */}
+      <ExecutionLogsPanel executionId={executionId} status={execData.status} />
       {/* Jobs Panel */}
       <JobsPanel executionId={executionId} />
 
