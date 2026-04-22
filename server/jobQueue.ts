@@ -27,7 +27,7 @@ export interface JobPayload {
   parseJmeterJtl: { runId: number; artifactId: number };
   aiAnalyzeRun: { runId: number };
   retentionPurge: { dryRun?: boolean };
-  generateExecutionPdf: { executionId: number; reportId: number; projectId: number };
+  generateExecutionPdf: { executionId: number; reportId: number; projectId: string };
   parseGpsFile: { artifactUid: string; runUid: string; orgId: string; filename: string };
   driveAiAnalyze: { analysisUid: string; runUid: string; orgId: string; mode: string };
 }

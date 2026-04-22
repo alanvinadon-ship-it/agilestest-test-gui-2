@@ -660,3 +660,4 @@
 - [x] Feature: Moteur d'exécution — colonne MODE dans le tableau Run Center avec badge SIMULÉ
 - [ ] Feature: Phase 2 — worker/queue Playwright réel, collecte artefacts, mise à jour auto statut
 - [x] Test: 12 tests Vitest pour executionEngine (simulateur, transitions, résultats, interface)
+- [x] Bug: Insert reports échoue avec projectId NaN — reports.projectId changé de INT à VARCHAR(36), supprimé Number() dans reports.ts et jobQueue.ts

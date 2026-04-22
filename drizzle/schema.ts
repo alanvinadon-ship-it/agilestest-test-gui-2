@@ -370,7 +370,7 @@ export type InsertAiAnalysis = typeof aiAnalyses.$inferInsert;
 export const reports = mysqlTable("reports", {
   id: int("id").autoincrement().primaryKey(),
   executionId: int("executionId").notNull(),
-  projectId: int("projectId").notNull(),
+  projectId: varchar("projectId", { length: 36 }).notNull(),
   status: mysqlEnum("status", ["PENDING", "GENERATING", "DONE", "FAILED"]).default("PENDING").notNull(),
   storagePath: varchar("storagePath", { length: 512 }),
   downloadUrl: text("downloadUrl"),
