@@ -651,3 +651,4 @@
 - [x] Test: 22 tests Vitest pour getProjectDatasetBindings et règles de validation binding — server/bindingSelector.test.ts
 - [x] Push: Synchroniser le code avec le dépôt GitHub alanvinadon-ship-it/agilestest-test-gui-2 (commit b400aaf)
 - [x] Bug: Warning 'No dataset keys were provided for the FILL steps' — corrigé : buildContext inclut target/locator_strategy/input_binding dans les steps, extractRequiredInputs lit inputBinding, prompt LLM mis à jour pour ne pas signaler les bindings déjà mappés, 32 tests passent
+- [x] Bug V2: Warning 'dataset does not contain username/password keys' persiste — cause racine : buildContext.ts lisait ds.values_json (snake_case) mais Drizzle retourne ds.valuesJson (camelCase), idem pour dataset_type_id vs datasetTypeId → merged_json était vide → LLM ne voyait aucune clé. Corrigé avec fallback camelCase/snake_case + 6 nouveaux tests (38 total)

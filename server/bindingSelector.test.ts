@@ -381,3 +381,92 @@ describe('formatSteps includes binding info', () => {
     expect(clickLine).not.toContain('binding=');
   });
 });
+
+// ─── Test: mergeDatasetValues supports Drizzle camelCase ─────────────────
+
+describe('mergeDatasetValues supports Drizzle camelCase', () => {
+  // Simulates the mergeDatasetValues logic from buildContext.ts
+  function mergeDatasetValues(datasets: any[]): Record<string, unknown> {
+    const merged: Record<string, unknown> = {};
+    for (const ds of datasets) {
+      // Drizzle retourne camelCase (valuesJson), le type frontend utilise snake_case (values_json)
+      const values = ds.valuesJson || ds.values_json || {};
+      // Drizzle retourne camelCase (datasetTypeId), le type frontend utilise snake_case (dataset_type_id)
+      const typeId = ds.datasetTypeId || ds.dataset_type_id || 'unknown';
+      for (const [key, value] of Object.entries(values)) {
+        merged[`${typeId}.${key}`] = value;
+        merged[key] = value;
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          for (const [nestedKey, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+            merged[`${typeId}.${key}.${nestedKey}`] = nestedValue;
+            merged[`${key}.${nestedKey}`] = nestedValue;
+          }
+        }
+      }
+    }
+    return merged;
+  }
+
+  it('should read valuesJson (camelCase from Drizzle)', () => {
+    const datasets = [{
+      datasetTypeId: 'users',
+      valuesJson: { username: 'lanvin@test.com', password: 'secret123' },
+    }];
+    const merged = mergeDatasetValues(datasets);
+    expect(merged['username']).toBe('lanvin@test.com');
+    expect(merged['password']).toBe('secret123');
+    expect(merged['users.username']).toBe('lanvin@test.com');
+    expect(merged['users.password']).toBe('secret123');
+  });
+
+  it('should read values_json (snake_case from frontend types)', () => {
+    const datasets = [{
+      dataset_type_id: 'users',
+      values_json: { username: 'lanvin@test.com', password: 'secret123' },
+    }];
+    const merged = mergeDatasetValues(datasets);
+    expect(merged['username']).toBe('lanvin@test.com');
+    expect(merged['password']).toBe('secret123');
+    expect(merged['users.username']).toBe('lanvin@test.com');
+    expect(merged['users.password']).toBe('secret123');
+  });
+
+  it('should prefer valuesJson over values_json when both exist', () => {
+    const datasets = [{
+      datasetTypeId: 'users',
+      valuesJson: { username: 'from_camel' },
+      values_json: { username: 'from_snake' },
+    }];
+    const merged = mergeDatasetValues(datasets);
+    expect(merged['username']).toBe('from_camel');
+  });
+
+  it('should handle empty valuesJson gracefully', () => {
+    const datasets = [{ datasetTypeId: 'users', valuesJson: {} }];
+    const merged = mergeDatasetValues(datasets);
+    expect(Object.keys(merged)).toHaveLength(0);
+  });
+
+  it('should handle missing valuesJson and values_json', () => {
+    const datasets = [{ datasetTypeId: 'users' }];
+    const merged = mergeDatasetValues(datasets);
+    expect(Object.keys(merged)).toHaveLength(0);
+  });
+
+  it('should flatten nested objects from camelCase source', () => {
+    const datasets = [{
+      datasetTypeId: 'form_data',
+      valuesJson: {
+        user_info: { firstName: 'Jean', lastName: 'Dupont' },
+        email: 'jean@test.com',
+      },
+    }];
+    const merged = mergeDatasetValues(datasets);
+    expect(merged['email']).toBe('jean@test.com');
+    expect(merged['form_data.email']).toBe('jean@test.com');
+    expect(merged['user_info.firstName']).toBe('Jean');
+    expect(merged['form_data.user_info.firstName']).toBe('Jean');
+    expect(merged['user_info.lastName']).toBe('Dupont');
+    expect(merged['form_data.user_info.lastName']).toBe('Dupont');
+  });
+});

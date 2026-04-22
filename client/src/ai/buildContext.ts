@@ -16,10 +16,13 @@ import type {
 function mergeDatasetValues(datasets: DatasetInstance[]): Record<string, unknown> {
   const merged: Record<string, unknown> = {};
   for (const ds of datasets) {
-    const values = ds.values_json || {};
+    // Drizzle retourne camelCase (valuesJson), le type frontend utilise snake_case (values_json)
+    const values = (ds as any).valuesJson || ds.values_json || {};
+    // Drizzle retourne camelCase (datasetTypeId), le type frontend utilise snake_case (dataset_type_id)
+    const typeId = (ds as any).datasetTypeId || ds.dataset_type_id || 'unknown';
     for (const [key, value] of Object.entries(values)) {
       // Préfixe par dataset_type_id pour éviter les collisions
-      merged[`${ds.dataset_type_id}.${key}`] = value;
+      merged[`${typeId}.${key}`] = value;
       // Aussi disponible sans préfixe (dernier gagne)
       merged[key] = value;
 
@@ -27,7 +30,7 @@ function mergeDatasetValues(datasets: DatasetInstance[]): Record<string, unknown
       // Ex: user_info: { firstName: "Jean" } → user_info.firstName: "Jean"
       if (value && typeof value === 'object' && !Array.isArray(value)) {
         for (const [nestedKey, nestedValue] of Object.entries(value as Record<string, unknown>)) {
-          merged[`${ds.dataset_type_id}.${key}.${nestedKey}`] = nestedValue;
+          merged[`${typeId}.${key}.${nestedKey}`] = nestedValue;
           merged[`${key}.${nestedKey}`] = nestedValue;
         }
       }
