@@ -16,9 +16,16 @@ function jsonBlock(obj: unknown): string {
 }
 
 function formatSteps(steps: AiScriptContext['scenario']['steps']): string {
-  return steps.map(s =>
-    `  ${s.order}. [${s.action}] ${s.description}\n     Expected: ${s.expected_result}\n     Params: ${JSON.stringify(s.parameters)}`
-  ).join('\n');
+  return steps.map(s => {
+    const parts = [`  ${s.order}. [${s.action}]`];
+    if (s.target) parts.push(`target="${s.target}"`);
+    if (s.locator_strategy) parts.push(`locator=${s.locator_strategy}`);
+    if (s.input_binding) parts.push(`binding=${s.input_binding}`);
+    if (s.description) parts.push(s.description);
+    const line1 = parts.join(' ');
+    const line2 = `     Expected: ${s.expected_result || 'N/A'}`;
+    return `${line1}\n${line2}`;
+  }).join('\n');
 }
 
 function formatDatasetKeys(merged: Record<string, unknown>, maskedKeys: string[]): string {
@@ -86,7 +93,7 @@ ${formatDatasetKeys(ctx.dataset.resolved.merged_json, ctx.dataset.secrets_policy
 2. Plan files following the framework's conventions.
 3. Map EVERY scenario step to a specific file and function/keyword.
 4. Reference dataset keys by their exact names — NEVER invent selectors or values.
-5. If any required input is missing from the dataset, add it to missing_inputs with severity WARNING. Object-type keys (e.g. user_info, address) contain nested fields that are also available as flattened keys (e.g. user_info.firstName, address.city).
+5. If a step already has an input_binding (e.g. binding=username), that key is ALREADY mapped to the dataset — do NOT report it as missing. Only add to missing_inputs (severity WARNING) if a FILL/SELECT/UPLOAD step has NO input_binding AND the required key is not found in the available dataset keys. Object-type keys (e.g. user_info, address) contain nested fields also available as flattened keys (e.g. user_info.firstName, address.city).
 6. Secret keys (${ctx.dataset.secrets_policy.masked_keys.join(', ') || 'none'}) must be referenced via environment variables, NEVER hardcoded.
 
 ## OUTPUT FORMAT
@@ -149,11 +156,12 @@ ${planSection}
 1. Generate ALL files listed in the plan (or infer from steps if no plan).
 2. NEVER hardcode selectors — import from selectors.ts or use dataset keys (selectors_*).
 3. NEVER hardcode business values — use dataset keys via import or config.
-4. Secret values (${ctx.dataset.secrets_policy.masked_keys.join(', ') || 'none'}) → use process.env or %{ENV_VAR} syntax.
-5. For RobotFramework: produce reusable keywords, centralized variables.
-6. For Playwright: produce spec.ts + helpers + selectors.ts imports.
-7. Include proper error handling and assertion messages referencing step context.
-8. Each file must be complete and runnable.
+4. When a step has an input_binding (e.g. binding=username), use that exact dataset key in the generated code. The binding is already resolved to the dataset.
+5. Secret values (${ctx.dataset.secrets_policy.masked_keys.join(', ') || 'none'}) → use process.env or %{ENV_VAR} syntax.
+6. For RobotFramework: produce reusable keywords, centralized variables.
+7. For Playwright: produce spec.ts + helpers + selectors.ts imports.
+8. Include proper error handling and assertion messages referencing step context.
+9. Each file must be complete and runnable.
 
 ## OUTPUT FORMAT
 Return ONLY a valid JSON object:

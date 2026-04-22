@@ -135,6 +135,12 @@ export function buildAiScriptContext(input: BuildContextInput): AiScriptContext 
   const expectedResults: string[] = steps.map(s => (s as any).expectedResult || (s as any).expected_result || '').filter((r: string) => !!r);
   const requiredInputs: string[] = [];
   for (const step of steps) {
+    // Extraire les inputBinding comme required_inputs (nouveau modèle structuré)
+    const binding = (step as any).inputBinding || (step as any).input_binding;
+    if (binding && !requiredInputs.includes(binding)) {
+      requiredInputs.push(binding);
+    }
+    // Fallback: extraire aussi depuis parameters (ancien modèle)
     if (step.parameters && typeof step.parameters === 'object') {
       for (const key of Object.keys(step.parameters)) {
         if (!requiredInputs.includes(key)) requiredInputs.push(key);
@@ -163,8 +169,11 @@ export function buildAiScriptContext(input: BuildContextInput): AiScriptContext 
         id: String(s.id || `step-${idx + 1}`),
         order: typeof s.order === 'number' ? s.order : idx + 1,
         action: s.action || '',
+        target: (s as any).target || '',
+        locator_strategy: (s as any).locatorStrategy || (s as any).locator_strategy || '',
+        input_binding: (s as any).inputBinding || (s as any).input_binding || null,
         description: s.description || '',
-        expected_result: s.expected_result || '',
+        expected_result: (s as any).expectedResult || s.expected_result || '',
         parameters: (s.parameters && typeof s.parameters === 'object') ? s.parameters : {},
       })),
       expected_results: expectedResults,

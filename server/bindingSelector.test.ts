@@ -217,3 +217,167 @@ describe('Flatten object values for bindings', () => {
     expect(bindings).toHaveLength(0);
   });
 });
+
+// ─── Test: buildContext step mapping includes bindings ────────────────────
+
+describe('buildContext step mapping includes bindings', () => {
+  // Simulates the step mapping logic from buildContext.ts
+  function mapStepsForContext(steps: Array<{
+    id: string; order: number; action: string; target: string;
+    locatorStrategy: string; inputBinding: string | null;
+    expectedResult: string; description?: string; parameters?: Record<string, unknown>;
+  }>) {
+    return steps.map((s, idx) => ({
+      id: String(s.id || `step-${idx + 1}`),
+      order: typeof s.order === 'number' ? s.order : idx + 1,
+      action: s.action || '',
+      target: (s as any).target || '',
+      locator_strategy: (s as any).locatorStrategy || (s as any).locator_strategy || '',
+      input_binding: (s as any).inputBinding || (s as any).input_binding || null,
+      description: s.description || '',
+      expected_result: (s as any).expectedResult || (s as any).expected_result || '',
+      parameters: (s.parameters && typeof s.parameters === 'object') ? s.parameters : {},
+    }));
+  }
+
+  function extractRequiredInputs(steps: Array<{
+    inputBinding?: string | null; input_binding?: string | null;
+    parameters?: Record<string, unknown>;
+  }>): string[] {
+    const requiredInputs: string[] = [];
+    for (const step of steps) {
+      const binding = (step as any).inputBinding || (step as any).input_binding;
+      if (binding && !requiredInputs.includes(binding)) {
+        requiredInputs.push(binding);
+      }
+      if (step.parameters && typeof step.parameters === 'object') {
+        for (const key of Object.keys(step.parameters)) {
+          if (!requiredInputs.includes(key)) requiredInputs.push(key);
+        }
+      }
+    }
+    return requiredInputs;
+  }
+
+  const loginSteps = [
+    { id: 'step-1', order: 1, action: 'NAVIGATE', target: 'urls.login', locatorStrategy: 'ref', inputBinding: null, expectedResult: 'La page est affichée', description: '' },
+    { id: 'step-2', order: 2, action: 'ASSERT', target: 'login.title', locatorStrategy: 'text', inputBinding: null, expectedResult: 'Page de connexion visible', description: '' },
+    { id: 'step-3', order: 3, action: 'FILL', target: 'login.username', locatorStrategy: 'label', inputBinding: 'username', expectedResult: '', description: '' },
+    { id: 'step-4', order: 4, action: 'FILL', target: 'login.password', locatorStrategy: 'label', inputBinding: 'password', expectedResult: '', description: '' },
+    { id: 'step-5', order: 5, action: 'CLICK', target: 'login.submit', locatorStrategy: 'role', inputBinding: null, expectedResult: '', description: '' },
+  ];
+
+  it('should include target in mapped steps', () => {
+    const mapped = mapStepsForContext(loginSteps);
+    expect(mapped[0].target).toBe('urls.login');
+    expect(mapped[2].target).toBe('login.username');
+    expect(mapped[4].target).toBe('login.submit');
+  });
+
+  it('should include locator_strategy in mapped steps', () => {
+    const mapped = mapStepsForContext(loginSteps);
+    expect(mapped[0].locator_strategy).toBe('ref');
+    expect(mapped[2].locator_strategy).toBe('label');
+    expect(mapped[4].locator_strategy).toBe('role');
+  });
+
+  it('should include input_binding in mapped steps', () => {
+    const mapped = mapStepsForContext(loginSteps);
+    expect(mapped[0].input_binding).toBeNull();
+    expect(mapped[2].input_binding).toBe('username');
+    expect(mapped[3].input_binding).toBe('password');
+    expect(mapped[4].input_binding).toBeNull();
+  });
+
+  it('should extract required_inputs from inputBinding fields', () => {
+    const inputs = extractRequiredInputs(loginSteps);
+    expect(inputs).toContain('username');
+    expect(inputs).toContain('password');
+    expect(inputs).toHaveLength(2);
+  });
+
+  it('should not duplicate required_inputs', () => {
+    const stepsWithDuplicates = [
+      ...loginSteps,
+      { id: 'step-6', order: 6, action: 'FILL', target: 'login.username2', locatorStrategy: 'label', inputBinding: 'username', expectedResult: '', description: '' },
+    ];
+    const inputs = extractRequiredInputs(stepsWithDuplicates);
+    expect(inputs).toHaveLength(2); // username appears twice but should be deduplicated
+  });
+
+  it('should also extract from parameters (legacy fallback)', () => {
+    const legacySteps = [
+      { id: 'step-1', order: 1, action: 'FILL', inputBinding: null, parameters: { email: 'test@example.com', password: 'secret' } },
+    ];
+    const inputs = extractRequiredInputs(legacySteps);
+    expect(inputs).toContain('email');
+    expect(inputs).toContain('password');
+  });
+
+  it('should combine inputBinding and parameters inputs', () => {
+    const mixedSteps = [
+      { id: 'step-1', order: 1, action: 'FILL', inputBinding: 'username', parameters: {} },
+      { id: 'step-2', order: 2, action: 'FILL', inputBinding: null, parameters: { legacy_key: 'val' } },
+    ];
+    const inputs = extractRequiredInputs(mixedSteps);
+    expect(inputs).toContain('username');
+    expect(inputs).toContain('legacy_key');
+    expect(inputs).toHaveLength(2);
+  });
+});
+
+// ─── Test: formatSteps includes binding info ─────────────────────────────
+
+describe('formatSteps includes binding info', () => {
+  // Simulates the formatSteps logic from promptTemplates.ts
+  function formatSteps(steps: Array<{
+    order: number; action: string; target: string;
+    locator_strategy: string; input_binding: string | null;
+    description: string; expected_result: string;
+  }>): string {
+    return steps.map(s => {
+      const parts = [`  ${s.order}. [${s.action}]`];
+      if (s.target) parts.push(`target="${s.target}"`);
+      if (s.locator_strategy) parts.push(`locator=${s.locator_strategy}`);
+      if (s.input_binding) parts.push(`binding=${s.input_binding}`);
+      if (s.description) parts.push(s.description);
+      const line1 = parts.join(' ');
+      const line2 = `     Expected: ${s.expected_result || 'N/A'}`;
+      return `${line1}\n${line2}`;
+    }).join('\n');
+  }
+
+  it('should include binding=username for FILL step', () => {
+    const output = formatSteps([
+      { order: 1, action: 'FILL', target: 'login.username', locator_strategy: 'label', input_binding: 'username', description: '', expected_result: '' },
+    ]);
+    expect(output).toContain('binding=username');
+    expect(output).toContain('target="login.username"');
+    expect(output).toContain('locator=label');
+  });
+
+  it('should NOT include binding for CLICK step (null)', () => {
+    const output = formatSteps([
+      { order: 1, action: 'CLICK', target: 'login.submit', locator_strategy: 'role', input_binding: null, description: '', expected_result: '' },
+    ]);
+    expect(output).not.toContain('binding=');
+    expect(output).toContain('target="login.submit"');
+  });
+
+  it('should format a full login scenario with bindings', () => {
+    const output = formatSteps([
+      { order: 1, action: 'NAVIGATE', target: 'urls.login', locator_strategy: 'ref', input_binding: null, description: '', expected_result: 'Page affichée' },
+      { order: 2, action: 'FILL', target: 'login.username', locator_strategy: 'label', input_binding: 'username', description: '', expected_result: '' },
+      { order: 3, action: 'FILL', target: 'login.password', locator_strategy: 'label', input_binding: 'password', description: '', expected_result: '' },
+      { order: 4, action: 'CLICK', target: 'login.submit', locator_strategy: 'role', input_binding: null, description: '', expected_result: '' },
+    ]);
+    expect(output).toContain('binding=username');
+    expect(output).toContain('binding=password');
+    // NAVIGATE and CLICK should not have binding
+    const lines = output.split('\n');
+    const navigateLine = lines.find(l => l.includes('[NAVIGATE]'));
+    expect(navigateLine).not.toContain('binding=');
+    const clickLine = lines.find(l => l.includes('[CLICK]'));
+    expect(clickLine).not.toContain('binding=');
+  });
+});

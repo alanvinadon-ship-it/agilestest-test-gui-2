@@ -17,9 +17,16 @@ function jsonBlock(obj: unknown): string {
 }
 
 function formatSteps(steps: AiScriptContext['scenario']['steps']): string {
-  return steps.map(s =>
-    `  ${s.order}. [${s.action}] ${s.description}\n     Expected: ${s.expected_result}\n     Params: ${JSON.stringify(s.parameters)}`
-  ).join('\n');
+  return steps.map(s => {
+    const parts = [`  ${s.order}. [${s.action}]`];
+    if (s.target) parts.push(`target="${s.target}"`);
+    if (s.locator_strategy) parts.push(`locator=${s.locator_strategy}`);
+    if (s.input_binding) parts.push(`binding=${s.input_binding}`);
+    if (s.description) parts.push(s.description);
+    const line1 = parts.join(' ');
+    const line2 = `     Expected: ${s.expected_result || 'N/A'}`;
+    return `${line1}\n${line2}`;
+  }).join('\n');
 }
 
 function formatDatasetKeys(merged: Record<string, unknown>, maskedKeys: string[]): string {

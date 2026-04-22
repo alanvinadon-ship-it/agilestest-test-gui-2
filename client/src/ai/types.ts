@@ -39,6 +39,12 @@ export interface AiScriptContext {
       id: string;
       order: number;
       action: string;
+      /** Cible de l'action (ex: login.username, contact.submit) */
+      target: string;
+      /** Stratégie de repérage (label, role, text, testId, css, xpath) */
+      locator_strategy: string;
+      /** Référence dataset binding (ex: form_data.email, users.username) ou null */
+      input_binding: string | null;
       description: string;
       expected_result: string;
       parameters: Record<string, unknown>;

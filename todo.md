@@ -649,3 +649,5 @@
 - [x] Feature: Mise à jour DSL preview avec binding sélectionné
 - [x] Feature: Bonus — filtrage bindings par action, auto-suggestion par target, aperçu valeur réelle
 - [x] Test: 22 tests Vitest pour getProjectDatasetBindings et règles de validation binding — server/bindingSelector.test.ts
+- [x] Push: Synchroniser le code avec le dépôt GitHub alanvinadon-ship-it/agilestest-test-gui-2 (commit b400aaf)
+- [x] Bug: Warning 'No dataset keys were provided for the FILL steps' — corrigé : buildContext inclut target/locator_strategy/input_binding dans les steps, extractRequiredInputs lit inputBinding, prompt LLM mis à jour pour ne pas signaler les bindings déjà mappés, 32 tests passent
