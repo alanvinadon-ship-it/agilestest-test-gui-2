@@ -679,3 +679,4 @@
 - [x] Feature: Collecte d'artefacts (screenshots par étape, upload S3) — saveScreenshotArtifact()
 - [x] Feature: Intégrer le worker réel dans executionEngine.ts (mode REAL) — realExecution()
 - [x] Feature: Tests Vitest pour le mode RÉEL Playwright — 36 tests passent
+- [x] Feature: Galerie de captures d'écran dans la page détail d'exécution — ScreenshotGallery.tsx avec lightbox, navigation clavier, badges statut, 19 tests

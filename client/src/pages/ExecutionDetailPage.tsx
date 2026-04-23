@@ -22,6 +22,7 @@ import {
   Zap, StopCircle, Terminal, ChevronDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import ScreenshotGallery from '@/components/ScreenshotGallery';
 
 // ─── Status config ───────────────────────────────────────────────────────
 const statusConfig: Record<ExecutionStatus, { icon: typeof CheckCircle2; label: string; cls: string; bg: string }> = {
@@ -688,6 +689,9 @@ export default function ExecutionDetailPage() {
 
       {/* AI Analysis */}
       <AiAnalysisPanel analyses={analysesList} />
+
+      {/* Screenshot Gallery */}
+      <ScreenshotGallery artifacts={artsList} />
 
       {/* Artifacts */}
       <div>
