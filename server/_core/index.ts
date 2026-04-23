@@ -21,8 +21,11 @@ import {
   corsMiddleware,
 } from "../security";
 
-// ── Drive Ingestion (registers job handler) ──────────────────────────────
+//// ── Drive Ingestion (registers job handler) ──────────────────────────
 import "../driveIngestion";
+
+// ── Job Queue (polling-based async job processing) ─────────────────
+import { startPolling } from "../jobQueue";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -97,6 +100,9 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+
+    // Start job queue polling after server is ready
+    startPolling(5000);
   });
 }
 

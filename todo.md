@@ -661,3 +661,9 @@
 - [ ] Feature: Phase 2 — worker/queue Playwright réel, collecte artefacts, mise à jour auto statut
 - [x] Test: 12 tests Vitest pour executionEngine (simulateur, transitions, résultats, interface)
 - [x] Bug: Insert reports échoue avec projectId NaN — reports.projectId changé de INT à VARCHAR(36), supprimé Number() dans reports.ts et jobQueue.ts
+- [x] Bug: Génération PDF bloquée en PENDING — cause : startPolling() n'était pas appelé au démarrage du serveur, runAfter était défini à une date future. Corrigé : ajout import/appel startPolling() dans server/_core/index.ts, logging détaillé dans handler
+- [x] Feature: Flux PDF complet PENDING → GENERATING → DONE/FAILED avec génération réelle pdfkit
+- [x] Feature: Stockage PDF sur S3 avec métadonnées (fileName, fileSize, downloadUrl) via storagePut()
+- [ ] Feature: Bouton téléchargement PDF quand statut DONE + route de download
+- [x] Feature: Gestion erreurs et timeouts dans la génération PDF (try/catch, retry logic, error message)
+- [ ] Test: Tests Vitest pour le flux de génération PDF (handler, routes, UI)

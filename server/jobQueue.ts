@@ -408,16 +408,21 @@ registerHandler("generateExecutionPdf", async (payload) => {
   if (!db) throw new Error("Database unavailable");
 
   const { executionId, reportId, projectId } = payload;
+  console.log(`[PDF] Starting generation for report ${reportId}, execution ${executionId}`);
 
   // Mark report as generating
   await db.update(reports).set({ status: "GENERATING" }).where(eq(reports.id, reportId));
+  console.log(`[PDF] Report marked as GENERATING`);
 
   try {
     // Fetch execution data
+    console.log(`[PDF] Fetching execution ${executionId}`);
     const [execution] = await db.select().from(executions).where(eq(executions.id, executionId)).limit(1);
     if (!execution) throw new Error(`Execution ${executionId} not found`);
+    console.log(`[PDF] Execution found, status: ${execution.status}`);
 
     // Fetch related data in parallel
+    console.log(`[PDF] Fetching related data...`);
     const [scenarioRows, profileRows, artifactRows, incidentRows, analysisRows] = await Promise.all([
       execution.scenarioId ? db.select().from(testScenarios).where(eq(testScenarios.uid, execution.scenarioId)).limit(1) : Promise.resolve([]),
       execution.profileId ? db.select().from(testProfiles).where(eq(testProfiles.uid, execution.profileId)).limit(1) : Promise.resolve([]),
@@ -428,9 +433,12 @@ registerHandler("generateExecutionPdf", async (payload) => {
 
     const scenario = scenarioRows[0] ?? null;
     const profile = profileRows[0] ?? null;
+    console.log(`[PDF] Related data fetched: scenario=${scenario?.name}, profile=${profile?.name}, artifacts=${artifactRows.length}, incidents=${incidentRows.length}`);
 
     // Build PDF with pdfkit
+    console.log(`[PDF] Importing pdfkit...`);
     const PDFDocument = (await import("pdfkit")).default;
+    console.log(`[PDF] pdfkit imported, creating document...`);
     const doc = new PDFDocument({ size: "A4", margin: 50 });
 
     // Collect buffer
@@ -527,15 +535,21 @@ registerHandler("generateExecutionPdf", async (payload) => {
     );
 
     doc.end();
+    console.log(`[PDF] PDF document ended, waiting for buffer...`);
     const pdfBuffer = await pdfDone;
+    console.log(`[PDF] PDF buffer ready, size: ${pdfBuffer.length} bytes`);
 
     // Upload to S3
+    console.log(`[PDF] Uploading to S3...`);
     const { storagePut } = await import("./storage");
     const filename = `rapport-execution-${executionId}-${Date.now()}.pdf`;
     const key = `reports/project-${projectId}/${filename}`;
+    console.log(`[PDF] S3 key: ${key}`);
     const { url } = await storagePut(key, pdfBuffer, "application/pdf");
+    console.log(`[PDF] S3 upload complete, URL: ${url}`);
 
     // Update report record
+    console.log(`[PDF] Updating report record...`);
     await db.update(reports).set({
       status: "DONE",
       storagePath: key,
@@ -543,6 +557,7 @@ registerHandler("generateExecutionPdf", async (payload) => {
       filename,
       sizeBytes: pdfBuffer.length,
     }).where(eq(reports.id, reportId));
+    console.log(`[PDF] Report updated to DONE`);
 
     // Notify owner that PDF is ready
     notifyOwner({
@@ -552,6 +567,7 @@ registerHandler("generateExecutionPdf", async (payload) => {
 
     return { reportId, filename, sizeBytes: pdfBuffer.length, url };
   } catch (err: any) {
+    console.error(`[PDF] Error during generation:`, err);
     await db.update(reports).set({
       status: "FAILED",
       error: String(err?.message ?? err).substring(0, 2000),
