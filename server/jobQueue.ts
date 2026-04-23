@@ -5,13 +5,14 @@
 
 import { getDb } from "./db";
 import { jobs, executions, artifacts, aiAnalyses, reports, testScenarios, testProfiles, incidents } from "../drizzle/schema";
-import { eq, and, lte, sql, inArray } from "drizzle-orm";
+import { eq, and, lte, sql, inArray, or } from "drizzle-orm";
 import { ENV } from "./_core/env";
 import { deleteArtifact } from "./artifactStorage";
 import { evaluateProbesHealthAndAlert } from "./probeAlertService";
 import { evaluateSuccessRateAlert } from "./successRateAlertService";
 import { processWebhookDeliveries } from "./routers/webhooks";
 import { notifyOwner } from "./_core/notification";
+import { resolveEntityCondition } from "./lib/resolveEntityId";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -424,8 +425,8 @@ registerHandler("generateExecutionPdf", async (payload) => {
     // Fetch related data in parallel
     console.log(`[PDF] Fetching related data...`);
     const [scenarioRows, profileRows, artifactRows, incidentRows, analysisRows] = await Promise.all([
-      execution.scenarioId && execution.scenarioId.trim() ? db.select().from(testScenarios).where(eq(testScenarios.uid, execution.scenarioId)).limit(1) : Promise.resolve([]),
-      execution.profileId && execution.profileId.trim() ? db.select().from(testProfiles).where(eq(testProfiles.uid, execution.profileId)).limit(1) : Promise.resolve([]),
+      execution.scenarioId && execution.scenarioId.trim() ? db.select().from(testScenarios).where(resolveEntityCondition(testScenarios.uid, testScenarios.id, execution.scenarioId)).limit(1) : Promise.resolve([]),
+      execution.profileId && execution.profileId.trim() ? db.select().from(testProfiles).where(resolveEntityCondition(testProfiles.uid, testProfiles.id, execution.profileId)).limit(1) : Promise.resolve([]),
       db.select().from(artifacts).where(eq(artifacts.executionId, execution.uid)),
       db.select().from(incidents).where(eq(incidents.executionId, String(executionId))),
       db.select().from(aiAnalyses).where(eq(aiAnalyses.executionId, executionId)),

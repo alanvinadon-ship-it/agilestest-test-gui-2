@@ -18,7 +18,7 @@ import {
   testScenarios,
   generatedScripts,
 } from "../drizzle/schema";
-import { eq } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import { notifyOwner } from "./_core/notification";
 
 // ─── Types ───────────────────────────────────────────────────────────────
@@ -210,15 +210,20 @@ export async function startExecution(executionId: number): Promise<ExecutionResu
 
   // 3. Récupérer les étapes du scénario
   let steps: ExecutionStep[] = [];
-  if (exec.scenarioId) {
-    const [scenario] = await db.select().from(testScenarios).where(eq(testScenarios.uid, exec.scenarioId)).limit(1);
+  if (exec.scenarioId && exec.scenarioId.trim()) {
+    // Chercher par uid (UUID) OU par id numérique pour compatibilité
+    const isNumericId = /^\d+$/.test(exec.scenarioId);
+    const scenarioCondition = isNumericId
+      ? or(eq(testScenarios.uid, exec.scenarioId), eq(testScenarios.id, Number(exec.scenarioId)))
+      : eq(testScenarios.uid, exec.scenarioId);
+    const [scenario] = await db.select().from(testScenarios).where(scenarioCondition).limit(1);
     if (scenario?.steps) {
       const rawSteps = typeof scenario.steps === "string" ? JSON.parse(scenario.steps) : scenario.steps;
       steps = (rawSteps as any[]).map((s: any, i: number) => ({
         index: i + 1,
         action: s.action || "UNKNOWN",
         target: s.target || s.selector || "",
-        description: s.description || s.expected_result || "",
+        description: s.description || s.expected_result || s.expectedResult || "",
         inputBinding: s.inputBinding || s.input_binding || undefined,
       }));
     }

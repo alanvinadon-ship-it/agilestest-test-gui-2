@@ -282,7 +282,7 @@ export default function ExecutionsPage() {
           className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 max-w-[200px] truncate">
           <option value="">Tous les scénarios</option>
           {scenariosList.map((sc: any) => (
-            <option key={sc.id} value={String(sc.id)}>{sc.name}</option>
+            <option key={sc.uid} value={sc.uid}>{sc.name}</option>
           ))}
         </select>
       </div>

@@ -671,3 +671,4 @@
 - [x] Bug: Bouton "Nouvelle exécution" ne passe pas scenarioId/profileId → exécution créée avec IDs vides → PDF affiche "---"
 - [x] Feature: Dialogue de création d'exécution avec sélection scénario + profil + env + mode
 - [x] Fix: Handler PDF — gérer gracieusement les IDs vides (afficher "Non spécifié" au lieu de "---")
+- [x] Bug: Moteur de simulation n'exécute que 2 étapes sur 8 — cause: lookup scénario par uid uniquement, mais scenarioId stocké comme id numérique → fallback 2 étapes par défaut. Fix: resolveEntityCondition cherche par uid OU id numérique

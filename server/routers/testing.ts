@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { eq, desc, and, like, inArray, sql, SQL, lt } from "drizzle-orm";
+import { eq, desc, and, like, inArray, sql, SQL, lt, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../_core/trpc";
 import { getDb } from "../db";
@@ -13,6 +13,7 @@ import { paginationInput } from "../../shared/pagination";
 import { normalizePagination, countRows } from "../lib/pagination";
 import { writeAuditLog } from "../lib/auditLog";
 import { randomUUID } from "crypto";
+import { resolveEntityCondition } from "../lib/resolveEntityId";
 import { notifyOwner } from "../_core/notification";
 import { dispatchWebhookEvent } from "./webhooks";
 
@@ -567,8 +568,8 @@ export const executionsRouter = router({
       db.select().from(artifacts).where(eq(artifacts.executionId, exec.uid)),
       db.select().from(incidents).where(eq(incidents.executionId, exec.uid)).orderBy(desc(incidents.detectedAt)),
       db.select().from(aiAnalyses).where(eq(aiAnalyses.executionId, input.executionId)).orderBy(desc(aiAnalyses.createdAt)),
-      exec.scenarioId ? db.select().from(testScenarios).where(eq(testScenarios.uid, exec.scenarioId)).limit(1) : Promise.resolve([]),
-      exec.profileId ? db.select().from(testProfiles).where(eq(testProfiles.uid, exec.profileId)).limit(1) : Promise.resolve([]),
+      exec.scenarioId ? db.select().from(testScenarios).where(resolveEntityCondition(testScenarios.uid, testScenarios.id, exec.scenarioId)).limit(1) : Promise.resolve([]),
+      exec.profileId ? db.select().from(testProfiles).where(resolveEntityCondition(testProfiles.uid, testProfiles.id, exec.profileId)).limit(1) : Promise.resolve([]),
     ]);
     return {
       ...exec,
@@ -642,7 +643,7 @@ export const executionsRouter = router({
       // Fetch execution details for the notification
       const [exec] = await db.select().from(executions).where(eq(executions.id, input.executionId)).limit(1);
       const scenarioName = exec?.scenarioId
-        ? (await db.select({ name: testScenarios.name }).from(testScenarios).where(eq(testScenarios.uid, exec.scenarioId)).limit(1))?.[0]?.name ?? "—"
+        ? (await db.select({ name: testScenarios.name }).from(testScenarios).where(resolveEntityCondition(testScenarios.uid, testScenarios.id, exec.scenarioId)).limit(1))?.[0]?.name ?? "—"
         : "—";
       notifyOwner({
         title: `\u26a0\ufe0f Ex\u00e9cution #${input.executionId} ${input.status}`,
@@ -664,7 +665,7 @@ export const executionsRouter = router({
     if (input.status === "PASSED") {
       const [exec] = await db.select().from(executions).where(eq(executions.id, input.executionId)).limit(1);
       const scenarioName = exec?.scenarioId
-        ? (await db.select({ name: testScenarios.name }).from(testScenarios).where(eq(testScenarios.uid, exec.scenarioId)).limit(1))?.[0]?.name ?? "\u2014"
+        ? (await db.select({ name: testScenarios.name }).from(testScenarios).where(resolveEntityCondition(testScenarios.uid, testScenarios.id, exec.scenarioId)).limit(1))?.[0]?.name ?? "\u2014"
         : "\u2014";
       dispatchWebhookEvent(exec?.projectId ?? "", "run.completed", {
         executionId: input.executionId,
@@ -714,8 +715,8 @@ export const executionsRouter = router({
       const [arts, incs, scenario, profile] = await Promise.all([
         db.select().from(artifacts).where(eq(artifacts.executionId, exec.uid)),
         db.select().from(incidents).where(eq(incidents.executionId, exec.uid)).orderBy(desc(incidents.detectedAt)),
-        exec.scenarioId ? db.select().from(testScenarios).where(eq(testScenarios.uid, exec.scenarioId)).limit(1) : Promise.resolve([]),
-        exec.profileId ? db.select().from(testProfiles).where(eq(testProfiles.uid, exec.profileId)).limit(1) : Promise.resolve([]),
+        exec.scenarioId ? db.select().from(testScenarios).where(resolveEntityCondition(testScenarios.uid, testScenarios.id, exec.scenarioId)).limit(1) : Promise.resolve([]),
+        exec.profileId ? db.select().from(testProfiles).where(resolveEntityCondition(testProfiles.uid, testProfiles.id, exec.profileId)).limit(1) : Promise.resolve([]),
       ]);
       return {
         ...exec,
