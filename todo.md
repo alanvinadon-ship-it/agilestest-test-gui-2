@@ -696,3 +696,5 @@
 - [x] Feature: Tests Vitest — 53 tests runner-architecture.test.ts (config, error codes, LOCAL, REMOTE, resolver, actions, engine, DB, UI)
 - [x] Bug: PlaywrightRemoteRunner.checkAvailability() retournait available=true pour endpoint null/vide — corrigé
 - [x] Bug: Test executeStepAction — ajouté alias export dans playwrightActions.ts
+- [x] Bug: PLAYWRIGHT_BROWSER_MISSING en production — Chromium introuvable à /root/.cache/ms-playwright/ sur le serveur déployé
+- [x] Fix: Adapter PlaywrightLocalRunner pour détecter Chromium via plusieurs chemins (env PLAYWRIGHT_CHROMIUM_PATH, Playwright cache, système /usr/bin/chromium)

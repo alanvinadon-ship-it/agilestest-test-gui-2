@@ -1,11 +1,13 @@
 /**
  * PlaywrightLocalRunner — Exécute les scénarios avec un navigateur Chromium local.
  *
- * Responsabilités :
- *   - Vérifier que Playwright et Chromium sont installés localement
- *   - Lancer le navigateur en mode headless
- *   - Exécuter chaque étape du scénario
- *   - Collecter screenshots, logs, erreurs
+ * Détection Chromium multi-chemins :
+ *   1. Variable d'environnement PLAYWRIGHT_CHROMIUM_PATH (override explicite)
+ *   2. Chemin par défaut Playwright (pw.chromium.executablePath())
+ *   3. Chromium système (/usr/bin/chromium, /usr/bin/chromium-browser, /usr/bin/google-chrome)
+ *
+ * En production (Docker/déploiement), le cache Playwright peut ne pas exister
+ * sous /root/.cache/ms-playwright/. Le fallback système résout ce problème.
  */
 
 import type {
@@ -14,17 +16,63 @@ import type {
   RealExecutionResult,
   StepExecutionResult,
   RunnerAvailability,
-  PlaywrightConfig,
 } from "./playwrightConfig";
 import { PLAYWRIGHT_ERROR_CODES } from "./playwrightConfig";
-import { buildLocator, resolveBindingValue, executeAction } from "./playwrightActions";
+import { executeAction } from "./playwrightActions";
+
+/** Chemins système courants pour Chromium / Chrome */
+const SYSTEM_CHROMIUM_PATHS = [
+  "/usr/bin/chromium",
+  "/usr/bin/chromium-browser",
+  "/usr/bin/google-chrome",
+  "/usr/bin/google-chrome-stable",
+  "/snap/bin/chromium",
+];
+
+/**
+ * Résout le chemin exécutable de Chromium en essayant plusieurs sources.
+ * Retourne le premier chemin valide trouvé, ou null si aucun.
+ */
+async function resolveChromiumPath(): Promise<{ path: string; source: string } | null> {
+  const fs = await import("fs");
+
+  // 1. Variable d'environnement explicite
+  const envPath = process.env.PLAYWRIGHT_CHROMIUM_PATH;
+  if (envPath && fs.existsSync(envPath)) {
+    return { path: envPath, source: "env:PLAYWRIGHT_CHROMIUM_PATH" };
+  }
+
+  // 2. Chemin Playwright par défaut
+  try {
+    const pw = await import("playwright");
+    const pwPath = pw.chromium.executablePath();
+    if (pwPath && fs.existsSync(pwPath)) {
+      return { path: pwPath, source: "playwright-cache" };
+    }
+  } catch {
+    // Playwright non installé, continuer
+  }
+
+  // 3. Chemins système
+  for (const sysPath of SYSTEM_CHROMIUM_PATHS) {
+    if (fs.existsSync(sysPath)) {
+      return { path: sysPath, source: `system:${sysPath}` };
+    }
+  }
+
+  return null;
+}
 
 export class PlaywrightLocalRunner implements RealExecutionRunner {
   readonly name = "PlaywrightLocalRunner";
   readonly mode = "LOCAL" as const;
 
+  /** Chemin résolu du binaire Chromium (mis en cache après checkAvailability) */
+  private resolvedExecutablePath: string | null = null;
+
   /**
    * Vérifie si Playwright et Chromium sont disponibles localement.
+   * Essaie plusieurs sources pour trouver un binaire Chromium valide.
    */
   async checkAvailability(): Promise<RunnerAvailability> {
     // 1. Vérifier que le module Playwright est importable
@@ -45,31 +93,35 @@ export class PlaywrightLocalRunner implements RealExecutionRunner {
       };
     }
 
-    // 2. Vérifier que le binaire Chromium existe
-    try {
-      const pw = await import("playwright");
-      const executablePath = pw.chromium.executablePath();
-      const fs = await import("fs");
-      if (!fs.existsSync(executablePath)) {
-        return {
-          available: false,
-          errorCode: PLAYWRIGHT_ERROR_CODES.PLAYWRIGHT_BROWSER_MISSING,
-          message: `Le binaire Chromium n'existe pas à: ${executablePath}. Exécutez: npx playwright install chromium --with-deps`,
-        };
-      }
-    } catch (err: any) {
+    // 2. Résoudre le chemin Chromium (multi-sources)
+    const resolved = await resolveChromiumPath();
+    if (!resolved) {
+      // Construire un message d'aide avec le chemin Playwright attendu
+      let expectedPath = "inconnu";
+      try {
+        const pw = await import("playwright");
+        expectedPath = pw.chromium.executablePath();
+      } catch { /* ignore */ }
+
       return {
         available: false,
         errorCode: PLAYWRIGHT_ERROR_CODES.PLAYWRIGHT_BROWSER_MISSING,
-        message: `Impossible de vérifier le binaire Chromium: ${err.message}`,
+        message: `Aucun binaire Chromium trouvé. Chemin Playwright attendu: ${expectedPath}. `
+          + `Chemins système vérifiés: ${SYSTEM_CHROMIUM_PATHS.join(", ")}. `
+          + `Solutions: (1) npx playwright install chromium --with-deps, `
+          + `(2) apt-get install chromium, `
+          + `(3) définir PLAYWRIGHT_CHROMIUM_PATH=/chemin/vers/chrome`,
       };
     }
 
-    return { available: true };
+    this.resolvedExecutablePath = resolved.path;
+    console.log(`[PlaywrightLocalRunner] Chromium trouvé via ${resolved.source}: ${resolved.path}`);
+    return { available: true, message: `Chromium via ${resolved.source}` };
   }
 
   /**
    * Exécute le scénario avec un navigateur Chromium local.
+   * Utilise le chemin résolu par checkAvailability, ou le résout à nouveau si nécessaire.
    */
   async execute(input: RealExecutionInput): Promise<RealExecutionResult> {
     const startTime = Date.now();
@@ -77,6 +129,14 @@ export class PlaywrightLocalRunner implements RealExecutionRunner {
     let stepsPassed = 0;
     let stepsFailed = 0;
     let hasFailed = false;
+
+    // Résoudre le chemin si pas encore fait
+    if (!this.resolvedExecutablePath) {
+      const resolved = await resolveChromiumPath();
+      if (resolved) {
+        this.resolvedExecutablePath = resolved.path;
+      }
+    }
 
     const { chromium } = await import("playwright");
 
@@ -86,8 +146,14 @@ export class PlaywrightLocalRunner implements RealExecutionRunner {
 
     try {
       console.log("[PlaywrightLocalRunner] Lancement du navigateur Chromium local...");
+      if (this.resolvedExecutablePath) {
+        console.log(`[PlaywrightLocalRunner] Chemin exécutable: ${this.resolvedExecutablePath}`);
+      }
+
       browser = await chromium.launch({
         headless: input.config.headless !== false,
+        // Utiliser le chemin résolu s'il diffère du défaut Playwright
+        ...(this.resolvedExecutablePath ? { executablePath: this.resolvedExecutablePath } : {}),
       });
       console.log("[PlaywrightLocalRunner] Navigateur lancé avec succès");
 
