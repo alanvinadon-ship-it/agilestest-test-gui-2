@@ -92,7 +92,7 @@ async function simulateExecution(
 
     // Déterminer le résultat de l'étape
     const shouldFail = options?.forceFailAtStep === step.index;
-    const stepSuccess = shouldFail ? false : Math.random() > 0.05; // 95% succès
+    const stepSuccess = shouldFail ? false : true; // 100% succès en mode simulation
 
     if (stepSuccess) {
       stepsPassed++;
