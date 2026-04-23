@@ -424,16 +424,16 @@ registerHandler("generateExecutionPdf", async (payload) => {
     // Fetch related data in parallel
     console.log(`[PDF] Fetching related data...`);
     const [scenarioRows, profileRows, artifactRows, incidentRows, analysisRows] = await Promise.all([
-      execution.scenarioId ? db.select().from(testScenarios).where(eq(testScenarios.uid, execution.scenarioId)).limit(1) : Promise.resolve([]),
-      execution.profileId ? db.select().from(testProfiles).where(eq(testProfiles.uid, execution.profileId)).limit(1) : Promise.resolve([]),
+      execution.scenarioId && execution.scenarioId.trim() ? db.select().from(testScenarios).where(eq(testScenarios.uid, execution.scenarioId)).limit(1) : Promise.resolve([]),
+      execution.profileId && execution.profileId.trim() ? db.select().from(testProfiles).where(eq(testProfiles.uid, execution.profileId)).limit(1) : Promise.resolve([]),
       db.select().from(artifacts).where(eq(artifacts.executionId, execution.uid)),
       db.select().from(incidents).where(eq(incidents.executionId, String(executionId))),
       db.select().from(aiAnalyses).where(eq(aiAnalyses.executionId, executionId)),
     ]);
 
-    const scenario = scenarioRows[0] ?? null;
-    const profile = profileRows[0] ?? null;
-    console.log(`[PDF] Related data fetched: scenario=${scenario?.name}, profile=${profile?.name}, artifacts=${artifactRows.length}, incidents=${incidentRows.length}`);
+    const scenario = scenarioRows?.[0] ?? null;
+    const profile = profileRows?.[0] ?? null;
+    console.log(`[PDF] Related data fetched: scenario=${scenario?.name ?? 'null'}, profile=${profile?.name ?? 'null'}, artifacts=${artifactRows?.length ?? 0}, incidents=${incidentRows?.length ?? 0}`);
 
     // Build PDF with pdfkit
     console.log(`[PDF] Importing pdfkit...`);
@@ -464,8 +464,8 @@ registerHandler("generateExecutionPdf", async (payload) => {
     const summaryData = [
       ["ID", `#${execution.id}`],
       ["Statut", execution.status],
-      ["Scénario", scenario?.name ?? "—"],
-      ["Profil", profile?.name ?? "—"],
+      ["Scénario", scenario?.name ?? "Non spécifié"],
+      ["Profil", profile?.name ?? "Non spécifié"],
       ["Créé le", execution.createdAt ? new Date(execution.createdAt).toLocaleString("fr-FR") : "—"],
       ["Démarré le", execution.startedAt ? new Date(execution.startedAt).toLocaleString("fr-FR") : "—"],
       ["Terminé le", execution.finishedAt ? new Date(execution.finishedAt).toLocaleString("fr-FR") : "—"],

@@ -664,6 +664,10 @@
 - [x] Bug: Génération PDF bloquée en PENDING — cause : startPolling() n'était pas appelé au démarrage du serveur, runAfter était défini à une date future. Corrigé : ajout import/appel startPolling() dans server/_core/index.ts, logging détaillé dans handler
 - [x] Feature: Flux PDF complet PENDING → GENERATING → DONE/FAILED avec génération réelle pdfkit
 - [x] Feature: Stockage PDF sur S3 avec métadonnées (fileName, fileSize, downloadUrl) via storagePut()
-- [ ] Feature: Bouton téléchargement PDF quand statut DONE + route de download
+- [x] Feature: Bouton téléchargement PDF quand statut DONE + route de download
 - [x] Feature: Gestion erreurs et timeouts dans la génération PDF (try/catch, retry logic, error message)
-- [ ] Test: Tests Vitest pour le flux de génération PDF (handler, routes, UI)
+- [x] Test: Tests Vitest pour le flux de génération PDF (handler, routes, UI)
+- [x] Bug: Rapport PDF affiche "---" pour Scénario et Profil au lieu des noms réels
+- [x] Bug: Bouton "Nouvelle exécution" ne passe pas scenarioId/profileId → exécution créée avec IDs vides → PDF affiche "---"
+- [x] Feature: Dialogue de création d'exécution avec sélection scénario + profil + env + mode
+- [x] Fix: Handler PDF — gérer gracieusement les IDs vides (afficher "Non spécifié" au lieu de "---")

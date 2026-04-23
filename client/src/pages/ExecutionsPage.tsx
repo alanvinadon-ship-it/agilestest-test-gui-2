@@ -14,9 +14,15 @@ import type { ExecutionStatus, TargetEnv } from '../types';
 import {
   Play, Loader2, Search, Eye,
   CheckCircle2, XCircle, Clock, AlertTriangle, Ban,
-  Sparkles, Brain, FileCode, Activity,
+  Sparkles, Brain, FileCode, Activity, Plus,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 
 const statusConfig: Record<ExecutionStatus, { icon: typeof CheckCircle2; label: string; cls: string }> = {
   PENDING: { icon: Clock, label: 'En attente', cls: 'text-yellow-400' },
@@ -133,6 +139,12 @@ export default function ExecutionsPage() {
   const { currentProject } = useProject();
   const { can: canPerm } = usePermission();
   const canRunExecution = canPerm(PermissionKey.EXECUTIONS_RUN);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [newExecScenarioId, setNewExecScenarioId] = useState('');
+  const [newExecProfileId, setNewExecProfileId] = useState('');
+  const [newExecEnv, setNewExecEnv] = useState<TargetEnv>('DEV');
+  const [newExecMode, setNewExecMode] = useState<'SIMULATED' | 'REAL'>('SIMULATED');
+  const [newExecAutoStart, setNewExecAutoStart] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [scenarioFilter, setScenarioFilter] = useState<string>('');
@@ -149,6 +161,12 @@ export default function ExecutionsPage() {
     { enabled: !!currentProject },
   );
   const scenariosList = scenariosData?.data ?? [];
+  // Fetch profiles for create dialog
+  const { data: profilesData } = trpc.profiles.list.useQuery(
+    { projectId: String(currentProject?.id || ''), page: 1, pageSize: 100 },
+    { enabled: !!currentProject },
+  );
+  const profilesList = profilesData?.data ?? [];
 
   const { data, isLoading, isFetching } = trpc.executions.list.useQuery(
     {
@@ -235,21 +253,10 @@ export default function ExecutionsPage() {
           </p>
         </div>
         {canRunExecution && (
-          <button
-            onClick={() => {
-              createExecution.mutate({
-                projectId: String(currentProject.id),
-                targetEnv: 'PROD',
-                executionMode: 'SIMULATED',
-                autoStart: true,
-              });
-            }}
-            disabled={createExecution.isPending}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
-          >
-            {createExecution.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+          <Button onClick={() => setShowCreateDialog(true)} className="gap-2">
+            <Plus className="w-4 h-4" />
             Nouvelle exécution
-          </button>
+          </Button>
         )}
       </div>
 
@@ -396,6 +403,107 @@ export default function ExecutionsPage() {
           )}
         </div>
       )}
+
+      {/* Dialog Nouvelle execution */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Nouvelle execution</DialogTitle>
+            <DialogDescription>
+              Selectionnez un scenario, un profil et un environnement pour lancer l execution.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="exec-scenario">Scenario</Label>
+              <select
+                id="exec-scenario"
+                value={newExecScenarioId}
+                onChange={(e) => setNewExecScenarioId(e.target.value)}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+              >
+                <option value="">-- Aucun scenario --</option>
+                {scenariosList.map((sc: any) => (
+                  <option key={sc.uid} value={sc.uid}>{sc.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="exec-profile">Profil</Label>
+              <select
+                id="exec-profile"
+                value={newExecProfileId}
+                onChange={(e) => setNewExecProfileId(e.target.value)}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+              >
+                <option value="">-- Aucun profil --</option>
+                {profilesList.map((p: any) => (
+                  <option key={p.uid} value={p.uid}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="exec-env">Environnement cible</Label>
+              <select
+                id="exec-env"
+                value={newExecEnv}
+                onChange={(e) => setNewExecEnv(e.target.value as TargetEnv)}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+              >
+                <option value="DEV">DEV</option>
+                <option value="PREPROD">PREPROD</option>
+                <option value="PILOT_ORANGE">PILOT ORANGE</option>
+                <option value="PROD">PROD</option>
+              </select>
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="exec-mode">Mode reel (Playwright)</Label>
+              <Switch
+                id="exec-mode"
+                checked={newExecMode === 'REAL'}
+                onCheckedChange={(checked) => setNewExecMode(checked ? 'REAL' : 'SIMULATED')}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="exec-autostart">Demarrer automatiquement</Label>
+              <Switch
+                id="exec-autostart"
+                checked={newExecAutoStart}
+                onCheckedChange={setNewExecAutoStart}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+              Annuler
+            </Button>
+            <Button
+              onClick={() => {
+                createExecution.mutate({
+                  projectId: String(currentProject!.id),
+                  scenarioId: newExecScenarioId || undefined,
+                  profileId: newExecProfileId || undefined,
+                  targetEnv: newExecEnv,
+                  executionMode: newExecMode,
+                  autoStart: newExecAutoStart,
+                });
+                setShowCreateDialog(false);
+                setNewExecScenarioId('');
+                setNewExecProfileId('');
+                setNewExecEnv('DEV');
+                setNewExecMode('SIMULATED');
+                setNewExecAutoStart(true);
+              }}
+              disabled={createExecution.isPending}
+              className="gap-2"
+            >
+              {createExecution.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+              Lancer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
