@@ -698,3 +698,5 @@
 - [x] Bug: Test executeStepAction — ajouté alias export dans playwrightActions.ts
 - [x] Bug: PLAYWRIGHT_BROWSER_MISSING en production — Chromium introuvable à /root/.cache/ms-playwright/ sur le serveur déployé
 - [x] Fix: Adapter PlaywrightLocalRunner pour détecter Chromium via plusieurs chemins (env PLAYWRIGHT_CHROMIUM_PATH, Playwright cache, système /usr/bin/chromium)
+- [x] Bug: PLAYWRIGHT_BROWSER_MISSING persiste en production Manus — aucun Chromium disponible (ni cache Playwright, ni système)
+- [x] Fix: Auto-installation Chromium dans PlaywrightLocalRunner.checkAvailability() via `npx playwright install chromium` avec fallback `--with-deps`
