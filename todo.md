@@ -673,3 +673,9 @@
 - [x] Fix: Handler PDF — gérer gracieusement les IDs vides (afficher "Non spécifié" au lieu de "---")
 - [x] Bug: Moteur de simulation n'exécute que 2 étapes sur 8 — cause: lookup scénario par uid uniquement, mais scenarioId stocké comme id numérique → fallback 2 étapes par défaut. Fix: resolveEntityCondition cherche par uid OU id numérique
 - [x] Feature: Taux de succès 100% en mode simulation (supprimer l'échec aléatoire de 5%)
+- [x] Feature: Installer Playwright comme dépendance serveur
+- [x] Feature: Créer playwrightRunner.ts — worker réel avec mapping actions → commandes Playwright
+- [x] Feature: Résolution des bindings de dataset (users.email → valeur réelle du dataset) — datasetResolver.ts
+- [x] Feature: Collecte d'artefacts (screenshots par étape, upload S3) — saveScreenshotArtifact()
+- [x] Feature: Intégrer le worker réel dans executionEngine.ts (mode REAL) — realExecution()
+- [x] Feature: Tests Vitest pour le mode RÉEL Playwright — 36 tests passent

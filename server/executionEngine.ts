@@ -1,13 +1,15 @@
 /**
  * executionEngine.ts — Moteur d'exécution AgilesTest
  *
- * Phase 1: Simulation fonctionnelle (SIMULATED mode)
+ * Mode SIMULATED: Simulation fonctionnelle (100% succès)
  *   - Transitions automatiques PENDING → RUNNING → PASSED/FAILED
  *   - Logs pas-à-pas avec timestamps
  *   - Durée simulée réaliste basée sur les étapes du scénario
  *
- * Phase 2 (préparé): Worker réel Playwright (REAL mode)
- *   - Interface extensible pour brancher un runner Playwright
+ * Mode REAL: Worker Playwright
+ *   - Exécution réelle via Chromium headless
+ *   - Résolution des bindings de dataset
+ *   - Collecte d'artefacts (screenshots par étape)
  *   - Même API de logs et transitions
  */
 
@@ -16,10 +18,15 @@ import {
   executions,
   executionLogs,
   testScenarios,
+  testProfiles,
+  artifacts,
   generatedScripts,
 } from "../drizzle/schema";
 import { eq, or, sql } from "drizzle-orm";
 import { notifyOwner } from "./_core/notification";
+import { resolveBindings } from "./datasetResolver";
+import { runWithPlaywright, type StepResult } from "./playwrightRunner";
+import { storagePut } from "./storage";
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -31,6 +38,7 @@ export interface ExecutionStep {
   target: string;
   description: string;
   inputBinding?: string;
+  locatorStrategy?: string;
 }
 
 export interface ExecutionResult {
@@ -61,12 +69,52 @@ async function insertLog(
   });
 }
 
+// ─── Artifact Helper ────────────────────────────────────────────────────
+
+/**
+ * Upload un screenshot vers S3 et enregistre l'artefact en DB.
+ */
+async function saveScreenshotArtifact(
+  db: any,
+  executionId: number,
+  executionUid: string,
+  stepIndex: number,
+  screenshotBuffer: Buffer,
+  status: "PASSED" | "FAILED" | "SKIPPED",
+): Promise<string | null> {
+  try {
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const filename = `exec-${executionUid}/step-${stepIndex}-${status.toLowerCase()}-${suffix}.png`;
+    const key = `screenshots/${filename}`;
+    const { url } = await storagePut(key, screenshotBuffer, "image/png");
+
+    await db.insert(artifacts).values({
+      uid: crypto.randomUUID(),
+      executionId: String(executionId),
+      type: "screenshot",
+      filename: `step-${stepIndex}-${status.toLowerCase()}.png`,
+      name: `Étape ${stepIndex} — ${status}`,
+      mimeType: "image/png",
+      contentType: "image/png",
+      sizeBytes: screenshotBuffer.length,
+      storagePath: key,
+      storageUrl: url,
+      downloadUrl: url,
+      uploadedAt: new Date(),
+    });
+
+    return url;
+  } catch (err) {
+    // Non bloquant — on continue même si le screenshot échoue
+    return null;
+  }
+}
+
 // ─── Simulation Engine ───────────────────────────────────────────────────
 
 /**
  * Simule l'exécution d'un scénario pas-à-pas.
- * Chaque étape prend entre 200ms et 1500ms (aléatoire réaliste).
- * 90% de chance de succès par étape, sauf si forceFailAtStep est défini.
+ * 100% de succès sauf si forceFailAtStep est défini.
  */
 async function simulateExecution(
   db: any,
@@ -86,11 +134,9 @@ async function simulateExecution(
   });
 
   for (const step of steps) {
-    // Simuler un délai réaliste par action
     const delay = getActionDelay(step.action);
     await sleep(delay);
 
-    // Déterminer le résultat de l'étape
     const shouldFail = options?.forceFailAtStep === step.index;
     const stepSuccess = shouldFail ? false : true; // 100% succès en mode simulation
 
@@ -105,7 +151,6 @@ async function simulateExecution(
         result: "PASSED",
       });
 
-      // Mettre à jour le compteur en temps réel
       await db.update(executions).set({
         stepsPassed,
         stepsTotal: steps.length,
@@ -125,13 +170,11 @@ async function simulateExecution(
           : `Element not found: ${step.target} (timeout 5000ms)`,
       });
 
-      // Mettre à jour le compteur
       await db.update(executions).set({
         stepsFailed,
         stepsTotal: steps.length,
       }).where(eq(executions.id, executionId));
 
-      // En mode simulation, on continue les étapes restantes mais elles sont marquées skipped
       for (let i = step.index + 1; i <= steps.length; i++) {
         const skippedStep = steps.find(s => s.index === i);
         if (skippedStep) {
@@ -166,7 +209,148 @@ async function simulateExecution(
   };
 }
 
-/** Délai réaliste par type d'action (ms) */
+// ─── Real Execution Engine (Playwright) ─────────────────────────────────
+
+/**
+ * Exécute un scénario en mode RÉEL avec Playwright.
+ * - Résout les bindings de dataset
+ * - Lance Chromium headless
+ * - Exécute chaque étape
+ * - Collecte les screenshots et les enregistre comme artefacts
+ */
+async function realExecution(
+  db: any,
+  executionId: number,
+  executionUid: string,
+  steps: ExecutionStep[],
+  profileId?: string,
+  datasetBundleId?: string,
+  projectId?: string,
+): Promise<ExecutionResult> {
+  const startTime = Date.now();
+
+  // 1. Résoudre les bindings
+  await insertLog(db, executionId, 0, "INFO", "🔗 Résolution des bindings de dataset et profil...", {
+    profileId: profileId || null,
+    datasetBundleId: datasetBundleId || null,
+  });
+
+  const { bindings, baseUrl, warnings } = await resolveBindings(profileId, datasetBundleId, projectId);
+
+  if (warnings.length > 0) {
+    await insertLog(db, executionId, 0, "WARN", `⚠️ Avertissements de résolution: ${warnings.join("; ")}`, {
+      warnings,
+    });
+  }
+
+  if (!baseUrl) {
+    await insertLog(db, executionId, 0, "WARN", "⚠️ Aucune URL de base trouvée dans le profil — les URLs NAVIGATE doivent être absolues", {
+      bindings: Object.keys(bindings),
+    });
+  }
+
+  await insertLog(db, executionId, 0, "INFO", `🚀 Démarrage de l'exécution RÉELLE (Playwright Chromium)`, {
+    mode: "REAL",
+    stepsCount: steps.length,
+    baseUrl: baseUrl || "(non défini)",
+    bindingsCount: Object.keys(bindings).length,
+    bindingKeys: Object.keys(bindings),
+    timestamp: new Date().toISOString(),
+  });
+
+  // 2. Lancer Playwright
+  let result;
+  try {
+    result = await runWithPlaywright(steps, {
+      baseUrl: baseUrl || "",
+      bindings,
+      screenshotPerStep: true,
+      stepTimeout: 15000,
+      headless: true,
+    });
+  } catch (error: any) {
+    await insertLog(db, executionId, 0, "ERROR", `💥 Erreur Playwright: ${error.message}`, {
+      error: error.message,
+      stack: error.stack?.slice(0, 500),
+    });
+    return {
+      status: "ERROR",
+      durationMs: Date.now() - startTime,
+      stepsTotal: steps.length,
+      stepsPassed: 0,
+      stepsFailed: steps.length,
+    };
+  }
+
+  // 3. Enregistrer les logs et artefacts pour chaque étape
+  let artifactsCount = 0;
+  for (const stepResult of result.stepResults) {
+    if (stepResult.status === "PASSED") {
+      await insertLog(db, executionId, stepResult.index, "STEP",
+        `✅ Étape ${stepResult.index}: ${stepResult.action} → ${stepResult.target}`, {
+          action: stepResult.action,
+          target: stepResult.target,
+          durationMs: stepResult.durationMs,
+          result: "PASSED",
+        });
+    } else if (stepResult.status === "FAILED") {
+      await insertLog(db, executionId, stepResult.index, "ERROR",
+        `❌ Étape ${stepResult.index}: ${stepResult.action} → ${stepResult.target} — ÉCHEC`, {
+          action: stepResult.action,
+          target: stepResult.target,
+          durationMs: stepResult.durationMs,
+          result: "FAILED",
+          error: stepResult.error,
+        });
+    } else {
+      await insertLog(db, executionId, stepResult.index, "WARN",
+        `⏭️ Étape ${stepResult.index}: ${stepResult.action} → ${stepResult.target} — IGNORÉE (échec précédent)`, {
+          action: stepResult.action,
+          target: stepResult.target,
+          result: "SKIPPED",
+        });
+    }
+
+    // Sauvegarder le screenshot comme artefact
+    if (stepResult.screenshotBuffer) {
+      const url = await saveScreenshotArtifact(
+        db, executionId, executionUid, stepResult.index,
+        stepResult.screenshotBuffer, stepResult.status,
+      );
+      if (url) artifactsCount++;
+    }
+
+    // Mettre à jour les compteurs en temps réel
+    await db.update(executions).set({
+      stepsPassed: result.stepResults.filter(s => s.status === "PASSED" && s.index <= stepResult.index).length,
+      stepsFailed: result.stepResults.filter(s => s.status === "FAILED" && s.index <= stepResult.index).length,
+      stepsTotal: steps.length,
+      artifactsCount,
+    }).where(eq(executions.id, executionId));
+  }
+
+  const durationMs = Date.now() - startTime;
+
+  await insertLog(db, executionId, 0, "INFO", `🏁 Exécution RÉELLE terminée — ${result.status}`, {
+    durationMs,
+    stepsTotal: steps.length,
+    stepsPassed: result.stepsPassed,
+    stepsFailed: result.stepsFailed,
+    stepsSkipped: steps.length - result.stepsPassed - result.stepsFailed,
+    artifactsCount,
+    finalStatus: result.status,
+  });
+
+  return {
+    status: result.status,
+    durationMs,
+    stepsTotal: steps.length,
+    stepsPassed: result.stepsPassed,
+    stepsFailed: result.stepsFailed,
+  };
+}
+
+/** Délai réaliste par type d'action (ms) — pour simulation */
 function getActionDelay(action: string): number {
   const delays: Record<string, [number, number]> = {
     NAVIGATE: [800, 2000],
@@ -193,7 +377,7 @@ function sleep(ms: number): Promise<void> {
  * Démarre l'exécution d'un test.
  * - Passe le statut en RUNNING
  * - Récupère les étapes du scénario
- * - Lance la simulation ou le worker réel
+ * - Lance la simulation ou le worker réel Playwright
  * - Met à jour le statut final (PASSED/FAILED/ERROR)
  */
 export async function startExecution(executionId: number): Promise<ExecutionResult> {
@@ -211,7 +395,6 @@ export async function startExecution(executionId: number): Promise<ExecutionResu
   // 3. Récupérer les étapes du scénario
   let steps: ExecutionStep[] = [];
   if (exec.scenarioId && exec.scenarioId.trim()) {
-    // Chercher par uid (UUID) OU par id numérique pour compatibilité
     const isNumericId = /^\d+$/.test(exec.scenarioId);
     const scenarioCondition = isNumericId
       ? or(eq(testScenarios.uid, exec.scenarioId), eq(testScenarios.id, Number(exec.scenarioId)))
@@ -225,6 +408,7 @@ export async function startExecution(executionId: number): Promise<ExecutionResu
         target: s.target || s.selector || "",
         description: s.description || s.expected_result || s.expectedResult || "",
         inputBinding: s.inputBinding || s.input_binding || undefined,
+        locatorStrategy: s.locatorStrategy || s.locator_strategy || undefined,
       }));
     }
   }
@@ -252,13 +436,16 @@ export async function startExecution(executionId: number): Promise<ExecutionResu
     if (mode === "SIMULATED") {
       result = await simulateExecution(db, executionId, steps);
     } else {
-      // Phase 2: Worker réel Playwright
-      // Pour l'instant, fallback sur simulation avec un log d'avertissement
-      await insertLog(db, executionId, 0, "WARN", "⚠️ Mode REAL non encore implémenté — fallback sur SIMULATED", {
-        requestedMode: "REAL",
-        actualMode: "SIMULATED",
-      });
-      result = await simulateExecution(db, executionId, steps);
+      // Mode RÉEL — Playwright
+      result = await realExecution(
+        db,
+        executionId,
+        exec.uid,
+        steps,
+        exec.profileId || undefined,
+        exec.datasetBundleId || undefined,
+        exec.projectId || undefined,
+      );
     }
 
     // 5. Mettre à jour le statut final
@@ -298,7 +485,7 @@ export async function startExecution(executionId: number): Promise<ExecutionResu
 
     return {
       status: "ERROR",
-      durationMs: Date.now() - Date.now(),
+      durationMs: 0,
       stepsTotal: steps.length,
       stepsPassed: 0,
       stepsFailed: 0,
