@@ -1,15 +1,14 @@
 /**
  * PlaywrightLocalRunner — Exécute les scénarios avec un navigateur Chromium local.
  *
- * Détection Chromium multi-chemins :
+ * Détection Chromium multi-chemins (fail-fast, pas d'auto-installation) :
  *   1. Variable d'environnement PLAYWRIGHT_CHROMIUM_PATH (override explicite)
  *   2. Chemin par défaut Playwright (pw.chromium.executablePath())
  *   3. Chromium système (/usr/bin/chromium, /usr/bin/chromium-browser, /usr/bin/google-chrome)
  *
- * Auto-installation :
- *   Si aucun binaire n'est trouvé, le runner tente automatiquement
- *   `npx playwright install chromium` pour télécharger Chromium dans le cache Playwright.
- *   Cela permet de fonctionner en production même sans navigateur pré-installé.
+ * Si aucun binaire n'est trouvé, retourne immédiatement PLAYWRIGHT_BROWSER_MISSING.
+ * L'installation de Chromium doit se faire dans le Dockerfile ou manuellement,
+ * PAS au runtime (risque de blocage du thread Node.js).
  */
 
 import type {
@@ -34,6 +33,7 @@ const SYSTEM_CHROMIUM_PATHS = [
 /**
  * Résout le chemin exécutable de Chromium en essayant plusieurs sources.
  * Retourne le premier chemin valide trouvé, ou null si aucun.
+ * Cette fonction est synchrone-safe (pas de shell, pas de téléchargement).
  */
 async function resolveChromiumPath(): Promise<{ path: string; source: string } | null> {
   const fs = await import("fs");
@@ -65,71 +65,6 @@ async function resolveChromiumPath(): Promise<{ path: string; source: string } |
   return null;
 }
 
-/**
- * Tente d'installer Chromium via `npx playwright install chromium`.
- * Retourne true si l'installation a réussi, false sinon.
- */
-async function autoInstallChromium(): Promise<{ success: boolean; message: string }> {
-  const { execSync } = await import("child_process");
-
-  console.log("[PlaywrightLocalRunner] Aucun Chromium trouvé — tentative d'auto-installation...");
-  console.log("[PlaywrightLocalRunner] Exécution: npx playwright install chromium");
-
-  try {
-    const output = execSync("npx playwright install chromium", {
-      timeout: 120_000, // 2 minutes max
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
-      env: {
-        ...process.env,
-        // S'assurer que le cache est dans un dossier accessible en écriture
-        PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH || undefined,
-      },
-    });
-
-    console.log("[PlaywrightLocalRunner] Sortie installation:", output.trim());
-
-    // Vérifier que le binaire est maintenant disponible
-    const resolved = await resolveChromiumPath();
-    if (resolved) {
-      console.log(`[PlaywrightLocalRunner] Auto-installation réussie! Chromium trouvé via ${resolved.source}: ${resolved.path}`);
-      return { success: true, message: `Chromium auto-installé via ${resolved.source}` };
-    }
-
-    return { success: false, message: "Installation terminée mais binaire introuvable après installation" };
-  } catch (err: any) {
-    const stderr = err.stderr?.toString() || "";
-    const stdout = err.stdout?.toString() || "";
-    console.error("[PlaywrightLocalRunner] Échec auto-installation:", err.message);
-    if (stderr) console.error("[PlaywrightLocalRunner] stderr:", stderr.substring(0, 500));
-    if (stdout) console.error("[PlaywrightLocalRunner] stdout:", stdout.substring(0, 500));
-
-    // Essayer aussi avec --with-deps si la première tentative échoue (dépendances système manquantes)
-    try {
-      console.log("[PlaywrightLocalRunner] Tentative avec --with-deps (nécessite sudo)...");
-      const output2 = execSync("npx playwright install --with-deps chromium", {
-        timeout: 180_000, // 3 minutes max
-        encoding: "utf-8",
-        stdio: ["pipe", "pipe", "pipe"],
-      });
-      console.log("[PlaywrightLocalRunner] Sortie install --with-deps:", output2.trim());
-
-      const resolved = await resolveChromiumPath();
-      if (resolved) {
-        console.log(`[PlaywrightLocalRunner] Auto-installation (with-deps) réussie! Chromium via ${resolved.source}`);
-        return { success: true, message: `Chromium auto-installé (with-deps) via ${resolved.source}` };
-      }
-    } catch (err2: any) {
-      console.error("[PlaywrightLocalRunner] Échec install --with-deps:", err2.message);
-    }
-
-    return {
-      success: false,
-      message: `Échec auto-installation: ${err.message}. ${stderr ? "stderr: " + stderr.substring(0, 200) : ""}`,
-    };
-  }
-}
-
 export class PlaywrightLocalRunner implements RealExecutionRunner {
   readonly name = "PlaywrightLocalRunner";
   readonly mode = "LOCAL" as const;
@@ -139,7 +74,8 @@ export class PlaywrightLocalRunner implements RealExecutionRunner {
 
   /**
    * Vérifie si Playwright et Chromium sont disponibles localement.
-   * Si Chromium n'est pas trouvé, tente une auto-installation.
+   * Fail-fast : retourne immédiatement si Chromium n'est pas trouvé.
+   * Pas d'auto-installation pour éviter de bloquer le thread Node.js.
    */
   async checkAvailability(): Promise<RunnerAvailability> {
     // 1. Vérifier que le module Playwright est importable
@@ -160,39 +96,28 @@ export class PlaywrightLocalRunner implements RealExecutionRunner {
       };
     }
 
-    // 2. Résoudre le chemin Chromium (multi-sources)
-    let resolved = await resolveChromiumPath();
+    // 2. Résoudre le chemin Chromium (multi-sources, pas d'installation)
+    const resolved = await resolveChromiumPath();
 
-    // 3. Si aucun binaire trouvé, tenter l'auto-installation
     if (!resolved) {
-      console.log("[PlaywrightLocalRunner] Chromium non trouvé, lancement de l'auto-installation...");
-      const installResult = await autoInstallChromium();
+      // Construire un message d'aide détaillé
+      let expectedPath = "inconnu";
+      try {
+        const pw = await import("playwright");
+        expectedPath = pw.chromium.executablePath();
+      } catch { /* ignore */ }
 
-      if (installResult.success) {
-        // Re-résoudre après installation
-        resolved = await resolveChromiumPath();
-      }
-
-      if (!resolved) {
-        // Construire un message d'aide détaillé
-        let expectedPath = "inconnu";
-        try {
-          const pw = await import("playwright");
-          expectedPath = pw.chromium.executablePath();
-        } catch { /* ignore */ }
-
-        return {
-          available: false,
-          errorCode: PLAYWRIGHT_ERROR_CODES.PLAYWRIGHT_BROWSER_MISSING,
-          message: `Chromium introuvable et auto-installation échouée. `
-            + `Chemin Playwright attendu: ${expectedPath}. `
-            + `${installResult.message}. `
-            + `Solutions manuelles: (1) npx playwright install chromium --with-deps, `
-            + `(2) apt-get install chromium, `
-            + `(3) définir PLAYWRIGHT_CHROMIUM_PATH=/chemin/vers/chrome, `
-            + `(4) utiliser le mode REMOTE avec un endpoint Browserless`,
-        };
-      }
+      return {
+        available: false,
+        errorCode: PLAYWRIGHT_ERROR_CODES.PLAYWRIGHT_BROWSER_MISSING,
+        message: `Aucun binaire Chromium trouvé. `
+          + `Chemin Playwright attendu: ${expectedPath}. `
+          + `Chemins système vérifiés: ${SYSTEM_CHROMIUM_PATHS.join(", ")}. `
+          + `Solutions: (1) Ajouter 'npx playwright install chromium --with-deps' au Dockerfile, `
+          + `(2) apt-get install chromium sur le serveur, `
+          + `(3) définir PLAYWRIGHT_CHROMIUM_PATH=/chemin/vers/chrome, `
+          + `(4) utiliser le mode REMOTE avec un endpoint Browserless`,
+      };
     }
 
     this.resolvedExecutablePath = resolved.path;

@@ -6,6 +6,7 @@
  *   - REMOTE → essayer PlaywrightRemoteRunner uniquement
  *   - AUTO   → essayer LOCAL, puis fallback REMOTE si indisponible
  *
+ * Timeout global de 30s pour éviter tout blocage en production.
  * Retourne un diagnostic complet de la résolution pour le logging.
  */
 
@@ -19,6 +20,9 @@ import { PLAYWRIGHT_ERROR_CODES, ERROR_CODE_DESCRIPTIONS } from "./playwrightCon
 import { PlaywrightLocalRunner } from "./PlaywrightLocalRunner";
 import { PlaywrightRemoteRunner } from "./PlaywrightRemoteRunner";
 
+/** Timeout global pour la résolution du runner (30 secondes) */
+const RESOLVE_TIMEOUT_MS = 30_000;
+
 export interface ResolverResult {
   runner: RealExecutionRunner | null;
   diagnostic: RunnerDiagnostic;
@@ -28,9 +32,39 @@ export interface ResolverResult {
 
 /**
  * Résout le runner d'exécution en fonction de la configuration.
- * Retourne le runner à utiliser et un diagnostic complet.
+ * Enveloppé dans un timeout global pour éviter tout blocage.
  */
 export async function resolveRunner(config: PlaywrightConfig): Promise<ResolverResult> {
+  return Promise.race([
+    resolveRunnerInternal(config),
+    new Promise<ResolverResult>((_, reject) =>
+      setTimeout(() => reject(new Error(
+        `Timeout: la résolution du runner a dépassé ${RESOLVE_TIMEOUT_MS / 1000}s. ` +
+        `Vérifiez que Chromium est installé (Dockerfile) ou que l'endpoint distant est accessible.`
+      )), RESOLVE_TIMEOUT_MS)
+    ),
+  ]).catch((error) => {
+    console.error(`[RunnerResolver] Timeout global: ${error.message}`);
+    return {
+      runner: null,
+      diagnostic: {
+        configuredMode: config.runnerMode,
+        resolvedMode: null,
+        fallbackUsed: false,
+        localAvailable: false,
+        remoteAvailable: false,
+        localMessage: `Timeout: ${error.message}`,
+      },
+      errorCode: PLAYWRIGHT_ERROR_CODES.PLAYWRIGHT_NO_RUNNER_AVAILABLE,
+      errorMessage: error.message,
+    } as ResolverResult;
+  });
+}
+
+/**
+ * Logique interne de résolution (sans timeout).
+ */
+async function resolveRunnerInternal(config: PlaywrightConfig): Promise<ResolverResult> {
   const diagnostic: RunnerDiagnostic = {
     configuredMode: config.runnerMode,
     resolvedMode: null,

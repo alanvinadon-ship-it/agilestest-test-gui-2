@@ -701,3 +701,5 @@
 - [x] Bug: PLAYWRIGHT_BROWSER_MISSING persiste en production Manus — aucun Chromium disponible (ni cache Playwright, ni système)
 - [x] Fix: Auto-installation Chromium dans PlaywrightLocalRunner.checkAvailability() via `npx playwright install chromium` avec fallback `--with-deps`
 - [x] Feature: Ajouter Chromium au Dockerfile — dépendances système + `npx playwright install chromium` + copie cache vers user non-root
+- [x] Bug: Exécution #480003 bloquée en production — auto-installation Chromium bloquait le thread Node.js
+- [x] Fix: Supprimé l'auto-installation de checkAvailability(), ajouté timeout global 30s sur resolveRunner, fail-fast si Chromium absent
