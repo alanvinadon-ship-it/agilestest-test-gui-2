@@ -700,3 +700,4 @@
 - [x] Fix: Adapter PlaywrightLocalRunner pour détecter Chromium via plusieurs chemins (env PLAYWRIGHT_CHROMIUM_PATH, Playwright cache, système /usr/bin/chromium)
 - [x] Bug: PLAYWRIGHT_BROWSER_MISSING persiste en production Manus — aucun Chromium disponible (ni cache Playwright, ni système)
 - [x] Fix: Auto-installation Chromium dans PlaywrightLocalRunner.checkAvailability() via `npx playwright install chromium` avec fallback `--with-deps`
+- [x] Feature: Ajouter Chromium au Dockerfile — dépendances système + `npx playwright install chromium` + copie cache vers user non-root
