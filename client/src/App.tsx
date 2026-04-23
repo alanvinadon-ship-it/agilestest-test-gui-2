@@ -49,6 +49,7 @@ import AdminBrandingPage from "./pages/AdminBrandingPage";
 import AiSettingsPage from "./pages/AiSettingsPage";
 import ScriptEditPage from "./pages/ScriptEditPage";
 import KeycloakConfigPage from "./pages/admin/KeycloakConfigPage";
+import RunnerConfigPage from "./pages/admin/RunnerConfigPage";
 import DriveRunsPage from "./pages/DriveRunsPage";
 import DriveRunDetailPage from "./pages/DriveRunDetailPage";
 
@@ -226,6 +227,9 @@ function AppRouter() {
               </Route>
               <Route path="/admin/keycloak">
                 <RequireAdmin><KeycloakConfigPage /></RequireAdmin>
+              </Route>
+              <Route path="/admin/runner">
+                <RequireAdmin><RunnerConfigPage /></RequireAdmin>
               </Route>
               <Route path="/docs/:slug" component={DocsPage} />
               <Route path="/docs">

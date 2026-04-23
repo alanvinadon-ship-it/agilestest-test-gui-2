@@ -318,15 +318,9 @@ export async function runWithPlaywright(
       }
     }
   } catch (error: any) {
-    // Erreur fatale (lancement navigateur, etc.)
-    return {
-      status: "ERROR",
-      durationMs: Date.now() - startTime,
-      stepsTotal: steps.length,
-      stepsPassed,
-      stepsFailed: steps.length - stepsPassed,
-      stepResults,
-    };
+    // Erreur fatale (lancement navigateur, etc.) — propager pour logging
+    console.error("[PlaywrightRunner] Fatal error:", error.message);
+    throw error;
   } finally {
     // Nettoyage
     try { if (context) await context.close(); } catch { /* ignore */ }

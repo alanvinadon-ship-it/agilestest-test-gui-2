@@ -34,6 +34,7 @@ import {
   TrendingUp,
   Palette,
   Brain,
+  Server,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -134,6 +135,7 @@ const baseNavSections: NavSection[] = [
       { href: "/admin/branding", icon: Palette, label: "Personnalisation" },
       { href: "/admin/ai-settings", icon: Brain, label: "Clés IA" },
       { href: "/admin/keycloak", icon: KeyRound, label: "Keycloak" },
+      { href: "/admin/runner", icon: Server, label: "Runner Playwright" },
     ],
   },
   {

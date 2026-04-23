@@ -680,3 +680,19 @@
 - [x] Feature: Intégrer le worker réel dans executionEngine.ts (mode REAL) — realExecution()
 - [x] Feature: Tests Vitest pour le mode RÉEL Playwright — 36 tests passent
 - [x] Feature: Galerie de captures d'écran dans la page détail d'exécution — ScreenshotGallery.tsx avec lightbox, navigation clavier, badges statut, 19 tests
+- [x] Bug: Mode RÉEL Playwright échoue immédiatement — corrigé avec architecture LOCAL/REMOTE/AUTO
+- [x] Feature: Module de configuration centralisé Playwright (PlaywrightConfig typé) — playwrightConfig.ts
+- [x] Feature: Types/interfaces — RealExecutionRunner, RealExecutionInput, RealExecutionResult
+- [x] Feature: Codes d'erreur standardisés (10 codes: PLAYWRIGHT_NOT_INSTALLED, PLAYWRIGHT_BROWSER_MISSING, etc.)
+- [x] Feature: PlaywrightLocalRunner — exécution avec navigateur local Chromium headless
+- [x] Feature: PlaywrightRemoteRunner — connexion CDP à Browserless/endpoint distant avec checkAvailability
+- [x] Feature: Factory resolver LOCAL/REMOTE/AUTO avec détection et fallback — runnerResolver.ts
+- [x] Feature: Schéma DB — champs runnerMode, errorCode, errorMessage sur executions
+- [x] Feature: Journalisation détaillée (logs serveur console + journal d'exécution DB)
+- [x] Feature: UI détail exécution — badges LOCAL/REMOTE/FALLBACK, errorCode, runner info
+- [x] Feature: Variables d'environnement Playwright (PLAYWRIGHT_RUNNER_MODE, PLAYWRIGHT_REMOTE_ENDPOINT, etc.)
+- [x] Feature: Page admin RunnerConfigPage — /admin/runner + lien sidebar Administration
+- [x] Feature: Router tRPC runnerConfig — lecture/écriture paramètres Playwright depuis DB (app_settings)
+- [x] Feature: Tests Vitest — 53 tests runner-architecture.test.ts (config, error codes, LOCAL, REMOTE, resolver, actions, engine, DB, UI)
+- [x] Bug: PlaywrightRemoteRunner.checkAvailability() retournait available=true pour endpoint null/vide — corrigé
+- [x] Bug: Test executeStepAction — ajouté alias export dans playwrightActions.ts

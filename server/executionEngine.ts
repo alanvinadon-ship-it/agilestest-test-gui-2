@@ -6,11 +6,13 @@
  *   - Logs pas-à-pas avec timestamps
  *   - Durée simulée réaliste basée sur les étapes du scénario
  *
- * Mode REAL: Worker Playwright
- *   - Exécution réelle via Chromium headless
+ * Mode REAL: Architecture LOCAL / REMOTE / AUTO
+ *   - LOCAL  : Playwright + navigateur Chromium local
+ *   - REMOTE : Connexion CDP à Browserless / service distant
+ *   - AUTO   : LOCAL avec fallback REMOTE si indisponible
  *   - Résolution des bindings de dataset
  *   - Collecte d'artefacts (screenshots par étape)
- *   - Même API de logs et transitions
+ *   - Journalisation détaillée avec codes d'erreur standardisés
  */
 
 import { getDb } from "./db";
@@ -25,8 +27,18 @@ import {
 import { eq, or, sql } from "drizzle-orm";
 import { notifyOwner } from "./_core/notification";
 import { resolveBindings } from "./datasetResolver";
-import { runWithPlaywright, type StepResult } from "./playwrightRunner";
 import { storagePut } from "./storage";
+import {
+  loadPlaywrightConfig,
+  loadPlaywrightConfigWithDb,
+  PLAYWRIGHT_ERROR_CODES,
+  ERROR_CODE_DESCRIPTIONS,
+  type PlaywrightConfig,
+  type PlaywrightErrorCode,
+  type RealExecutionResult,
+  type StepExecutionResult,
+} from "./runner/playwrightConfig";
+import { resolveRunner, formatDiagnosticLogs } from "./runner/runnerResolver";
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -47,6 +59,14 @@ export interface ExecutionResult {
   stepsTotal: number;
   stepsPassed: number;
   stepsFailed: number;
+  /** Mode runner effectivement utilisé (REAL uniquement) */
+  resolvedRunnerMode?: "LOCAL" | "REMOTE";
+  /** Fallback LOCAL → REMOTE a eu lieu */
+  fallbackUsed?: boolean;
+  /** Code d'erreur standardisé */
+  errorCode?: PlaywrightErrorCode;
+  /** Message d'erreur détaillé */
+  errorMessage?: string;
 }
 
 // ─── Log Helper ──────────────────────────────────────────────────────────
@@ -138,7 +158,7 @@ async function simulateExecution(
     await sleep(delay);
 
     const shouldFail = options?.forceFailAtStep === step.index;
-    const stepSuccess = shouldFail ? false : true; // 100% succès en mode simulation
+    const stepSuccess = shouldFail ? false : true;
 
     if (stepSuccess) {
       stepsPassed++;
@@ -209,14 +229,15 @@ async function simulateExecution(
   };
 }
 
-// ─── Real Execution Engine (Playwright) ─────────────────────────────────
+// ─── Real Execution Engine (Playwright LOCAL/REMOTE/AUTO) ───────────────
 
 /**
  * Exécute un scénario en mode RÉEL avec Playwright.
+ * - Résout le runner (LOCAL/REMOTE/AUTO) via le resolver
  * - Résout les bindings de dataset
- * - Lance Chromium headless
- * - Exécute chaque étape
+ * - Exécute via le runner résolu
  * - Collecte les screenshots et les enregistre comme artefacts
+ * - Journalise chaque étape avec diagnostic complet
  */
 async function realExecution(
   db: any,
@@ -229,7 +250,91 @@ async function realExecution(
 ): Promise<ExecutionResult> {
   const startTime = Date.now();
 
-  // 1. Résoudre les bindings
+  // 1. Charger la configuration Playwright
+  const config = await loadPlaywrightConfigWithDb();
+  console.log(`[ExecutionEngine] REAL execution #${executionId} — mode configuré: ${config.runnerMode}`);
+
+  await insertLog(db, executionId, 0, "INFO", `⚙️ Configuration runner Playwright`, {
+    runnerMode: config.runnerMode,
+    remoteEndpoint: config.remoteEndpoint || "(non configuré)",
+    headless: config.headless,
+    timeoutMs: config.timeoutMs,
+    enableScreenshots: config.enableScreenshots,
+    enableTrace: config.enableTrace,
+    enableVideo: config.enableVideo,
+  });
+
+  // 2. Résoudre le runner (LOCAL/REMOTE/AUTO avec fallback)
+  await insertLog(db, executionId, 0, "INFO", `🔍 Résolution du runner (mode: ${config.runnerMode})...`);
+
+  const { runner, diagnostic, errorCode, errorMessage } = await resolveRunner(config);
+
+  // Journaliser le diagnostic complet
+  const diagLines = formatDiagnosticLogs(diagnostic);
+  for (const line of diagLines) {
+    await insertLog(db, executionId, 0, "DEBUG", `  📋 ${line}`, { diagnostic: true });
+  }
+
+  // Si aucun runner disponible → échec immédiat
+  if (!runner) {
+    console.error(`[ExecutionEngine] No runner available for execution #${executionId}: ${errorCode} — ${errorMessage}`);
+
+    await insertLog(db, executionId, 0, "ERROR", `💥 Aucun runner disponible — ${errorCode}`, {
+      errorCode,
+      errorMessage,
+      diagnostic,
+      hint: getHintForErrorCode(errorCode),
+    });
+
+    // Marquer chaque étape comme FAILED
+    for (const step of steps) {
+      await insertLog(db, executionId, step.index, "ERROR",
+        `❌ Étape ${step.index}: ${step.action} → ${step.target} — ÉCHEC (${errorCode})`, {
+          action: step.action,
+          target: step.target,
+          result: "FAILED",
+          errorCode,
+        });
+    }
+
+    // Mettre à jour l'exécution avec le code d'erreur
+    await db.update(executions).set({
+      runnerMode: diagnostic.resolvedMode || config.runnerMode,
+      runnerType: "PLAYWRIGHT",
+      errorCode: errorCode || null,
+      errorMessage: errorMessage || null,
+    }).where(eq(executions.id, executionId));
+
+    return {
+      status: "ERROR",
+      durationMs: Date.now() - startTime,
+      stepsTotal: steps.length,
+      stepsPassed: 0,
+      stepsFailed: steps.length,
+      errorCode,
+      errorMessage,
+    };
+  }
+
+  // Runner résolu avec succès
+  const resolvedMode = runner.mode;
+  console.log(`[ExecutionEngine] Runner résolu: ${runner.name} (mode: ${resolvedMode}, fallback: ${diagnostic.fallbackUsed})`);
+
+  await insertLog(db, executionId, 0, "INFO",
+    `✅ Runner résolu: ${resolvedMode}${diagnostic.fallbackUsed ? " (fallback depuis LOCAL)" : ""}`, {
+      runnerName: runner.name,
+      resolvedMode,
+      fallbackUsed: diagnostic.fallbackUsed,
+      remoteEndpoint: diagnostic.remoteEndpoint || null,
+    });
+
+  // Mettre à jour l'exécution avec le runner info
+  await db.update(executions).set({
+    runnerMode: resolvedMode,
+    runnerType: "PLAYWRIGHT",
+  }).where(eq(executions.id, executionId));
+
+  // 3. Résoudre les bindings de dataset
   await insertLog(db, executionId, 0, "INFO", "🔗 Résolution des bindings de dataset et profil...", {
     profileId: profileId || null,
     datasetBundleId: datasetBundleId || null,
@@ -249,8 +354,10 @@ async function realExecution(
     });
   }
 
-  await insertLog(db, executionId, 0, "INFO", `🚀 Démarrage de l'exécution RÉELLE (Playwright Chromium)`, {
+  await insertLog(db, executionId, 0, "INFO", `🚀 Démarrage de l'exécution RÉELLE (${runner.name})`, {
     mode: "REAL",
+    runnerMode: resolvedMode,
+    runnerName: runner.name,
     stepsCount: steps.length,
     baseUrl: baseUrl || "(non défini)",
     bindingsCount: Object.keys(bindings).length,
@@ -258,31 +365,59 @@ async function realExecution(
     timestamp: new Date().toISOString(),
   });
 
-  // 2. Lancer Playwright
-  let result;
+  // 4. Exécuter via le runner résolu
+  let result: RealExecutionResult;
   try {
-    result = await runWithPlaywright(steps, {
+    result = await runner.execute({
+      steps,
       baseUrl: baseUrl || "",
       bindings,
-      screenshotPerStep: true,
-      stepTimeout: 15000,
-      headless: true,
+      config,
     });
   } catch (error: any) {
-    await insertLog(db, executionId, 0, "ERROR", `💥 Erreur Playwright: ${error.message}`, {
+    console.error(`[ExecutionEngine] ${runner.name} fatal error:`, error.message, error.stack?.slice(0, 500));
+
+    const detectedCode = detectErrorCode(error);
+    const userMessage = `💥 Erreur ${runner.name}: ${error.message}`;
+
+    await insertLog(db, executionId, 0, "ERROR", userMessage, {
+      errorCode: detectedCode,
       error: error.message,
       stack: error.stack?.slice(0, 500),
+      runnerMode: resolvedMode,
+      hint: getHintForErrorCode(detectedCode),
     });
+
+    // Marquer chaque étape comme FAILED
+    for (const step of steps) {
+      await insertLog(db, executionId, step.index, "ERROR",
+        `❌ Étape ${step.index}: ${step.action} → ${step.target} — ÉCHEC (${detectedCode})`, {
+          action: step.action,
+          target: step.target,
+          result: "FAILED",
+          errorCode: detectedCode,
+        });
+    }
+
+    await db.update(executions).set({
+      errorCode: detectedCode,
+      errorMessage: error.message,
+    }).where(eq(executions.id, executionId));
+
     return {
       status: "ERROR",
       durationMs: Date.now() - startTime,
       stepsTotal: steps.length,
       stepsPassed: 0,
       stepsFailed: steps.length,
+      resolvedRunnerMode: resolvedMode,
+      fallbackUsed: diagnostic.fallbackUsed,
+      errorCode: detectedCode,
+      errorMessage: error.message,
     };
   }
 
-  // 3. Enregistrer les logs et artefacts pour chaque étape
+  // 5. Enregistrer les logs et artefacts pour chaque étape
   let artifactsCount = 0;
   for (const stepResult of result.stepResults) {
     if (stepResult.status === "PASSED") {
@@ -331,6 +466,12 @@ async function realExecution(
 
   const durationMs = Date.now() - startTime;
 
+  // Mettre à jour les infos runner dans l'exécution
+  await db.update(executions).set({
+    errorCode: result.errorCode || null,
+    errorMessage: result.errorMessage || null,
+  }).where(eq(executions.id, executionId));
+
   await insertLog(db, executionId, 0, "INFO", `🏁 Exécution RÉELLE terminée — ${result.status}`, {
     durationMs,
     stepsTotal: steps.length,
@@ -339,6 +480,9 @@ async function realExecution(
     stepsSkipped: steps.length - result.stepsPassed - result.stepsFailed,
     artifactsCount,
     finalStatus: result.status,
+    runnerMode: resolvedMode,
+    fallbackUsed: diagnostic.fallbackUsed,
+    remoteEndpoint: result.remoteEndpointUsed || null,
   });
 
   return {
@@ -347,8 +491,46 @@ async function realExecution(
     stepsTotal: steps.length,
     stepsPassed: result.stepsPassed,
     stepsFailed: result.stepsFailed,
+    resolvedRunnerMode: resolvedMode,
+    fallbackUsed: diagnostic.fallbackUsed,
+    errorCode: result.errorCode,
+    errorMessage: result.errorMessage,
   };
 }
+
+// ─── Error Detection Helpers ────────────────────────────────────────────
+
+function detectErrorCode(error: any): PlaywrightErrorCode {
+  const msg = (error.message || "").toLowerCase();
+  if (msg.includes("executable doesn't exist") || msg.includes("enoent") || msg.includes("chromium")) {
+    return PLAYWRIGHT_ERROR_CODES.PLAYWRIGHT_BROWSER_MISSING;
+  }
+  if (msg.includes("playwright") && msg.includes("install")) {
+    return PLAYWRIGHT_ERROR_CODES.PLAYWRIGHT_NOT_INSTALLED;
+  }
+  if (msg.includes("connect") || msg.includes("econnrefused") || msg.includes("websocket")) {
+    return PLAYWRIGHT_ERROR_CODES.PLAYWRIGHT_REMOTE_CONNECT_FAILED;
+  }
+  if (msg.includes("timeout")) {
+    return PLAYWRIGHT_ERROR_CODES.PLAYWRIGHT_EXECUTION_TIMEOUT;
+  }
+  return PLAYWRIGHT_ERROR_CODES.PLAYWRIGHT_RUNTIME_ERROR;
+}
+
+function getHintForErrorCode(code?: PlaywrightErrorCode): string | undefined {
+  if (!code) return undefined;
+  const hints: Partial<Record<PlaywrightErrorCode, string>> = {
+    PLAYWRIGHT_NOT_INSTALLED: "Installez Playwright: npm install playwright",
+    PLAYWRIGHT_BROWSER_MISSING: "Installez Chromium: npx playwright install chromium --with-deps",
+    PLAYWRIGHT_LOCAL_LAUNCH_FAILED: "Vérifiez les permissions et les dépendances système de Chromium",
+    PLAYWRIGHT_REMOTE_ENDPOINT_MISSING: "Configurez PLAYWRIGHT_REMOTE_ENDPOINT dans Paramètres > Runner (ex: ws://browserless:3000)",
+    PLAYWRIGHT_REMOTE_CONNECT_FAILED: "Vérifiez que le service Browserless est démarré et accessible",
+    PLAYWRIGHT_NO_RUNNER_AVAILABLE: "Configurez un endpoint distant (PLAYWRIGHT_REMOTE_ENDPOINT) ou installez Chromium localement",
+  };
+  return hints[code];
+}
+
+// ─── Utility ────────────────────────────────────────────────────────────
 
 /** Délai réaliste par type d'action (ms) — pour simulation */
 function getActionDelay(action: string): number {
@@ -377,7 +559,7 @@ function sleep(ms: number): Promise<void> {
  * Démarre l'exécution d'un test.
  * - Passe le statut en RUNNING
  * - Récupère les étapes du scénario
- * - Lance la simulation ou le worker réel Playwright
+ * - Lance la simulation ou le worker réel Playwright (LOCAL/REMOTE/AUTO)
  * - Met à jour le statut final (PASSED/FAILED/ERROR)
  */
 export async function startExecution(executionId: number): Promise<ExecutionResult> {
@@ -428,6 +610,8 @@ export async function startExecution(executionId: number): Promise<ExecutionResu
     stepsTotal: steps.length,
     stepsPassed: 0,
     stepsFailed: 0,
+    runnerMode: mode === "REAL" ? (await loadPlaywrightConfigWithDb()).runnerMode : null,
+    runnerType: mode === "REAL" ? "PLAYWRIGHT" : null,
   }).where(eq(executions.id, executionId));
 
   try {
@@ -436,7 +620,7 @@ export async function startExecution(executionId: number): Promise<ExecutionResu
     if (mode === "SIMULATED") {
       result = await simulateExecution(db, executionId, steps);
     } else {
-      // Mode RÉEL — Playwright
+      // Mode RÉEL — Playwright LOCAL/REMOTE/AUTO
       result = await realExecution(
         db,
         executionId,
@@ -460,27 +644,34 @@ export async function startExecution(executionId: number): Promise<ExecutionResu
     }).where(eq(executions.id, executionId));
 
     // 6. Notifications
-    if (result.status === "FAILED") {
+    if (result.status === "FAILED" || result.status === "ERROR") {
       const scenarioName = exec.scenarioId
         ? (await db.select({ name: testScenarios.name }).from(testScenarios).where(eq(testScenarios.uid, exec.scenarioId)).limit(1))?.[0]?.name ?? "—"
         : "—";
+      const errorInfo = result.errorCode ? ` (${result.errorCode})` : "";
       notifyOwner({
-        title: `⚠️ Exécution #${executionId} FAILED`,
-        content: `L'exécution #${executionId} (scénario: ${scenarioName}, env: ${exec.targetEnv ?? "—"}, mode: ${mode}) a échoué. ${result.stepsPassed}/${result.stepsTotal} étapes réussies.`,
+        title: `⚠️ Exécution #${executionId} ${result.status}`,
+        content: `L'exécution #${executionId} (scénario: ${scenarioName}, env: ${exec.targetEnv ?? "—"}, mode: ${mode}${result.resolvedRunnerMode ? `/${result.resolvedRunnerMode}` : ""}) a échoué${errorInfo}. ${result.stepsPassed}/${result.stepsTotal} étapes réussies.`,
       }).catch(() => {});
     }
 
     return result;
   } catch (error: any) {
     // Erreur inattendue → statut ERROR
+    const detectedCode = detectErrorCode(error);
+
     await db.update(executions).set({
       status: "ERROR",
       finishedAt: new Date(),
+      errorCode: detectedCode,
+      errorMessage: error.message,
     }).where(eq(executions.id, executionId));
 
     await insertLog(db, executionId, 0, "ERROR", `💥 Erreur fatale: ${error.message}`, {
+      errorCode: detectedCode,
       error: error.message,
       stack: error.stack?.slice(0, 500),
+      hint: getHintForErrorCode(detectedCode),
     });
 
     return {
@@ -489,6 +680,8 @@ export async function startExecution(executionId: number): Promise<ExecutionResu
       stepsTotal: steps.length,
       stepsPassed: 0,
       stepsFailed: 0,
+      errorCode: detectedCode,
+      errorMessage: error.message,
     };
   }
 }

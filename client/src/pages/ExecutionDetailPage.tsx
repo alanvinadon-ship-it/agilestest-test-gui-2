@@ -19,7 +19,7 @@ import {
   AlertCircle, Activity, Wrench, Sparkles, Play, RotateCcw,
   Code2, Globe, Package, Server, Brain,
   Eye, Shield, Beaker, Tag, Hash, FileDown,
-  Zap, StopCircle, Terminal, ChevronDown,
+  Zap, StopCircle, Terminal, ChevronDown, Wifi, WifiOff, Monitor,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ScreenshotGallery from '@/components/ScreenshotGallery';
@@ -303,17 +303,62 @@ function AiAnalysisPanel({ analyses }: { analyses: any[] }) {
   );
 }
 // ─── Execution Mode Badge ─────────────────────────────────────────────────────
-function ExecutionModeBadge({ mode }: { mode: string }) {
+function ExecutionModeBadge({ mode, runnerMode }: { mode: string; runnerMode?: string | null }) {
   const isSimulated = mode === 'SIMULATED';
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border ${
-      isSimulated
-        ? 'text-amber-400 bg-amber-500/10 border-amber-500/20'
-        : 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'
-    }`}>
-      <Zap className="w-3 h-3" />
-      {isSimulated ? 'SIMULÉ' : 'RÉEL'}
+    <div className="flex items-center gap-1">
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border ${
+        isSimulated
+          ? 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+          : 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'
+      }`}>
+        <Zap className="w-3 h-3" />
+        {isSimulated ? 'SIMULÉ' : 'RÉEL'}
+      </span>
+      {!isSimulated && runnerMode && (
+        <RunnerModeBadge runnerMode={runnerMode} />
+      )}
+    </div>
+  );
+}
+
+// ─── Runner Mode Badge ──────────────────────────────────────────────────────
+function RunnerModeBadge({ runnerMode }: { runnerMode: string }) {
+  const configs: Record<string, { icon: typeof Monitor; label: string; cls: string }> = {
+    LOCAL:    { icon: Monitor, label: 'LOCAL',    cls: 'text-green-400 bg-green-500/10 border-green-500/20' },
+    REMOTE:   { icon: Wifi,    label: 'REMOTE',   cls: 'text-blue-400 bg-blue-500/10 border-blue-500/20' },
+    FALLBACK: { icon: WifiOff, label: 'FALLBACK', cls: 'text-orange-400 bg-orange-500/10 border-orange-500/20' },
+    AUTO:     { icon: Server,  label: 'AUTO',     cls: 'text-violet-400 bg-violet-500/10 border-violet-500/20' },
+  };
+  const cfg = configs[runnerMode] || configs.AUTO;
+  const Icon = cfg.icon;
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border ${cfg.cls}`}>
+      <Icon className="w-3 h-3" />
+      {cfg.label}
     </span>
+  );
+}
+
+// ─── Error Hint ───────────────────────────────────────────────────────────
+function ErrorHint({ errorCode }: { errorCode: string }) {
+  const hints: Record<string, string> = {
+    PLAYWRIGHT_NOT_INSTALLED: 'Installez Playwright sur le serveur : npm install playwright',
+    PLAYWRIGHT_BROWSER_MISSING: 'Installez Chromium : npx playwright install chromium --with-deps',
+    PLAYWRIGHT_LOCAL_LAUNCH_FAILED: 'Vérifiez les permissions et les dépendances système de Chromium',
+    PLAYWRIGHT_REMOTE_ENDPOINT_MISSING: 'Configurez PLAYWRIGHT_REMOTE_ENDPOINT dans Paramètres > Runner (ex: ws://browserless:3000)',
+    PLAYWRIGHT_REMOTE_CONNECT_FAILED: 'Vérifiez que le service Browserless est démarré et accessible',
+    PLAYWRIGHT_NO_RUNNER_AVAILABLE: 'Configurez un endpoint distant ou installez Chromium localement',
+    PLAYWRIGHT_EXECUTION_TIMEOUT: 'L\'exécution a dépassé le délai maximum. Vérifiez la réactivité de l\'application cible.',
+    PLAYWRIGHT_RUNTIME_ERROR: 'Erreur inattendue du navigateur. Consultez les logs serveur pour plus de détails.',
+  };
+  const hint = hints[errorCode];
+  if (!hint) return null;
+  return (
+    <p className="text-xs text-amber-400/80 flex items-start gap-1.5 mt-1">
+      <Wrench className="w-3 h-3 shrink-0 mt-0.5" />
+      <span>{hint}</span>
+    </p>
   );
 }
 
@@ -592,7 +637,7 @@ export default function ExecutionDetailPage() {
               </button>
             )}
             {/* Mode d'exécution badge */}
-            <ExecutionModeBadge mode={(execData as any).executionMode || 'SIMULATED'} />
+            <ExecutionModeBadge mode={(execData as any).executionMode || 'SIMULATED'} runnerMode={(execData as any).runnerMode} />
             <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md ${config.bg}`}>
               <StatusIcon className={`w-4 h-4 ${config.cls} ${execData.status === 'RUNNING' ? 'animate-spin' : ''}`} />
               <span className={`text-sm font-medium ${config.cls}`}>{config.label}</span>
@@ -653,9 +698,38 @@ export default function ExecutionDetailPage() {
             <Server className="w-3 h-3 text-muted-foreground" />
             <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Runner</p>
           </div>
-          <p className="text-xs font-mono text-foreground">{execData.runnerId || '—'}</p>
+          {(execData as any).runnerMode ? (
+            <div className="space-y-1">
+              <RunnerModeBadge runnerMode={(execData as any).runnerMode} />
+              {(execData as any).runnerType && (
+                <p className="text-[10px] text-muted-foreground font-mono">{(execData as any).runnerType}</p>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs font-mono text-foreground">{execData.runnerId || '—'}</p>
+          )}
         </div>
       </div>
+
+      {/* Error Banner — visible quand ERROR avec errorCode */}
+      {execData.status === 'ERROR' && (execData as any).errorCode && (
+        <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+            <div className="space-y-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono font-semibold text-red-400 bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20">
+                  {(execData as any).errorCode}
+                </span>
+              </div>
+              {(execData as any).errorMessage && (
+                <p className="text-sm text-red-300/80 break-words">{(execData as any).errorMessage}</p>
+              )}
+              <ErrorHint errorCode={(execData as any).errorCode} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-3">

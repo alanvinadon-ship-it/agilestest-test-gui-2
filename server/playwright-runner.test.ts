@@ -148,10 +148,10 @@ describe("executionEngine — REAL mode integration", () => {
     expect(content).toContain('import { resolveBindings } from "./datasetResolver"');
   });
 
-  it("should import runWithPlaywright in executionEngine", async () => {
+  it("should import resolveRunner in executionEngine", async () => {
     const fs = await import("fs");
     const content = fs.readFileSync("server/executionEngine.ts", "utf-8");
-    expect(content).toContain('import { runWithPlaywright');
+    expect(content).toContain('import { resolveRunner');
   });
 
   it("should import storagePut for screenshot artifacts", async () => {
